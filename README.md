@@ -56,8 +56,8 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 `ToggleGroup`, `text_input`, `password`, `text_area`, `input_group`, `select`,
 `checkbox`, `radio`, `switch`, `slider`, `number_input`, `otp_input`
 
-**Display** — `card`, `divider`, `vertical_divider`, `badge`, `progress`,
-`alert`, `empty_state`, `label`, `tag`
+**Display** — `card`, `group_box`, `divider`, `vertical_divider`, `badge`,
+`progress`, `alert`, `empty_state`, `label`, `tag`
 
 **Feedback** — `spinner` (arc and dots), `ring_progress`, `skeleton`,
 `skeleton_list_item`, `skeleton_table`
@@ -77,6 +77,12 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 **Shell** — `TitleBar` (with window controls), `Resizable` (draggable split
 panes), and — behind the `dock` feature — a full docking layout with draggable
 tabs, nested splits and drop targets
+
+**Settings** — `Settings` (a panel with a searchable sidebar), `SettingPage`,
+`SettingGroup`, `SettingItem` and `SettingField`
+
+**Icons** — the whole [Lucide](https://lucide.dev) set as `IconName`, drawn
+through the bundled icon font
 
 **Overlays** — `Modal`, `Dialog`, `Drawer`, `Toast`/`Toasts`,
 `Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`
@@ -318,6 +324,121 @@ theme's SVG catalog, which is why they stay legible on every background.
 iced 0.14 has no accessibility tree and no read-only text input, so `label`
 draws a visible label rather than an ARIA name, and `readonly` withholds the
 edit handler — the field keeps its normal look and value but loses the caret.
+
+## Icons
+
+Icons come from the bundled [Lucide](https://lucide.dev) font, so every icon is
+a name rather than a file:
+
+```rust
+use iced_kit::icons::IconName;
+use iced_kit::widgets::{button, Icon};
+
+button::<Message>("Find")
+    .icon(Icon::new(IconName::Search))
+    .on_press(Message::Search)
+```
+
+`IconName` is the font's own enum, so a variant is the Lucide name in upper
+camel case and can be looked up directly on lucide.dev. `Icon::new` also takes
+an `svg::Handle`, for art the font does not carry.
+
+The font is registered on first use, so nothing is required of the application.
+Passing `iced_kit::icons::LUCIDE_FONT_BYTES` to `iced::application(..).font(..)`
+instead loads it at startup; both work together, since the font system ignores a
+font it already has.
+
+## Group boxes
+
+`group_box` is a titled surface for grouping related content, in three variants:
+`Normal` (a plain surface), `Fill` (a muted one, for a group inset inside
+another) and `Outline` (a border with no fill).
+
+```rust
+group_box::<Message>()
+    .title(label("Appearance"))
+    .description("How the app looks.")
+    .push(text("Theme"))
+```
+
+## Settings
+
+`Settings` builds an application's preferences screen: a searchable sidebar of
+pages, each a column of titled groups, each group a list of labelled controls.
+It follows the reference implementation's structure — page, group, item, field —
+closely enough that a screen built for `gpui-kit` maps over one level at a time.
+
+```rust
+use iced_kit::setting::{
+    SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+};
+
+fn view(app: &App) -> Element<'_, Message, Theme> {
+    Settings::new(&app.settings)
+        .on_event(Message::Settings)
+        .on_reset(Message::SettingsReset)
+        .page(
+            SettingPage::new("General").group(
+                SettingGroup::new()
+                    .title("Updates")
+                    .item(
+                        SettingItem::new("Automatic updates")
+                            .description("Install new versions in the background.")
+                            .keywords(["auto", "upgrade"])
+                            .field(SettingField::switch(
+                                app.auto_update,
+                                Message::AutoUpdate,
+                            )),
+                    ),
+            ),
+        )
+        .into()
+}
+```
+
+A field is one of six shapes: `switch`, `checkbox`, `text`, `number` (a stepper
+over an inclusive range), `select` (a dropdown of value/label pairs) and
+`custom` (any element). A field with a `default_value` can be reset, and the
+reset control appears only while something actually differs from its default.
+
+The panel's own view state — the selected page, the search query, the last
+chosen group — lives in `SettingsState`, which the caller owns as it owns every
+other value. `SettingsState::apply` does the bookkeeping, so an application
+forwards the event and handles the one case that needs a task:
+
+```rust
+Message::Settings(event) => {
+    app.settings.apply(event);
+
+    // A group click asks to scroll to it. Its position is only known once iced
+    // has laid the page out, so it comes back as a task.
+    match app.settings.take_pending_scroll() {
+        Some((page, group)) => Settings::<Message>::scroll_to_group(page, group),
+        None => Task::none(),
+    }
+}
+```
+
+Searching matches titles, descriptions and keywords, case-insensitively.
+Groups and pages with no match drop out of both the content and the sidebar, so
+a query that matches nothing leaves nothing to click; clearing it restores the
+full panel.
+
+Three things differ from the reference, all for reasons iced makes unavoidable:
+
+- **Nothing is bound to a global store.** `gpui-kit` reads and writes setting
+  values through the app's global state and downcasts the type at render time.
+  iced has no such store, and its `Element` is already type-erased, so a field
+  is built from the current value and a message constructor instead. As a
+  benefit, the runtime type erasure and the `TypeId` dispatch disappear.
+- **The sidebar is not resizable.** iced's split panes resize proportionally
+  rather than within a pixel range, so `Settings::sidebar_width` is fixed.
+- **Stacking is the application's decision.** The reference picks between
+  side-by-side and stacked from the panel's own width. Rebuilding the pages
+  inside iced's width-aware widget is not possible, because a rendered element
+  borrows the pages rather than owning them — so the application reports its
+  window width with `Settings::stacked`, against
+  `iced_kit::setting::STACKED_LAYOUT_MAX_WIDTH`.
 
 ## Documentation
 

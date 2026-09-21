@@ -42,3 +42,17 @@ clarity:
 
 This crate builds on [`iced`](https://github.com/iced-rs/iced), which is
 licensed MIT. It is used as an ordinary dependency and is not vendored.
+
+## Lucide icons
+
+The icons are drawn from the [Lucide](https://lucide.dev) icon set, used through
+[`lucide-icons`](https://github.com/WhySoBad/lucide-icons-rs), an ordinary
+dependency that bundles the font.
+
+- **Licence:** MIT AND ISC (the icon set is ISC; the Rust wrapper is MIT)
+- **What is used:** the bundled `lucide.ttf`, its `Icon` enum (re-exported here
+  as `IconName`), and the font bytes re-exported as `LUCIDE_FONT_BYTES`.
+
+The settings component's structure — pages holding groups, groups holding
+labelled items, and the render options threaded through them — follows
+`gpui-kit`'s `setting` module, as noted under the design language above.

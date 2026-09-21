@@ -13,12 +13,46 @@ use iced::widget::container;
 use iced::{Element, Length, Rectangle, Size as IcedSize};
 
 /// What an icon is drawn from.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum IconSource {
     /// A vector image, tinted with the surrounding text color.
     Svg(svg::Handle),
-    /// A text glyph, such as an emoji or a symbol from an icon font.
+    /// A glyph from the bundled icon font, such as [`IconName::Search`].
+    ///
+    /// This is the usual choice. The glyph is treated as text, so it inherits
+    /// the enclosing control's color and size with no extra plumbing.
+    ///
+    /// [`IconName::Search`]: crate::icons::IconName::Search
+    Named(crate::icons::IconName),
+    /// A raw text glyph, for a symbol no icon font provides.
+    ///
+    /// This is drawn in the ambient font, so it is what to use for an emoji or a
+    /// symbol the system fonts already have. For a Lucide icon prefer
+    /// [`IconSource::Named`], which carries its own font.
     Glyph(String),
+}
+
+/// Two sources are equal when they draw the same thing.
+///
+/// Written out rather than derived because the icon font's own enum does not
+/// implement `PartialEq`: it is re-exported from a crate that only derives
+/// `Copy`, and comparing two named icons is naturally a comparison of the
+/// glyphs they resolve to.
+impl PartialEq for IconSource {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Svg(a), Self::Svg(b)) => a == b,
+            (Self::Named(a), Self::Named(b)) => crate::icons::glyph(*a) == crate::icons::glyph(*b),
+            (Self::Glyph(a), Self::Glyph(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl From<crate::icons::IconName> for IconSource {
+    fn from(name: crate::icons::IconName) -> Self {
+        Self::Named(name)
+    }
 }
 
 impl From<svg::Handle> for IconSource {
@@ -36,6 +70,12 @@ impl From<&str> for IconSource {
 impl From<String> for IconSource {
     fn from(glyph: String) -> Self {
         Self::Glyph(glyph)
+    }
+}
+
+impl From<crate::icons::IconName> for Icon {
+    fn from(name: crate::icons::IconName) -> Self {
+        Self::new(name)
     }
 }
 
@@ -66,8 +106,7 @@ impl From<&String> for Icon {
 /// An icon placed beside a button's label, or standing in for it.
 #[must_use = "an Icon does nothing unless it is given to a Button"]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Icon {
-    source: IconSource,
+pub struct Icon {    source: IconSource,
     size: Option<f32>,
 }
 
@@ -98,27 +137,46 @@ impl Icon {
 
         match self.source {
             IconSource::Svg(handle) => TintedIcon { handle, side }.into(),
-            IconSource::Glyph(glyph) => {
-                // A glyph advances by its own metrics, so it is centered in a
-                // square box to keep icon-only buttons from shifting.
-                //
-                // The line height is wrapped in `Pixels` because iced reads a
-                // bare `f32` as a *relative* multiple of the font size, which
-                // would inflate this box to hundreds of pixels and push the
-                // whole button apart.
-                container(
-                    iced::widget::text(glyph)
-                        .size(side)
-                        .line_height(iced::Pixels(side)),
-                )
-                .width(Length::Fixed(side))
-                .height(Length::Fixed(side))
-                .align_x(iced::alignment::Horizontal::Center)
-                .align_y(iced::alignment::Vertical::Center)
-                .into()
+            IconSource::Named(name) => {
+                // The glyph is only meaningful once the font is registered, and
+                // registering it here means an application never has to. This is
+                // what makes `Icon::new(IconName::Search)` work out of the box.
+                crate::icons::load();
+                glyph_box(crate::icons::glyph(name), side, Some(crate::icons::font()))
             }
+            IconSource::Glyph(glyph) => glyph_box(glyph, side, None),
         }
     }
+}
+
+/// A glyph centered in a square box of the given side.
+///
+/// A glyph advances by its own metrics, so it is boxed to keep an icon-only
+/// control from shifting as its glyph changes between renders. A named icon
+/// additionally carries its font, because iced resolves a family per text
+/// widget and the icon font is not the ambient one.
+fn glyph_box<'a, Message: 'a>(
+    glyph: impl iced::widget::text::IntoFragment<'a>,
+    side: f32,
+    font: Option<iced::Font>,
+) -> Element<'a, Message, Theme> {
+    // The line height is wrapped in `Pixels` because iced reads a bare `f32` as
+    // a *relative* multiple of the font size, which would inflate this box to
+    // hundreds of pixels and push the whole control apart.
+    let mut label = iced::widget::text(glyph)
+        .size(side)
+        .line_height(iced::Pixels(side));
+
+    if let Some(font) = font {
+        label = label.font(font);
+    }
+
+    container(label)
+        .width(Length::Fixed(side))
+        .height(Length::Fixed(side))
+        .align_x(iced::alignment::Horizontal::Center)
+        .align_y(iced::alignment::Vertical::Center)
+        .into()
 }
 
 /// An SVG drawn in the color the surrounding widget set.

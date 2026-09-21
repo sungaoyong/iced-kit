@@ -34,6 +34,8 @@
 #[cfg(feature = "dock")]
 pub mod dock;
 
+pub mod icons;
+pub mod setting;
 pub mod theme;
 pub mod widgets;
 
@@ -41,6 +43,7 @@ pub use theme::{Colors, Size, Theme, Tokens};
 
 /// The imports most applications want.
 pub mod prelude {
+    pub use crate::icons::IconName;
     pub use crate::theme::{Size, Theme};
     pub use crate::widgets::*;
 }

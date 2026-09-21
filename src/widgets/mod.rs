@@ -18,6 +18,7 @@ pub mod data_table;
 pub mod display;
 #[cfg(feature = "dock")]
 pub mod dock;
+pub mod group_box;
 pub mod input;
 pub mod list;
 pub mod markdown;
@@ -43,6 +44,7 @@ pub use button::{
 pub use chart::{Chart, ChartKind, Series};
 pub use data_table::{Column, DataTable, SortDirection, SortKey, TableState, Width};
 pub use display::{alert, badge, card, divider, empty_state, progress, vertical_divider, Tone};
+pub use group_box::{group_box, GroupBox, GroupBoxVariant};
 pub use input::{
     addon, group_button, group_icon_button, input_group, label, password, text_area, text_input,
     AddonAlignment, InputGroup, InputGroupAddon, TextArea, TextInput,

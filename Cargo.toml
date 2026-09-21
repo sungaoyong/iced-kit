@@ -11,6 +11,10 @@ categories = ["gui"]
 # Ship the sources, the bundled tab-strip icons, and the documentation that
 # explains the licensing. Everything else at the repository root is development
 # scaffolding.
+#
+# The icon font is not listed here: it comes from the `lucide-icons`
+# dependency, whose `lucide.ttf` is embedded by the compiler rather than read
+# from this package.
 include = [
     "src/**/*.rs",
     "assets/*.svg",
@@ -37,6 +41,10 @@ dock-serde = ["dock", "dep:serde", "slotmap/serde"]
 
 [dependencies]
 iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"] }
+# Icon font and name enum only. The crate's own `iced` feature is deliberately
+# off: it generates a named function per icon, which the `From` conversions here
+# make unnecessary.
+lucide-icons = { version = "1.31", default-features = false }
 slotmap = { version = "1.0", optional = true }
 thiserror = { version = "2.0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }

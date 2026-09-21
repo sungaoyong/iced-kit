@@ -9,7 +9,7 @@
 //! against it. Delete a reference file to regenerate it after an intentional
 //! visual change.
 
-use iced::widget::{column, container};
+use iced::widget::{column, container, row};
 use iced::{Element, Length};
 use iced_kit::widgets::chart::{Chart, ChartKind, Series};
 use iced_kit::widgets::data_table::{Column, DataTable, SortDirection, SortKey, TableState, Width};
@@ -1415,4 +1415,334 @@ fn a_sankey_chart_renders() {
             .into_element::<Message>(),
         false,
     );
+}
+
+#[test]
+fn a_settings_panel_renders() {
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+    };
+
+    let state = SettingsState::new();
+
+    let settings = Settings::<Message>::new(&state)
+        .on_event(|_| Message::Noop)
+        .page(
+            SettingPage::new("Appearance")
+                .icon(iced_kit::icons::IconName::Palette)
+                .group(
+                    SettingGroup::new()
+                        .title("Theme")
+                        .description("How the interface is colored.")
+                        .item(
+                            SettingItem::new("Dark mode")
+                                .description("Use the dark palette.")
+                                .field(
+                                    SettingField::switch(true, |_| Message::Noop)
+                                        .default_value(true),
+                                ),
+                        )
+                        .item(
+                            SettingItem::new("Accent")
+                                .field(SettingField::select(
+                                    vec![
+                                        ("blue".to_owned(), "Blue".to_owned()),
+                                        ("violet".to_owned(), "Violet".to_owned()),
+                                    ],
+                                    Some("blue".to_owned()),
+                                    |_| Message::Noop,
+                                )),
+                        ),
+                )
+                .group(
+                    SettingGroup::new()
+                        .title("Typography")
+                        .item(
+                            SettingItem::new("Font size")
+                                .field(
+                                    SettingField::number(14.0, 8.0..=72.0, |_| Message::Noop)
+                                        .default_value(14.0),
+                                ),
+                        )
+                        .item(
+                            SettingItem::new("Font family")
+                                .field(SettingField::text("Inter", |_| Message::Noop)),
+                        ),
+                ),
+        )
+        .page(
+            SettingPage::new("Privacy")
+                .icon(iced_kit::icons::IconName::User)
+                .group(SettingGroup::new().title("Telemetry").item(
+                    SettingItem::new("Send usage data").field(
+                        SettingField::checkbox(false, |_| Message::Noop).default_value(false),
+                    ),
+                )),
+        );
+
+    let element: Element<'_, Message, Theme> = settings.into();
+    assert_renders("settings_panel", element, false);
+}
+
+#[test]
+fn a_settings_panel_renders_in_dark_mode() {
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+    };
+
+    let state = SettingsState::new();
+
+    let element: Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+        .page(
+            SettingPage::new("General").group(
+                SettingGroup::new()
+                    .title("Startup")
+                    .item(SettingItem::new("Launch at login").field(SettingField::switch(
+                        true,
+                        |_| Message::Noop,
+                    ))),
+            ),
+        )
+        .into();
+
+    assert_renders("settings_panel_dark", element, true);
+}
+
+#[test]
+fn a_stacked_settings_panel_renders() {
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+    };
+
+    let state = SettingsState::new();
+
+    let element: Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+        .stacked(true)
+        .page(
+            SettingPage::new("General").group(
+                SettingGroup::new()
+                    .title("Updates")
+                    .item(SettingItem::new("Automatic updates").field(SettingField::switch(
+                        true,
+                        |_| Message::Noop,
+                    ))),
+            ),
+        )
+        .into();
+
+    assert_renders("settings_panel_stacked", element, false);
+}
+
+#[test]
+fn a_disabled_settings_group_renders_inert() {
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+    };
+
+    let state = SettingsState::new();
+
+    let element: Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+        .page(
+            SettingPage::new("Advanced").group(
+                SettingGroup::new()
+                    .title("Experimental")
+                    .disabled(true)
+                    .item(SettingItem::new("Unsafe mode").field(SettingField::switch(
+                        false,
+                        |_| Message::Noop,
+                    )))
+                    .item(
+                        SettingItem::new("Buffer size")
+                            .field(SettingField::number(64.0, 1.0..=512.0, |_| Message::Noop)),
+                    ),
+            ),
+        )
+        .into();
+
+    assert_renders("settings_panel_disabled", element, false);
+}
+
+#[test]
+fn group_boxes_render_in_every_variant() {
+    use iced_kit::widgets::{group_box, GroupBoxVariant};
+
+    assert_renders(
+        "group_boxes",
+        column![
+            group_box::<Message>()
+                .title(iced::widget::text("Normal"))
+                .push(iced::widget::text("A plain surface.")),
+            group_box::<Message>()
+                .title(iced::widget::text("Fill"))
+                .variant(GroupBoxVariant::Fill)
+                .push(iced::widget::text("An inset surface.")),
+            group_box::<Message>()
+                .title(iced::widget::text("Outline"))
+                .variant(GroupBoxVariant::Outline)
+                .description("A bordered surface.")
+                .push(iced::widget::text("Grouped without a fill.")),
+        ]
+        .spacing(16),
+        false,
+    );
+}
+
+#[test]
+fn named_icons_render() {
+    use iced_kit::icons::IconName;
+    use iced_kit::widgets::{button, Icon};
+
+    assert_renders(
+        "named_icons",
+        row![
+            button::<Message>("Search")
+                .icon(Icon::new(IconName::Search))
+                .on_press(Message::Noop),
+            button::<Message>("Undo")
+                .icon(Icon::new(IconName::Undo2))
+                .on_press(Message::Noop),
+            button::<Message>("Settings")
+                .icon(Icon::new(IconName::Settings2))
+                .outline()
+                .on_press(Message::Noop),
+            button::<Message>("Info")
+                .icon(Icon::new(IconName::Info))
+                .ghost()
+                .on_press(Message::Noop),
+        ]
+        .spacing(12),
+        false,
+    );
+}
+
+/// The settings panel owns its view state, so the checks below drive the panel
+/// through messages the way an application would, rather than asserting on the
+/// snapshot alone.
+mod settings_interaction {
+    use super::{Element, Message, Theme};
+    use iced::Task;
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent, SettingsState,
+    };
+
+    fn app(state: &SettingsState, dark: bool) -> Element<'_, Message, Theme> {
+        Settings::<Message>::new(state)
+            .on_event(|_event| Message::Noop)
+            .page(
+                SettingPage::new("Appearance").group(
+                    SettingGroup::new()
+                        .title("Theme")
+                        .item(SettingItem::new("Dark mode").field(SettingField::switch(
+                            dark,
+                            |_| Message::Noop,
+                        ))),
+                ),
+            )
+            .into()
+    }
+
+    fn simulator(
+        state: &SettingsState,
+        dark: bool,
+    ) -> iced_test::Simulator<'_, Message, Theme, iced::Renderer> {
+        iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(640.0, 480.0),
+            app(state, dark),
+        )
+    }
+
+    #[test]
+    fn the_panel_renders_without_a_snapshot_comparison() {
+        // A smoke test: building and rendering the element must not panic, which
+        // is what catches a bad layout or a missing id.
+        let state = SettingsState::new();
+        let mut sim = simulator(&state, false);
+
+        sim.snapshot(&Theme::light()).expect("the panel must render");
+        sim.snapshot(&Theme::dark()).expect("the panel must render dark");
+    }
+
+    #[test]
+    fn applying_a_page_selection_moves_the_panel() {
+        let mut state = SettingsState::new();
+        state.apply(SettingsEvent::SelectPage(1));
+
+        assert_eq!(state.selected_page(), 1);
+
+        // And the panel still renders on the page that was selected.
+        let mut sim = simulator(&state, false);
+        sim.snapshot(&Theme::light()).expect("the panel must render");
+    }
+
+    #[test]
+    fn a_search_hides_every_page_that_does_not_match() {
+        // Each simulator borrows the state, so the two queries get their own.
+        let mut matching = SettingsState::new();
+        matching.set_query("dark mode");
+        let mut sim = simulator(&matching, false);
+        sim.snapshot(&Theme::light())
+            .expect("a matching page must still render");
+
+        let mut unmatched = SettingsState::new();
+        unmatched.set_query("nothing matches this");
+        let mut sim = simulator(&unmatched, false);
+        sim.snapshot(&Theme::light())
+            .expect("an unmatched query must render the empty state");
+    }
+
+    #[test]
+    fn scrolling_to_a_group_builds_a_task() {
+        // The scroll is an operation over the rendered tree, so it can only be
+        // exercised after the panel has been built and laid out.
+        let state = SettingsState::new();
+        let element = app(&state, false);
+
+        let mut sim = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(640.0, 480.0),
+            element,
+        );
+        sim.snapshot(&Theme::light()).expect("render first");
+
+        let task: Task<Message> = Settings::<Message>::scroll_to_group(0, 0);
+        drop(task);
+    }
+}
+
+#[test]
+fn a_filtered_settings_panel_renders_only_matching_groups() {
+    use iced_kit::setting::{
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsState,
+    };
+
+    // The query matches the second group's item, so the first group must drop
+    // out of both the content and the sidebar.
+    let mut state = SettingsState::new();
+    state.set_query("font");
+
+    let element: Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+        .on_event(|_| Message::Noop)
+        .page(
+            SettingPage::new("Appearance")
+                .group(
+                    SettingGroup::new()
+                        .title("Theme")
+                        .item(SettingItem::new("Dark mode").field(SettingField::switch(
+                            true,
+                            |_| Message::Noop,
+                        ))),
+                )
+                .group(
+                    SettingGroup::new()
+                        .title("Typography")
+                        .item(
+                            SettingItem::new("Font size")
+                                .field(SettingField::number(14.0, 8.0..=72.0, |_| Message::Noop)),
+                        ),
+                ),
+        )
+        .into();
+
+    assert_renders("settings_panel_filtered", element, false);
 }

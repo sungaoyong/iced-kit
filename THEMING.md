@@ -227,6 +227,10 @@ raised panels and inert regions.
 - **The dock's internal composition.** The ported dock code lays out its own
   tabs and splitters. This crate supplies the styling (see
   `widgets::dock::style`) and the metrics, not the layout.
+- **The icons.** Lucide glyphs are a font, so they take their color from the
+  text they sit beside rather than from a token of their own. To recolor one,
+  set the color on the control containing it. The set itself is fixed: an icon
+  outside Lucide is passed to `Icon::new` as an `svg::Handle`.
 
 ## Watching for regressions
 

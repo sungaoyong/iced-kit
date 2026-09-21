@@ -2,9 +2,15 @@
 //!
 //! Run with `cargo run --example gallery`.
 
-use iced::widget::{column, container, row, scrollable};
+use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Length, Task};
+use iced_kit::icons::IconName;
 use iced_kit::prelude::*;
+use iced_kit::setting::{
+    SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent,
+    SettingsState,
+};
+use iced_kit::widgets::{group_box, GroupBoxVariant};
 use iced_kit::widgets::overlay::{self, Layer, Toast, ToastKind, ToastPlacement, Toasts};
 use iced_kit::widgets::plot::{
     AreaChart, AreaSeries, BarAlignment, BarChart, Candle, CandlestickChart, LineChart, LineSeries,
@@ -121,6 +127,15 @@ struct App {
     /// Split state for the resizable demo.
     #[cfg(feature = "dock")]
     splits: iced::widget::pane_grid::State<usize>,
+    /// The settings demo's panel state, and the values its fields edit.
+    settings: SettingsState,
+    settings_dark_mode: bool,
+    settings_autosave: bool,
+    settings_font_size: f64,
+    settings_font_family: String,
+    settings_accent: String,
+    settings_telemetry: bool,
+    settings_launch_at_login: bool,
 }
 
 /// A row of the sample data set.
@@ -184,6 +199,17 @@ enum Message {
     TogglesChanged(Vec<bool>),
     PickedFromMenu(&'static str),
     PageSelected(usize),
+    /// Navigation and search inside the settings panel.
+    Settings(SettingsEvent),
+    /// The settings panel asked for a reset; the index is the page it came from.
+    SettingsReset(usize),
+    SettingsDarkMode(bool),
+    SettingsAutosave(bool),
+    SettingsFontSize(f64),
+    SettingsFontFamily(String),
+    SettingsAccent(String),
+    SettingsTelemetry(bool),
+    SettingsLaunchAtLogin(bool),
     AccordionToggled(usize),
     ToggleBusy,
     PortChanged(f64),
@@ -242,6 +268,14 @@ impl Default for App {
             last_window_action: None,
             #[cfg(feature = "dock")]
             splits: Resizable::<Message>::split_state(3, SplitAxis::Horizontal, 0.25).0,
+            settings: SettingsState::new(),
+            settings_dark_mode: true,
+            settings_autosave: true,
+            settings_font_size: 14.0,
+            settings_font_family: "Inter".to_owned(),
+            settings_accent: "blue".to_owned(),
+            settings_telemetry: false,
+            settings_launch_at_login: false,
         }
     }
 }
@@ -360,6 +394,37 @@ impl App {
                 // accordion feel like a toggle rather than a selector.
                 self.accordion_open = (self.accordion_open != Some(index)).then_some(index);
             }
+            Message::Settings(event) => {
+                self.settings.apply(event);
+
+                // Choosing a group asks to scroll to it. The position is only
+                // known once iced has laid the page out, so it comes back as a
+                // task rather than being applied here.
+                return match self.settings.take_pending_scroll() {
+                    Some((page, group)) => Settings::<Message>::scroll_to_group(page, group),
+                    None => Task::none(),
+                };
+            }
+            Message::SettingsReset(_page) => {
+                // The panel cannot reset values it does not own, so it reports
+                // which page asked and the application restores its own
+                // defaults. One page needs one restore here because the demo
+                // keeps every setting in the same struct.
+                self.settings_dark_mode = true;
+                self.settings_autosave = true;
+                self.settings_font_size = 14.0;
+                "Inter".clone_into(&mut self.settings_font_family);
+                "blue".clone_into(&mut self.settings_accent);
+                self.settings_telemetry = false;
+                self.settings_launch_at_login = false;
+            }
+            Message::SettingsDarkMode(value) => self.settings_dark_mode = value,
+            Message::SettingsAutosave(value) => self.settings_autosave = value,
+            Message::SettingsFontSize(value) => self.settings_font_size = value,
+            Message::SettingsFontFamily(value) => self.settings_font_family = value,
+            Message::SettingsAccent(value) => self.settings_accent = value,
+            Message::SettingsTelemetry(value) => self.settings_telemetry = value,
+            Message::SettingsLaunchAtLogin(value) => self.settings_launch_at_login = value,
             Message::ToggleBusy => self.busy = !self.busy,
             Message::PortChanged(value) => self.port = value,
             Message::OtpChanged(value) => self.otp = value,
@@ -393,6 +458,8 @@ impl App {
             self.tabs_section(),
             self.navigation_section(),
             self.data_section(),
+            self.settings_section(),
+            Self::group_box_section(),
             self.shell_section(),
         ]
         .spacing(24)
@@ -960,6 +1027,141 @@ impl App {
                 .align_y(Alignment::Center)
                 .wrap(),
                 label(format!("Open toasts: {}", self.toasts.len())).size(13),
+            ]
+            .spacing(12),
+        )
+    }
+
+    /// A settings panel, with the page and field shapes the reference shows.
+    fn settings_section(&self) -> Element<'_, Message, Theme> {
+        let panel = Settings::<Message>::new(&self.settings)
+            .on_event(Message::Settings)
+            .on_reset(Message::SettingsReset)
+            .page(
+                SettingPage::new("Appearance")
+                    .icon(IconName::Palette)
+                    .description("How the interface looks.")
+                    .group(
+                        SettingGroup::new()
+                            .title("Theme")
+                            .description("The palette the interface is drawn in.")
+                            .item(
+                                SettingItem::new("Dark mode")
+                                    .description("Use the dark palette.")
+                                    .keywords(["night", "color scheme"])
+                                    .field(
+                                        SettingField::switch(
+                                            self.settings_dark_mode,
+                                            Message::SettingsDarkMode,
+                                        )
+                                        .default_value(true),
+                                    ),
+                            )
+                            .item(SettingItem::new("Accent color").field(
+                                SettingField::select(
+                                    vec![
+                                        ("blue".to_owned(), "Blue".to_owned()),
+                                        ("violet".to_owned(), "Violet".to_owned()),
+                                        ("rose".to_owned(), "Rose".to_owned()),
+                                    ],
+                                    Some(self.settings_accent.clone()),
+                                    Message::SettingsAccent,
+                                )
+                                .default_value("blue"),
+                            )),
+                    )
+                    .group(
+                        SettingGroup::new()
+                            .title("Typography")
+                            .item(
+                                SettingItem::new("Font size")
+                                    .description("In points.")
+                                    .field(
+                                        SettingField::number(
+                                            self.settings_font_size,
+                                            8.0..=72.0,
+                                            Message::SettingsFontSize,
+                                        )
+                                        .default_value(14.0),
+                                    ),
+                            )
+                            .item(SettingItem::new("Font family").field(SettingField::text(
+                                self.settings_font_family.clone(),
+                                Message::SettingsFontFamily,
+                            ))),
+                    ),
+            )
+            .page(
+                SettingPage::new("General")
+                    .icon(IconName::Settings2)
+                    .group(
+                        SettingGroup::new()
+                            .title("Startup")
+                            .item(SettingItem::new("Launch at login").field(
+                                SettingField::switch(
+                                    self.settings_launch_at_login,
+                                    Message::SettingsLaunchAtLogin,
+                                ),
+                            ))
+                            .item(
+                                SettingItem::new("Autosave")
+                                    .description("Write changes as you make them.")
+                                    .field(
+                                        SettingField::switch(
+                                            self.settings_autosave,
+                                            Message::SettingsAutosave,
+                                        )
+                                        .default_value(true),
+                                    ),
+                            ),
+                    ),
+            )
+            .page(
+                SettingPage::new("Privacy")
+                    .icon(IconName::User)
+                    .group(SettingGroup::new().title("Telemetry").item(
+                        SettingItem::new("Send usage data")
+                            .description("Anonymous, and never sold.")
+                            .keywords(["analytics", "tracking"])
+                            .field(
+                                SettingField::checkbox(
+                                    self.settings_telemetry,
+                                    Message::SettingsTelemetry,
+                                )
+                                .default_value(false),
+                            ),
+                    ))
+                    .group(
+                        SettingGroup::new()
+                            .title("Experimental")
+                            .disabled(true)
+                            .item(SettingItem::new("Differential sync").field(
+                                SettingField::<Message>::switch(false, |_| Message::ToggleBusy),
+                            )),
+                    ),
+            );
+
+        Self::section(
+            "Settings",
+            container(panel).height(Length::Fixed(560.0)),
+        )
+    }
+
+    /// The three group box variants, standalone.
+    fn group_box_section() -> Element<'static, Message, Theme> {
+        let sample = |variant: GroupBoxVariant| {
+            group_box::<Message>()
+                .variant(variant)
+                .title(label(variant.as_str().to_owned()).size(14))
+                .push(text("Grouped content").size(13))
+        };
+
+        Self::section(
+            "Group boxes",
+            column![
+                sample(GroupBoxVariant::Normal),
+                sample(GroupBoxVariant::Fill),
+                sample(GroupBoxVariant::Outline).description("A bordered surface."),
             ]
             .spacing(12),
         )
