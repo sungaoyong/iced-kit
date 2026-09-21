@@ -1173,7 +1173,7 @@ impl App {
             .map_or_else(|| "none yet".to_owned(), str::to_owned);
 
         let title_bar = TitleBar::new("iced-kit")
-            .icon("◆")
+            .icon(IconName::GalleryVerticalEnd)
             .subtitle("shell")
             .control(WindowControl::Minimize, Message::Minimize)
             .control(WindowControl::Maximize, Message::Maximize)

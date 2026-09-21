@@ -6,9 +6,11 @@
 //! application's business, so each control emits a message and the application
 //! decides what to do with it.
 
+use crate::icons::IconName;
 use crate::theme::Theme;
 use crate::widgets::button as kit_button;
 use crate::widgets::display::Tone;
+use crate::widgets::Icon;
 use iced::widget::{container, row, text, Space};
 use iced::{Alignment, Color, Element, Length, Padding};
 
@@ -29,13 +31,20 @@ pub enum WindowControl {
 }
 
 impl WindowControl {
-    /// The glyph this control draws.
+    /// The icon this control draws.
+    ///
+    /// These come from the bundled icon font rather than from text characters,
+    /// so a window control matches every other icon in the library: one weight,
+    /// one optical size, one grid. The characters they replaced — `─`, `□`, `✕`
+    /// — are sized and weighted by whichever system font resolves them, so they
+    /// could not be made to agree with each other, let alone with the rest of
+    /// the interface.
     #[must_use]
-    pub const fn glyph(self) -> &'static str {
+    pub const fn icon(self) -> IconName {
         match self {
-            Self::Minimize => "─",
-            Self::Maximize => "□",
-            Self::Close => "✕",
+            Self::Minimize => IconName::Minus,
+            Self::Maximize => IconName::Square,
+            Self::Close => IconName::X,
         }
     }
 
@@ -56,10 +65,19 @@ impl WindowControl {
     }
 }
 
+/// What a trailing button draws.
+#[derive(Debug, Clone)]
+enum ControlGlyph {
+    /// A named icon, drawn in the icon font.
+    Named(IconName),
+    /// A caller's own character, drawn in the ambient font.
+    Text(String),
+}
+
 /// One trailing button, its glyph, and the message it emits.
 #[derive(Debug, Clone)]
 struct Control<Message> {
-    glyph: String,
+    glyph: ControlGlyph,
     message: Message,
     destructive: bool,
 }
@@ -69,7 +87,7 @@ struct Control<Message> {
 pub struct TitleBar<'a, Message> {
     title: String,
     subtitle: Option<String>,
-    icon: Option<String>,
+    icon: Option<ControlGlyph>,
     controls: Vec<Control<Message>>,
     height: f32,
     tone: Tone,
@@ -107,9 +125,27 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
         self
     }
 
-    /// Adds a leading icon glyph.
-    pub fn icon(mut self, icon: impl Into<String>) -> Self {
-        self.icon = Some(icon.into());
+    /// Adds a leading icon, drawn in the icon font.
+    ///
+    /// ```
+    /// # use iced_kit::widgets::TitleBar;
+    /// # use iced_kit::icons::IconName;
+    /// # #[derive(Clone, Debug)] enum Message {}
+    /// # fn view() -> iced::Element<'static, Message, iced_kit::Theme> {
+    /// TitleBar::<Message>::new("My App").icon(IconName::Settings2).into()
+    /// # }
+    /// ```
+    pub fn icon(mut self, icon: IconName) -> Self {
+        self.icon = Some(ControlGlyph::Named(icon));
+        self
+    }
+
+    /// Adds a leading icon glyph: a plain character in the ambient font.
+    ///
+    /// For a symbol the icon set does not carry. Prefer [`icon`](Self::icon) for
+    /// anything Lucide has, so the bar matches the rest of the interface.
+    pub fn icon_glyph(mut self, glyph: impl Into<String>) -> Self {
+        self.icon = Some(ControlGlyph::Text(glyph.into()));
         self
     }
 
@@ -131,7 +167,7 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
     /// Adds a window control that emits `message` when pressed.
     pub fn control(mut self, control: WindowControl, message: Message) -> Self {
         self.controls.push(Control {
-            glyph: control.glyph().to_owned(),
+            glyph: ControlGlyph::Named(control.icon()),
             message,
             destructive: control.is_destructive(),
         });
@@ -139,6 +175,10 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
     }
 
     /// Adds a custom button that emits `message` when pressed.
+    ///
+    /// The glyph is a plain character drawn in the ambient font, so it suits a
+    /// symbol the icon set does not carry. For an icon, use
+    /// [`custom_icon`](Self::custom_icon).
     pub fn custom_control(
         mut self,
         glyph: impl Into<String>,
@@ -146,7 +186,25 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
         destructive: bool,
     ) -> Self {
         self.controls.push(Control {
-            glyph: glyph.into(),
+            glyph: ControlGlyph::Text(glyph.into()),
+            message,
+            destructive,
+        });
+        self
+    }
+
+    /// Adds a custom button drawing a named icon.
+    ///
+    /// This is how to add a control that matches the built-in ones, such as a
+    /// restore button or a settings button on the trailing edge.
+    pub fn custom_icon(
+        mut self,
+        icon: IconName,
+        message: Message,
+        destructive: bool,
+    ) -> Self {
+        self.controls.push(Control {
+            glyph: ControlGlyph::Named(icon),
             message,
             destructive,
         });
@@ -170,7 +228,18 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
         let mut title = row![].spacing(8).align_y(Alignment::Center);
 
         if let Some(icon) = self.icon.as_ref() {
-            title = title.push(text(icon.clone()).size(title_style.size + 2.0));
+            let element: Element<'a, Message, Theme> = match icon {
+                // Through the shared `Icon`, so the leading icon is sized and
+                // colored exactly like the window controls beside the title.
+                ControlGlyph::Named(name) => {
+                    Icon::new(*name).into_element(crate::theme::Size::Md)
+                }
+                ControlGlyph::Text(glyph) => text(glyph.clone())
+                    .size(title_style.size + 2.0)
+                    .into(),
+            };
+
+            title = title.push(element);
         }
 
         title = title.push(
@@ -195,23 +264,40 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
     /// Builds the trailing control row.
     fn controls(&self) -> Element<'a, Message, Theme> {
         let mut controls = row![].spacing(2).align_y(Alignment::Center);
+        let size = crate::theme::Size::Sm;
 
         for control in &self.controls {
-            let glyph = control.glyph.clone();
             let destructive = control.destructive;
 
-            // A close button is tinted, so the destructive action is
-            // distinguishable before it is committed.
-            let widget = if destructive {
-                kit_button(glyph).destructive()
-            } else {
-                kit_button(glyph).ghost()
+            // The glyph decides how the button is built: a named icon goes
+            // through the icon slot, a caller's character is the label. Either
+            // way the button is square, so a row of controls lines up whatever
+            // each one draws.
+            let button = match &control.glyph {
+                ControlGlyph::Named(icon) => {
+                    let button = if destructive {
+                        kit_button::<Message>(String::new()).destructive()
+                    } else {
+                        kit_button::<Message>(String::new()).ghost()
+                    };
+
+                    button.icon(Icon::new(*icon))
+                }
+                ControlGlyph::Text(glyph) => {
+                    let button = if destructive {
+                        kit_button::<Message>(glyph.clone()).destructive()
+                    } else {
+                        kit_button::<Message>(glyph.clone()).ghost()
+                    };
+
+                    button
+                }
             }
-            .size(crate::theme::Size::Sm)
+            .size(size)
             .width(Length::Fixed(32.0))
             .on_press(control.message.clone());
 
-            controls = controls.push(widget);
+            controls = controls.push(button);
         }
 
         controls.into()
@@ -299,6 +385,7 @@ pub fn title_spacer<'a, Message: 'a>() -> Element<'a, Message, Theme> {
 #[cfg(test)]
 mod tests {
     use super::{recommended_height, separator_color, title_spacer, TitleBar, WindowControl};
+    use crate::icons::IconName;
     use crate::theme::Theme;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -318,10 +405,31 @@ mod tests {
     #[test]
     fn a_title_bar_renders_with_an_icon_and_subtitle() {
         let element: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
-            .icon("◆")
+            .icon(IconName::Settings2)
             .subtitle("untitled")
             .into();
         drop(element);
+    }
+
+    #[test]
+    fn a_title_bar_renders_with_a_text_glyph_icon() {
+        let element: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
+            .icon_glyph("◆")
+            .into();
+        drop(element);
+    }
+
+    #[test]
+    fn a_custom_control_can_be_an_icon_or_a_glyph() {
+        let with_icon: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
+            .custom_icon(IconName::Info, Message::Drag, false)
+            .into();
+        drop(with_icon);
+
+        let with_glyph: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
+            .custom_control("⚙", Message::Drag, false)
+            .into();
+        drop(with_glyph);
     }
 
     #[test]
@@ -363,6 +471,19 @@ mod tests {
     }
 
     #[test]
+    fn every_window_control_renders_in_every_tone() {
+        for tone in [crate::widgets::Tone::Neutral, crate::widgets::Tone::Primary] {
+            let element: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
+                .tone(tone)
+                .control(WindowControl::Minimize, Message::Minimize)
+                .control(WindowControl::Maximize, Message::Maximize)
+                .control(WindowControl::Close, Message::Close)
+                .into();
+            drop(element);
+        }
+    }
+
+    #[test]
     fn a_title_bar_renders_at_several_heights() {
         for height in [28.0, 40.0, 64.0] {
             let element: iced::Element<'_, Message, Theme> =
@@ -379,32 +500,59 @@ mod tests {
     }
 
     #[test]
-    fn every_control_has_a_glyph_and_a_label() {
+    fn every_control_has_an_icon_and_a_label() {
         for control in [
             WindowControl::Minimize,
             WindowControl::Maximize,
             WindowControl::Close,
         ] {
-            assert!(!control.glyph().is_empty());
+            // A glyph in the icon font is always a private-use character, which
+            // is what keeps an icon from colliding with a letter.
+            let glyph = crate::icons::glyph(control.icon());
+            assert!(
+                ('\u{e000}'..='\u{f8ff}').contains(&glyph),
+                "{control:?} resolved to {glyph:?}, which is not an icon-font glyph"
+            );
             assert!(!control.label().is_empty());
         }
     }
 
     #[test]
-    fn control_glyphs_are_distinct() {
-        // Two controls drawn the same way would be indistinguishable.
-        let glyphs = [
-            WindowControl::Minimize.glyph(),
-            WindowControl::Maximize.glyph(),
-            WindowControl::Close.glyph(),
+    fn control_icons_are_distinct() {
+        // Two controls drawing the same icon would be indistinguishable.
+        let icons = [
+            WindowControl::Minimize.icon(),
+            WindowControl::Maximize.icon(),
+            WindowControl::Close.icon(),
         ];
 
-        for (i, left) in glyphs.iter().enumerate() {
-            for (j, right) in glyphs.iter().enumerate() {
+        for (i, left) in icons.iter().enumerate() {
+            for (j, right) in icons.iter().enumerate() {
                 if i != j {
-                    assert_ne!(left, right);
+                    assert_ne!(
+                        crate::icons::glyph(*left),
+                        crate::icons::glyph(*right),
+                        "two window controls must not draw the same glyph"
+                    );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn the_window_controls_use_the_icons_they_name() {
+        // Pinned so a future icon-set change is a deliberate edit rather than a
+        // silent reshuffle. The comparison is on the resolved glyph, because the
+        // icon font's own enum implements neither `PartialEq` nor `Eq`.
+        for (control, expected) in [
+            (WindowControl::Minimize, IconName::Minus),
+            (WindowControl::Maximize, IconName::Square),
+            (WindowControl::Close, IconName::X),
+        ] {
+            assert_eq!(
+                crate::icons::glyph(control.icon()),
+                crate::icons::glyph(expected)
+            );
         }
     }
 

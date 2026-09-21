@@ -82,7 +82,8 @@ tabs, nested splits and drop targets
 `SettingGroup`, `SettingItem` and `SettingField`
 
 **Icons** — the whole [Lucide](https://lucide.dev) set as `IconName`, drawn
-through the bundled icon font
+through the bundled icon font. Components draw from it throughout, including a
+title bar's window controls (`─`/`□`/`✕` are `IconName::Minus`/`Square`/`X`)
 
 **Overlays** — `Modal`, `Dialog`, `Drawer`, `Toast`/`Toasts`,
 `Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`

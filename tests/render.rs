@@ -1079,7 +1079,7 @@ fn a_title_bar_renders_with_window_controls() {
         "title_bar",
         column![
             TitleBar::new("iced-kit gallery")
-                .icon("◆")
+                .icon(iced_kit::icons::IconName::GalleryVerticalEnd)
                 .subtitle("untitled")
                 .control(WindowControl::Minimize, Message::Noop)
                 .control(WindowControl::Maximize, Message::Noop)
@@ -1089,7 +1089,7 @@ fn a_title_bar_renders_with_window_controls() {
                 .control(WindowControl::Close, Message::Close),
             TitleBar::new("Warning tone")
                 .tone(Tone::Warning)
-                .icon("⚠")
+                .icon(iced_kit::icons::IconName::TriangleAlert)
                 .control(WindowControl::Close, Message::Close),
         ]
         .spacing(12),
@@ -1102,7 +1102,7 @@ fn a_title_bar_renders_in_dark_mode() {
     assert_renders(
         "title_bar_dark",
         TitleBar::new("iced-kit")
-            .icon("◆")
+            .icon(iced_kit::icons::IconName::GalleryVerticalEnd)
             .subtitle("dark")
             .control(WindowControl::Minimize, Message::Noop)
             .control(WindowControl::Close, Message::Close),
