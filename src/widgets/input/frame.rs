@@ -429,9 +429,16 @@ where
             .shrink(padding)
             .resolve(self.width, self.height, content.size());
 
+        // `align` *adds* the centering offset to the node's position, so the
+        // padding has to be applied with `translate`, which also adds. Using
+        // `move_to` here would set the position absolutely and throw the
+        // centering away, which leaves a single-line control pinned to the top of
+        // its field — this was a real defect, and the reason a field's value sat
+        // high in its box while the placeholder, drawn centered by iced itself,
+        // did not.
         let content = content
             .align(iced::Alignment::Center, iced::Alignment::Center, size)
-            .move_to((padding.left, padding.top));
+            .translate(iced::Vector::new(padding.left, padding.top));
 
         layout::Node::with_children(size.expand(padding), vec![content])
     }
@@ -627,6 +634,56 @@ mod tests {
             iced::Alignment::Center
         );
         assert_eq!(cross_alignment(ControlKind::Multi), iced::Alignment::Start);
+    }
+
+    /// The frame centres a control in its field by aligning the laid-out node
+    /// against the field's inner box.
+    ///
+    /// This pins the arithmetic that makes that work, because it is easy to undo
+    /// by accident: `Node::align` *adds* the centering offset to the node's
+    /// position, so the padding has to be applied with something that also adds.
+    /// `Node::move_to` sets the position outright, which silently discards the
+    /// centering and pins the control to the top of the field — a real defect,
+    /// where a value sat high in its box while the placeholder, which iced
+    /// centres itself, did not.
+    #[test]
+    fn centering_survives_the_padding_being_applied() {
+        use iced::advanced::layout;
+
+        let field = iced::Size::new(200.0, 32.0);
+        // A single line of `Md` text: a 20px line box in a 32px field.
+        let control_height = Size::Md.text().line_height;
+
+        let node = layout::Node::new(iced::Size::new(180.0, control_height))
+            .align(iced::Alignment::Center, iced::Alignment::Center, field)
+            .translate(iced::Vector::new(1.0, 1.0));
+
+        let centered = (field.height - control_height) / 2.0 + 1.0;
+        assert_eq!(
+            node.bounds().y,
+            centered,
+            "the control must keep its centering offset after the padding is applied"
+        );
+        assert_eq!(node.bounds().x, 1.0 + (field.width - 180.0) / 2.0);
+    }
+
+    /// `move_to` is the call that breaks the test above, so it is worth naming.
+    #[test]
+    fn move_to_would_discard_the_centering_offset() {
+        use iced::advanced::layout;
+
+        let field = iced::Size::new(200.0, 32.0);
+        let control_height = Size::Md.text().line_height;
+
+        let node = layout::Node::new(iced::Size::new(180.0, control_height))
+            .align(iced::Alignment::Center, iced::Alignment::Center, field)
+            .move_to((1.0, 1.0));
+
+        assert_eq!(
+            node.bounds().y,
+            1.0,
+            "this is why the frame translates rather than moves"
+        );
     }
 
     #[test]
