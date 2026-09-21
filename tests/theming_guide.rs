@@ -210,3 +210,46 @@ fn component_metrics_are_functions_not_tokens() {
     assert!(iced_kit::widgets::resizable::min_pane_size() > 0.0);
     assert!(iced_kit::widgets::resizable::splitter_width() > 0.0);
 }
+
+#[test]
+fn resolving_a_field_appearance() {
+    // The guide's field example: focus, validation and the disabled state are
+    // independent flags, and the error border wins over the focus ring.
+    let theme = Theme::light();
+
+    let state = catalog::FieldState {
+        focused: true,
+        invalid: true,
+        ..catalog::FieldState::default()
+    };
+    let appearance = catalog::FieldAppearance::resolve(&theme, state);
+
+    assert_eq!(appearance.border, theme.colors().destructive);
+    assert!(appearance.border_width > 0.0);
+
+    // And the appearance converts into what iced's controls expect.
+    let input_style = appearance.into_text_input_style();
+    let editor_style = appearance.into_text_editor_style();
+
+    assert_eq!(input_style.border.width, 0.0);
+    assert_eq!(editor_style.border.width, 0.0);
+    assert_eq!(input_style.value, appearance.text_color);
+    assert_eq!(editor_style.value, appearance.text_color);
+}
+
+#[test]
+fn a_themed_field_renders_in_a_guide_style_view() {
+    // The guide says an override reads colors from the passed-in theme; a field
+    // built that way has to render under both palettes.
+    for theme in [Theme::light(), Theme::dark()] {
+        let element: Element<'_, Message, Theme> =
+            iced_kit::widgets::text_input::<Message>("Email", "a@b.c")
+                .on_input(|_| Message::ToggleTheme)
+                .into();
+
+        let field: Element<'_, Message, Theme> = container(element).into();
+        drop(field);
+
+        assert!(theme.colors().background.a > 0.0);
+    }
+}

@@ -24,14 +24,14 @@ use iced_kit::widgets::plot::{
     SankeyNode,
 };
 use iced_kit::widgets::{
-    accordion, alert, avatar, avatar_with_name, badge, code, divider, empty_state, heading, kbd,
-    list, muted_text, number_input, otp_input, pagination, paragraph, progress, ring_progress,
-    shortcut, skeleton, skeleton_list_item, spinner_styled, tag, text_input, tooltip,
-    AccordionSection, AvatarLabel, Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem,
-    Modal, SkeletonShape, SpinnerStyle, TitleBar, Tone, VirtualList, VirtualListState,
-    WindowControl,
+    accordion, addon, alert, avatar, avatar_with_name, badge, code, divider, empty_state,
+    group_button, heading, input_group, kbd, list, muted_text, number_input, otp_input, pagination,
+    paragraph, password, progress, ring_progress, shortcut, skeleton, skeleton_list_item,
+    spinner_styled, tag, text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel,
+    Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem, Modal, SkeletonShape, SpinnerStyle,
+    TitleBar, Tone, VirtualList, VirtualListState, WindowControl,
 };
-use iced_kit::Theme;
+use iced_kit::{Size, Theme};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Message {
@@ -498,6 +498,160 @@ fn dark_mode_renders_the_same_components() {
         ]
         .spacing(12),
         true,
+    );
+}
+
+#[test]
+fn text_fields_render_in_every_state() {
+    assert_renders(
+        "text_fields",
+        column![
+            text_input::<Message>("Placeholder", "").on_input(|_| Message::Noop),
+            text_input::<Message>("Filled", "Ada Lovelace").on_input(|_| Message::Noop),
+            text_input::<Message>("Invalid", "not an email")
+                .invalid(true)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("With label", "value")
+                .label("Email")
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("With error", "x")
+                .error("That is not an email")
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Disabled", "nope")
+                .disabled(true)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Read-only", "selectable")
+                .readonly(true)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Password", "hunter2")
+                .password(true)
+                .on_mask_toggle(Message::Noop)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Search", "query")
+                .clearable(Message::Noop)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Loading", "checking")
+                .loading(true)
+                .on_input(|_| Message::Noop),
+        ]
+        .spacing(12),
+        false,
+    );
+}
+
+#[test]
+fn text_fields_render_at_every_size() {
+    assert_renders(
+        "text_field_sizes",
+        column![
+            text_input::<Message>("Extra small", "xs")
+                .size(Size::Xs)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Small", "sm")
+                .size(Size::Sm)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Medium", "md")
+                .size(Size::Md)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("Large", "lg")
+                .size(Size::Lg)
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("With prefix", "120")
+                .prefix(iced::widget::text("$"))
+                .on_input(|_| Message::Noop),
+            text_input::<Message>("With prefix and suffix", "120")
+                .prefix(iced::widget::text("$"))
+                .suffix(iced::widget::text("USD"))
+                .on_input(|_| Message::Noop),
+        ]
+        .spacing(12),
+        false,
+    );
+}
+
+#[test]
+fn input_groups_render() {
+    assert_renders(
+        "input_groups",
+        column![
+            input_group()
+                .input(text_input::<Message>("example.com", "").on_input(|_| Message::Noop))
+                .addon(addon().push(iced::widget::text("https://").size(12))),
+            input_group()
+                .input(text_input::<Message>("Search…", "rust").on_input(|_| Message::Noop))
+                .addon(
+                    addon()
+                        .align(AddonAlignment::InlineEnd)
+                        .push(group_button::<Message>("Go").on_press(Message::Noop)),
+                ),
+            input_group()
+                .input(text_input::<Message>("0.00", "120").on_input(|_| Message::Noop))
+                .addon(addon().push(iced::widget::text("$").size(13)))
+                .addon(
+                    addon()
+                        .align(AddonAlignment::InlineEnd)
+                        .push(iced::widget::text("USD").size(12)),
+                ),
+            input_group()
+                .input(text_input::<Message>("Card number", "4242").on_input(|_| Message::Noop),)
+                .addon(
+                    addon()
+                        .align(AddonAlignment::BlockStart)
+                        .push(iced::widget::text("As printed on the card").size(11)),
+                )
+                .addon(
+                    addon()
+                        .align(AddonAlignment::BlockEnd)
+                        .push(iced::widget::text("We never store this").size(11)),
+                ),
+            input_group()
+                .input(
+                    text_input::<Message>("Email", "nope")
+                        .invalid(true)
+                        .on_input(|_| Message::Noop),
+                )
+                .addon(
+                    addon()
+                        .align(AddonAlignment::InlineEnd)
+                        .push(iced::widget::text("@"))
+                )
+                .invalid(true),
+        ]
+        .spacing(14),
+        false,
+    );
+}
+
+#[test]
+fn number_and_otp_fields_render() {
+    assert_renders(
+        "number_and_otp_fields",
+        column![
+            number_input("Port", 8080.0, 1.0..=65535.0, |_| Message::Noop),
+            number_input("Price", 19.99, 0.0..=100.0, |_| Message::Noop)
+                .step(0.01)
+                .prefix(iced::widget::text("$")),
+            number_input("At the maximum", 100.0, 0.0..=100.0, |_| Message::Noop),
+            number_input("Disabled", 5.0, 0.0..=10.0, |_| Message::Noop).disabled(true),
+            otp_input("123456", 6, |_| Message::Noop),
+            otp_input("1234", 6, |_| Message::Noop).groups(2),
+            otp_input("12", 6, |_| Message::Noop).masked(true),
+        ]
+        .spacing(14),
+        false,
+    );
+}
+
+#[test]
+fn a_password_field_renders_masked_and_revealed() {
+    assert_renders(
+        "password_fields",
+        column![
+            password::<Message>("Password", "hunter2"),
+            password::<Message>("Revealed", "hunter2").masked(false),
+        ]
+        .spacing(12),
+        false,
     );
 }
 

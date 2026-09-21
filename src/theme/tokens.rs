@@ -194,6 +194,16 @@ pub struct Radius {
     pub full: u16,
 }
 
+impl Radius {
+    /// The medium step of the default scale.
+    ///
+    /// A widget that has to know its radius before it can be given a theme —
+    /// a frame resolved outside the draw pass, say — uses this. Every palette
+    /// in this crate shares one radius scale, so the default is the right value,
+    /// and naming it here keeps the two from drifting apart.
+    pub const DEFAULT_MD: u16 = 6;
+}
+
 impl Default for Radius {
     fn default() -> Self {
         Self {
@@ -399,6 +409,33 @@ impl Size {
             Self::Lg => 18.0,
             Self::Custom(size) => size * 0.5,
         }
+    }
+
+    /// The horizontal inset between a form control's border and its content.
+    ///
+    /// A field sets its text closer to the border than a button sets its label:
+    /// the value is what the eye tracks, and the shorter run to the border is
+    /// what makes the box read as a place to type. This is `gpui-kit`'s
+    /// `input_px`.
+    #[must_use]
+    pub const fn input_padding(self) -> f32 {
+        match self {
+            Self::Xs => 4.0,
+            Self::Sm => 8.0,
+            Self::Lg => 12.0,
+            // An explicit size carries no inset of its own, so it borrows the
+            // default step's.
+            Self::Md | Self::Custom(_) => 10.0,
+        }
+    }
+
+    /// The height of a form control's content box, excluding its border.
+    ///
+    /// A field's border is one pixel on each side and the text is centred in
+    /// what remains, so this is the value a field's line box has to equal.
+    #[must_use]
+    pub const fn input_inner_height(self) -> f32 {
+        self.height() - 2.0
     }
 }
 

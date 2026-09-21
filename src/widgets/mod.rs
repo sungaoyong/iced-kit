@@ -43,7 +43,10 @@ pub use button::{
 pub use chart::{Chart, ChartKind, Series};
 pub use data_table::{Column, DataTable, SortDirection, SortKey, TableState, Width};
 pub use display::{alert, badge, card, divider, empty_state, progress, vertical_divider, Tone};
-pub use input::{label, password, text_area, text_input, TextArea, TextInput};
+pub use input::{
+    addon, group_button, group_icon_button, input_group, label, password, text_area, text_input,
+    AddonAlignment, InputGroup, InputGroupAddon, TextArea, TextInput,
+};
 pub use list::{list, tag, ListItem};
 pub use markdown::Markdown as MarkdownDocument;
 pub use navigation::{accordion, pagination, Section as AccordionSection};

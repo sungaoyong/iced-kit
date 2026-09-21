@@ -11,9 +11,10 @@ use iced_kit::widgets::plot::{
     PieChart, PieSlice, RadarChart, RadarSeries, SankeyAlign, SankeyChart, SankeyLink, SankeyNode,
 };
 use iced_kit::widgets::{
-    accordion, alert, avatar, avatar_with_name, code, empty_state, heading, icon_button, kbd,
-    muted_text, pagination, paragraph, ring_progress, shortcut, skeleton, skeleton_list_item,
-    spinner_styled, tooltip, AccordionSection, AvatarLabel, Button, ButtonGroup, Dropdown,
+    accordion, addon, alert, avatar, avatar_with_name, code, empty_state, group_button, heading,
+    icon_button, input_group, kbd, muted_text, number_input, otp_input, pagination, paragraph,
+    ring_progress, shortcut, skeleton, skeleton_list_item, spinner_styled, text_area, text_input,
+    tooltip, AccordionSection, AddonAlignment, AvatarLabel, Button, ButtonGroup, Dropdown,
     DropdownButton, Heading, MenuItem, Modal, SkeletonShape, SpinnerStyle, Toggle, ToggleGroup,
     Tone,
 };
@@ -76,6 +77,9 @@ struct App {
     name: String,
     email: String,
     password: String,
+    password_visible: bool,
+    search: String,
+    amount: String,
     notes: iced::widget::text_editor::Content,
     notifications: bool,
     newsletter: bool,
@@ -157,6 +161,10 @@ enum Message {
     NameChanged(String),
     EmailChanged(String),
     PasswordChanged(String),
+    TogglePasswordVisibility,
+    ClearSearch,
+    SearchChanged(String),
+    AmountChanged(String),
     NotesEdited(iced::widget::text_editor::Action),
     NotificationsToggled(bool),
     NewsletterToggled(bool),
@@ -199,6 +207,9 @@ impl Default for App {
             name: String::new(),
             email: String::new(),
             password: String::new(),
+            password_visible: false,
+            search: String::new(),
+            amount: String::new(),
             notes: iced::widget::text_editor::Content::new(),
             notifications: false,
             newsletter: false,
@@ -284,6 +295,12 @@ impl App {
             Message::NameChanged(value) => self.name = value,
             Message::EmailChanged(value) => self.email = value,
             Message::PasswordChanged(value) => self.password = value,
+            Message::TogglePasswordVisibility => {
+                self.password_visible = !self.password_visible;
+            }
+            Message::ClearSearch => self.search.clear(),
+            Message::SearchChanged(value) => self.search = value,
+            Message::AmountChanged(value) => self.amount = value,
             Message::NotesEdited(action) => {
                 self.notes.perform(action);
             }
@@ -368,6 +385,7 @@ impl App {
             self.header(),
             self.buttons_section(),
             self.form_section(),
+            self.input_group_section(),
             self.selection_section(),
             self.display_section(),
             self.feedback_section(),
@@ -622,38 +640,112 @@ impl App {
             "Form fields",
             column![
                 row![
-                    column![
-                        label("Name").size(13),
-                        text_input::<Message>("Ada Lovelace", &self.name)
-                            .on_input(Message::NameChanged)
-                            .width(200),
-                    ]
-                    .spacing(4),
-                    column![
-                        label("Email").size(13),
-                        text_input::<Message>("you@example.com", &self.email)
-                            .on_input(Message::EmailChanged)
-                            .width(200),
-                    ]
-                    .spacing(4),
-                    column![
-                        label("Password").size(13),
-                        password::<Message>("••••••••", &self.password)
-                            .on_input(Message::PasswordChanged)
-                            .width(200),
-                    ]
-                    .spacing(4),
+                    text_input::<Message>("Ada Lovelace", &self.name)
+                        .label("Name")
+                        .on_input(Message::NameChanged)
+                        .width(220),
+                    text_input::<Message>("you@example.com", &self.email)
+                        .label("Email")
+                        .on_input(Message::EmailChanged)
+                        .width(220),
+                    text_input::<Message>("••••••••", &self.password)
+                        .label("Password")
+                        .password(true)
+                        .masked(self.password_visible)
+                        .on_mask_toggle(Message::TogglePasswordVisibility)
+                        .on_input(Message::PasswordChanged)
+                        .width(220),
                 ]
                 .spacing(16)
                 .wrap(),
-                column![
-                    label("Notes").size(13),
-                    text_area::<Message>("Write something…", &self.notes)
-                        .on_edit(Message::NotesEdited),
+                row![
+                    text_input::<Message>("Search…", &self.search)
+                        .label("Search")
+                        .clearable(Message::ClearSearch)
+                        .on_input(Message::SearchChanged)
+                        .width(220),
+                    text_input::<Message>("https://example.com", &self.email)
+                        .label("Site")
+                        .prefix(label("https://").size(13))
+                        .on_input(Message::EmailChanged)
+                        .width(260),
+                    text_input::<Message>("Required", "")
+                        .label("Validated")
+                        .error("This field is required")
+                        .width(220),
                 ]
+                .spacing(16)
+                .wrap(),
+                row![
+                    number_input("Port", 8080.0, 1.0..=65535.0, Message::PortChanged),
+                    otp_input(&self.otp, 6, Message::OtpChanged).groups(2),
+                ]
+                .spacing(16)
+                .align_y(iced::Alignment::Start)
+                .wrap(),
+                column![text_area::<Message>("Write something…", &self.notes)
+                    .label("Notes")
+                    .on_edit(Message::NotesEdited),]
                 .spacing(4),
             ]
             .spacing(16),
+        )
+    }
+
+    fn input_group_section(&self) -> Element<'_, Message, Theme> {
+        Self::section(
+            "Input groups",
+            column![
+                input_group()
+                    .input(
+                        text_input::<Message>("example.com", &self.email)
+                            .on_input(Message::EmailChanged),
+                    )
+                    .addon(addon().push(label("https://").size(13)))
+                    .width(320),
+                input_group()
+                    .input(
+                        text_input::<Message>("Search…", &self.search)
+                            .on_input(Message::SearchChanged),
+                    )
+                    .addon(
+                        addon()
+                            .align(AddonAlignment::InlineEnd)
+                            .push(group_button::<Message>("Go").on_press(Message::Save)),
+                    )
+                    .width(320),
+                input_group()
+                    .input(
+                        text_input::<Message>("0.00", &self.amount)
+                            .on_input(Message::AmountChanged),
+                    )
+                    .addon(addon().push(label("$").size(13)))
+                    .addon(
+                        addon()
+                            .align(AddonAlignment::InlineEnd)
+                            .push(label("USD").size(12))
+                    )
+                    .width(320),
+                input_group()
+                    .input(
+                        text_input::<Message>("4242 4242 4242 4242", "")
+                            .invalid(true)
+                            .on_input(Message::NameChanged),
+                    )
+                    .addon(
+                        addon()
+                            .align(AddonAlignment::BlockStart)
+                            .push(label("Card that expired last month").size(11)),
+                    )
+                    .addon(
+                        addon()
+                            .align(AddonAlignment::InlineEnd)
+                            .push(label("@").size(12))
+                    )
+                    .invalid(true)
+                    .width(320),
+            ]
+            .spacing(14),
         )
     }
 

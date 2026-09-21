@@ -93,8 +93,11 @@ fn soften(color: Color, factor: f32) -> Color {
 ///
 /// In dark mode a control has to sit slightly above the page to be visible, so
 /// it is a faint wash of the input border; in light mode the page itself is
-/// already the right surface.
-fn input_background(theme: &Theme) -> Color {
+/// already the right surface and a fill would only add noise.
+///
+/// This is `gpui-kit`'s `input_background`.
+#[must_use]
+pub fn field_surface(theme: &Theme) -> Color {
     let colors = theme.colors();
 
     if theme.is_dark() {
@@ -333,14 +336,14 @@ impl ButtonVariant {
         // is what keeps it visually behind a filled button of the same accent.
         if outline {
             return match self {
-                Self::Default => Some(input_background(theme)),
+                Self::Default => Some(field_surface(theme)),
                 Self::Ghost | Self::Link | Self::Text => None,
                 other => other.accent(theme).map(|accent| tint(accent, 0.1)),
             };
         }
 
         match self {
-            Self::Default => Some(input_background(theme)),
+            Self::Default => Some(field_surface(theme)),
             Self::Primary => Some(colors.primary),
             Self::Secondary => Some(colors.secondary),
             Self::Destructive => Some(colors.destructive),
@@ -772,7 +775,7 @@ impl ButtonClass {
                 ButtonVariant::Ghost | ButtonVariant::Link | ButtonVariant::Text => None,
                 // A neutral control keeps its surface, so a disabled form still
                 // reads as a form rather than as a row of labels.
-                ButtonVariant::Default => Some(tint(input_background(theme), 0.5)),
+                ButtonVariant::Default => Some(tint(field_surface(theme), 0.5)),
                 other => other.accent(theme).map(|accent| tint(accent, 0.15)),
             }
         };
@@ -1014,6 +1017,137 @@ pub fn muted(theme: &Theme) -> container::Style {
         },
         text_color: Some(colors.muted_foreground),
         ..container::Style::default()
+    }
+}
+
+/// The state a form control's frame is drawn in.
+///
+/// Focus, validation and the disabled state are independent of one another, so
+/// they are carried as separate flags rather than as one enum: a disabled field
+/// can still be showing a validation error, and the frame has to resolve that
+/// combination rather than pick one. That combination is exactly why the
+/// booleans are not folded into a state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct FieldState {
+    /// The control inside the frame holds focus.
+    pub focused: bool,
+    /// The pointer is over the frame.
+    pub hovered: bool,
+    /// The caller's validation has failed.
+    pub invalid: bool,
+    /// The control is inert.
+    pub disabled: bool,
+}
+
+/// The resolved appearance of a form control's frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FieldAppearance {
+    /// The fill inside the border.
+    pub background: Color,
+    /// The border color.
+    pub border: Color,
+    /// The border's width in logical pixels.
+    pub border_width: f32,
+    /// The color of value text.
+    pub text_color: Color,
+    /// The color of placeholder text, and of a prefix or suffix at rest.
+    pub placeholder_color: Color,
+    /// The background painted behind selected text.
+    pub selection: Color,
+}
+
+impl FieldAppearance {
+    /// Resolves the frame's appearance from the theme and the control's state.
+    ///
+    /// The precedence is deliberate, and follows `gpui-kit`'s `GroupAppearance`:
+    /// an invalid field keeps its error border even while focused, because focus
+    /// is not new information and replacing the error with a ring would hide the
+    /// one signal the user has to act on. Focus only wins when there is no error
+    /// to show. Disabled dims everything else but never cancels validation.
+    #[must_use]
+    pub fn resolve(theme: &Theme, state: FieldState) -> Self {
+        let colors = theme.colors();
+
+        let (border, border_width) = if state.invalid {
+            (colors.destructive, 1.0)
+        } else if state.focused && !state.disabled {
+            // A focused field draws the ring at two pixels: the increase in
+            // weight is what carries the signal, since the ring color is a
+            // mid-grey in both palettes and barely differs from the input
+            // border.
+            (colors.ring, 2.0)
+        } else if state.hovered && !state.disabled {
+            (shade(colors.input, -0.15), 1.0)
+        } else {
+            (colors.input, 1.0)
+        };
+
+        let background = field_surface(theme);
+
+        Self {
+            background: if state.disabled {
+                // A disabled field keeps a surface rather than going flat: an
+                // empty box still has to read as a place a value could live.
+                blend(field_surface(theme), colors.muted)
+            } else {
+                background
+            },
+            border: if state.disabled {
+                fade(border, 0.5)
+            } else {
+                border
+            },
+            border_width,
+            text_color: if state.disabled {
+                colors.muted_foreground
+            } else {
+                colors.foreground
+            },
+            placeholder_color: colors.muted_foreground,
+            selection: colors.selection,
+        }
+    }
+
+    /// Converts this appearance into the closure iced's `text_input` expects.
+    ///
+    /// The catalog on [`Theme`] already resolves the same tokens, but it can
+    /// only see the widget's *own* status — it cannot know that the caller
+    /// marked the field invalid or that a group owns the frame. Passing a class
+    /// built from this appearance is how those outer decisions reach the
+    /// control.
+    #[must_use]
+    pub fn into_text_input_style(self) -> text_input::Style {
+        text_input::Style {
+            background: Background::Color(Color::TRANSPARENT),
+            // The control sits inside a frame that draws the border, so it
+            // draws none of its own; a second one would double the line.
+            border: Border {
+                color: Color::TRANSPARENT,
+                width: 0.0,
+                radius: 0.0.into(),
+            },
+            icon: self.placeholder_color,
+            placeholder: self.placeholder_color,
+            value: self.text_color,
+            selection: self.selection,
+        }
+    }
+
+    /// Converts this appearance into the closure iced's `text_editor` expects.
+    #[must_use]
+    pub fn into_text_editor_style(self) -> text_editor::Style {
+        text_editor::Style {
+            background: Background::Color(Color::TRANSPARENT),
+            border: Border {
+                color: Color::TRANSPARENT,
+                width: 0.0,
+                radius: 0.0.into(),
+            },
+            placeholder: self.placeholder_color,
+            value: self.text_color,
+            selection: self.selection,
+        }
     }
 }
 

@@ -184,6 +184,27 @@ let appearance = class.appearance(&Theme::light(), ButtonState::Normal);
 `crate::widgets::Button` builds exactly this struct from its builder methods, so
 a custom control can reuse the same palette without reimplementing it.
 
+A field's appearance works the same way. Focus, validation and the disabled
+state are independent, so they are carried as separate flags rather than folded
+into one enum — a disabled field can still be showing a validation error, and
+the frame has to resolve that combination rather than pick one:
+
+```rust
+use iced_kit::theme::catalog::{FieldAppearance, FieldState};
+
+let state = FieldState { focused: true, invalid: true, ..FieldState::default() };
+let appearance = FieldAppearance::resolve(&Theme::light(), state);
+
+// The error border wins over the focus ring: focus is not new information when
+// something is already wrong, and a ring would hide the signal to act on.
+assert_eq!(appearance.border, Theme::light().colors().destructive);
+```
+
+`appearance.into_text_input_style()` and `into_text_editor_style()` turn it into
+the style closure iced's controls expect, which is how an outer decision — the
+caller marked the field invalid; a group owns the frame — reaches a control
+whose own catalog can only see its own status.
+
 Container styles are reusable the same way:
 
 ```rust

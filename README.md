@@ -53,8 +53,8 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 ## Components
 
 **Form** — `button`, `icon_button`, `ButtonGroup`, `DropdownButton`, `Toggle`,
-`ToggleGroup`, `text_input`, `password`, `text_area`, `select`, `checkbox`,
-`radio`, `switch`, `slider`, `number_input`, `otp_input`
+`ToggleGroup`, `text_input`, `password`, `text_area`, `input_group`, `select`,
+`checkbox`, `radio`, `switch`, `slider`, `number_input`, `otp_input`
 
 **Display** — `card`, `divider`, `vertical_divider`, `badge`, `progress`,
 `alert`, `empty_state`, `label`, `tag`
@@ -269,6 +269,55 @@ text_input::<Message>("Email", &self.email).on_input(Message::EmailChanged)
 badge("Active", Tone::Success)
 alert("Saved", "Your changes were written.", Tone::Success)
 ```
+
+## Text inputs
+
+Every field draws one border around its whole box, so a prefix, a suffix, a
+clear button and a spinner all sit inside it rather than beside it. The frame
+owns the border, the validation state and the focus ring; the control inside it
+draws none of its own.
+
+```rust
+text_input::<Message>("you@example.com", &self.email)
+    .label("Email")
+    .on_input(Message::EmailChanged)
+```
+
+A field is one of four shapes:
+
+- **`text_input`** — a single-line field. `prefix`, `suffix`, `label`, `error`,
+  `invalid`, `disabled`, `readonly`, `loading`, `clearable`, `password` with an
+  `on_mask_toggle` eye button, and four size steps.
+- **`text_area`** — a multi-line one, with `height`, `min_height`, `label`,
+  `error` and the same state flags.
+- **`number_input`** — a spin button: the value and both steppers share one
+  border, and a stepper is left inert at the end of the range it would leave.
+- **`otp_input`** — a row of one-character boxes, optionally `masked` and split
+  into `groups`.
+
+`input_group` composes a field with addons on any of four sides. Inline addons
+sit in the row beside the value; block addons span the width above or below it:
+
+```rust
+input_group()
+    .input(text_input::<Message>("Query", &self.query).on_input(Message::QueryChanged))
+    .addon(addon().push(label("https://")))
+    .addon(
+        addon()
+            .align(AddonAlignment::InlineEnd)
+            .push(group_button::<Message>("Go").on_press(Message::Search)),
+    )
+```
+
+Two things are worth knowing about the implementation. An invalid field keeps
+its error border while focused, because focus is not new information and a focus
+ring would hide the one signal the user has to act on. And icons and the spinner
+inside a field inherit the field's text color rather than reading it from the
+theme's SVG catalog, which is why they stay legible on every background.
+
+iced 0.14 has no accessibility tree and no read-only text input, so `label`
+draws a visible label rather than an ARIA name, and `readonly` withholds the
+edit handler — the field keeps its normal look and value but loses the caret.
 
 ## Documentation
 
