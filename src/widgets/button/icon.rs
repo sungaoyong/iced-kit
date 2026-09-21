@@ -9,7 +9,6 @@
 use crate::theme::{Size, Theme};
 use iced::advanced::widget::tree;
 use iced::advanced::{layout, mouse, renderer, svg, Clipboard, Widget};
-use iced::widget::container;
 use iced::{Element, Length, Rectangle, Size as IcedSize};
 
 /// What an icon is drawn from.
@@ -155,6 +154,16 @@ impl Icon {
 /// control from shifting as its glyph changes between renders. A named icon
 /// additionally carries its font, because iced resolves a family per text
 /// widget and the icon font is not the ambient one.
+///
+/// # Why the text centers itself
+///
+/// The alignment is set on the `Text` rather than by wrapping it in a
+/// `container`. A container with an explicit size does not shrink to its child,
+/// so its alignment has nothing to center against and the glyph lands at the
+/// left edge of a full-width line box — which is what pushed every icon-only
+/// button's glyph off to the right. A `Text` given a width and an `align_x`
+/// centers the glyph while drawing it, which is the same thing without the
+/// extra wrapper.
 fn glyph_box<'a, Message: 'a>(
     glyph: impl iced::widget::text::IntoFragment<'a>,
     side: f32,
@@ -165,18 +174,17 @@ fn glyph_box<'a, Message: 'a>(
     // hundreds of pixels and push the whole control apart.
     let mut label = iced::widget::text(glyph)
         .size(side)
-        .line_height(iced::Pixels(side));
+        .line_height(iced::Pixels(side))
+        .width(Length::Fixed(side))
+        .height(Length::Fixed(side))
+        .align_x(iced::alignment::Horizontal::Center)
+        .align_y(iced::alignment::Vertical::Center);
 
     if let Some(font) = font {
         label = label.font(font);
     }
 
-    container(label)
-        .width(Length::Fixed(side))
-        .height(Length::Fixed(side))
-        .align_x(iced::alignment::Horizontal::Center)
-        .align_y(iced::alignment::Vertical::Center)
-        .into()
+    label.into()
 }
 
 /// An SVG drawn in the color the surrounding widget set.
@@ -424,5 +432,69 @@ where
 {
     fn from(icon: SpinnerIcon) -> Self {
         Element::new(icon)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Icon, IconSource};
+    use crate::icons::{IconName, glyph};
+    use crate::theme::Size;
+
+    #[test]
+    fn an_icon_takes_its_size_from_the_control_unless_told_otherwise() {
+        let inherited = Icon::new(IconName::Search);
+        assert_eq!(inherited.resolved_size(Size::Md), Size::Md.icon_size());
+
+        let explicit = Icon::new(IconName::Search).size(30.0);
+        assert_eq!(
+            explicit.resolved_size(Size::Md),
+            30.0,
+            "an explicit size must win over the control's own"
+        );
+    }
+
+    /// A named icon carries the icon font; a raw glyph uses the ambient one.
+    #[test]
+    fn a_named_icon_and_a_raw_glyph_are_different_sources() {
+        let named: IconSource = IconName::Search.into();
+        assert!(matches!(named, IconSource::Named(_)));
+
+        let raw: IconSource = "✕".into();
+        assert!(matches!(raw, IconSource::Glyph(_)));
+    }
+
+    /// Two named icons compare by the glyph they resolve to, because the icon
+    /// font's own enum does not implement `PartialEq`.
+    #[test]
+    fn named_icons_compare_by_their_glyphs() {
+        assert_eq!(IconSource::from(IconName::Search), IconSource::from(IconName::Search));
+        assert_ne!(IconSource::from(IconName::Search), IconSource::from(IconName::X));
+
+        // A named icon and a raw glyph that happen to share a character are
+        // still different sources: one carries the font, the other does not.
+        assert_ne!(
+            IconSource::Named(IconName::Search),
+            IconSource::Glyph(glyph(IconName::Search).to_string())
+        );
+    }
+
+    #[test]
+    fn a_glyph_source_is_built_from_a_string_or_a_str() {
+        assert_eq!(IconSource::from("a"), IconSource::from("a".to_owned()));
+    }
+
+    #[test]
+    fn every_source_kind_renders() {
+        use iced::Element;
+
+        for source in [
+            IconSource::Named(IconName::Search),
+            IconSource::Glyph("✕".to_owned()),
+        ] {
+            let element: Element<'_, (), crate::Theme> =
+                Icon::new(source).into_element(Size::Md);
+            drop(element);
+        }
     }
 }

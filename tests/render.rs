@@ -1770,6 +1770,46 @@ fn a_caret_matches_a_selects_arrow() {
     );
 }
 
+/// An icon-only button must centre its glyph in its square.
+///
+/// This was a real defect: the glyph was boxed in a `container` sized to the
+/// icon, which does not shrink to its child, so the alignment had nothing to
+/// center against and every icon-only button drew its glyph against the left of
+/// a full-width line box — visibly right of centre. The box is now the `Text`
+/// itself, which centers the glyph as it draws.
+#[test]
+fn icon_only_buttons_centre_their_glyph() {
+    use iced_kit::widgets::icon_button;
+
+    assert_renders(
+        "icon_only_buttons",
+        column![
+            // A text glyph and an icon-font glyph, so both paths are covered.
+            row![
+                icon_button::<Message>().icon("✕").primary().on_press(Message::Noop),
+                icon_button::<Message>().icon("＋").primary().on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon(iced_kit::icons::IconName::Plus)
+                    .primary()
+                    .on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon(iced_kit::icons::IconName::X)
+                    .primary()
+                    .on_press(Message::Noop),
+            ]
+            .spacing(8),
+            row![
+                icon_button::<Message>().icon("✕").outline().on_press(Message::Noop),
+                icon_button::<Message>().icon("＋").outline().on_press(Message::Noop),
+                icon_button::<Message>().icon("⊙").outline().on_press(Message::Noop),
+            ]
+            .spacing(8),
+        ]
+        .spacing(16),
+        false,
+    );
+}
+
 /// The dropdown caret at every size, beside the label it has to line up with.
 ///
 /// A caret is the one piece of a button that is not text, so it is the piece
