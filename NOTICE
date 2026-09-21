@@ -1,0 +1,44 @@
+# Notices
+
+This project incorporates third-party material. The notices below are provided
+to satisfy the attribution requirements of the licences involved.
+
+## iced_dock
+
+The docking layout implementation under `src/dock/` is a port of
+[`iced_dock`](https://github.com/Fee0/iced_dock), by Fee0.
+
+- **Licence:** MIT (declared in the upstream `Cargo.toml`; the upstream
+  repository does not ship a standalone `LICENSE` file)
+- **What was ported:** the complete `src/` tree — 24 files, ~8,700 lines —
+  covering the layout model, builder, dock widget, tab strip, split container,
+  manager, factory and styling types.
+- **What was changed:**
+  - Import paths, so the code resolves inside this crate (`crate::x` becomes
+    `crate::dock::x`).
+  - The `serde` feature is renamed `dock-serde`, and the required
+    `slotmap/serde` dependency is declared.
+  - Doc comments that referred to the crate by name now refer to this module.
+  - The tab strip's bundled SVG assets moved to `assets/` at the repository
+    root, with the `include_bytes!` paths updated.
+
+  The layout algorithm, widget behaviour, event model and styling structure are
+  upstream's work.
+
+## Design language
+
+The token names and values, and the component vocabulary, follow these
+projects. Nothing is copied verbatim, but the provenance is stated here for
+clarity:
+
+| Source | Licence | What came from it |
+| --- | --- | --- |
+| [gpui-kit](https://github.com/longbridge/gpui-kit) | Apache-2.0 | Semantic token names and values, component naming |
+| [shadcn/ui](https://ui.shadcn.com/) | MIT | The semantic token vocabulary |
+| [iced-astraui](https://github.com/AstraBrew-Labs/iced-astraui) | MIT | Implementation patterns (design tokens, global layers) |
+| [shadcn-rs](https://github.com/FerrisMind/shadcn-rs) | MIT / Apache-2.0 | Implementation patterns (data table, charts) |
+
+## iced
+
+This crate builds on [`iced`](https://github.com/iced-rs/iced), which is
+licensed MIT. It is used as an ordinary dependency and is not vendored.

@@ -1,0 +1,127 @@
+[package]
+name = "iced-kit"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "A shadcn/ui-flavored component library and design system for iced, porting the gpui-kit visual language"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/iced-kit/iced-kit"
+keywords = ["iced", "gui", "widgets", "components", "design-system"]
+categories = ["gui"]
+# Ship the sources, the bundled tab-strip icons, and the documentation that
+# explains the licensing. Everything else at the repository root is development
+# scaffolding.
+include = [
+    "src/**/*.rs",
+    "assets/*.svg",
+    "examples/*.rs",
+    "tests/*.rs",
+    "tests/dock/*.rs",
+    "tests/snapshots/*.png",
+    "Cargo.toml",
+    "README.md",
+    "THEMING.md",
+    "PUBLISHING.md",
+    "NOTICE",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+]
+
+[features]
+# Docking layout: draggable tabs, resizable splits, drag-and-drop docking.
+dock = ["dep:slotmap", "dep:thiserror"]
+
+# Serialization of dock layouts. `slotmap/serde` is required because
+# layout node ids are slotmap keys.
+dock-serde = ["dock", "dep:serde", "slotmap/serde"]
+
+[dependencies]
+iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"] }
+slotmap = { version = "1.0", optional = true }
+thiserror = { version = "2.0", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+too_many_lines = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+# Tests assert that a value passes through arithmetic unchanged, which is
+# exactly the case `float_cmp` warns about.
+float_cmp = "allow"
+
+[dev-dependencies]
+iced_test = "0.14"
+serde_json = "1.0"
+
+# Each dock test needs an explicit target: cargo does not auto-discover tests
+# in subdirectories, and all of them require the `dock` feature.
+
+[[test]]
+name = "dock_builder"
+path = "tests/dock/builder.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_layout_dirty"
+path = "tests/dock/dock_update_layout_dirty.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_event_no_double_apply"
+path = "tests/dock/event_no_double_apply.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_factory_split"
+path = "tests/dock/factory_split.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_factory_tabs"
+path = "tests/dock/factory_tabs.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_focus"
+path = "tests/dock/focus.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_layout_seed"
+path = "tests/dock/layout_seed.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_manager"
+path = "tests/dock/manager_dock.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_simulator"
+path = "tests/dock/simulator.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_style"
+path = "tests/dock/style.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_tab_switch_layout_sync"
+path = "tests/dock/tab_switch_layout_sync.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_serde_roundtrip"
+path = "tests/dock/serde_roundtrip.rs"
+required-features = ["dock-serde"]

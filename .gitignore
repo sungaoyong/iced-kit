@@ -1,0 +1,22 @@
+# Build output. The debug profile reaches tens of gigabytes on this crate
+# because every feature combination is compiled separately.
+/target
+
+# Reference material, not part of this library.
+#
+# `gpui-kit` is the upstream project whose visual language this crate ports. It
+# is a checkout kept beside the sources for consultation, with its own history,
+# and it is not ours to redistribute — the files that were actually derived from
+# it are called out in NOTICE. Nothing in the build refers to it.
+/gpui-kit
+
+# Editor and OS noise.
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Scratch files from profiling or manual rendering checks.
+*.profraw
+perf.data*

@@ -1,0 +1,8 @@
+# Store text as LF in the repository, so the working tree's line endings on
+# Windows (CRLF, from the global `core.autocrlf`) never reach the history and a
+# checkout on any platform produces the same diff.
+* text=auto eol=lf
+
+# Render snapshots are compared byte for byte, so they must never be rewritten.
+*.png binary
+*.svg text
