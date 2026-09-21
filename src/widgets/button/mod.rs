@@ -506,7 +506,7 @@ impl<'a, Message: Clone + 'a> Button<'a, Message> {
         parts.extend(children);
 
         if self.dropdown_caret {
-            parts.push(crate::widgets::overlay::caret(size.text().size));
+            parts.push(crate::widgets::overlay::caret(size));
         }
 
         let content: Element<'a, Message, Theme> = match parts.len() {

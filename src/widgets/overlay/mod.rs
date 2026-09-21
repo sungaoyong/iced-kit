@@ -44,15 +44,35 @@ pub use tooltip::{tooltip, tooltip_at, tooltip_bubble, TooltipPosition};
 
 /// A downward chevron, for the trigger of a menu.
 ///
-/// It is drawn as a glyph rather than an SVG so it inherits the surrounding
-/// text color without extra plumbing: a caret sits inside a button whose color
-/// depends on its variant, and iced's SVG widget would ignore that color.
+/// It is drawn as a glyph in the bundled icon font rather than as an SVG so it
+/// inherits the surrounding text color without extra plumbing: a caret sits
+/// inside a button whose color depends on its variant, and iced's SVG widget
+/// would ignore that color.
+///
+/// # Why it is boxed and centered
+///
+/// A bare glyph advances by its own metrics and sits on the text baseline, which
+/// for a chevron means it reads as small as its advance width and rides high
+/// against the label beside it. Centering it in a square of the control's icon
+/// size is what lines it up with that label.
+///
+/// The square is a step larger than an icon slot: the chevron's strokes are
+/// thin, so at the icon size exactly it would look lighter than the text it
+/// sits beside.
 #[must_use]
-pub fn caret<'a, Message: 'a>(font_size: f32) -> Element<'a, Message, Theme> {
-    iced::widget::text("\u{25be}")
-        .size(font_size * 0.9)
-        .line_height(iced::Pixels(font_size))
-        .into()
+pub fn caret<'a, Message: 'a>(size: crate::theme::Size) -> Element<'a, Message, Theme> {
+    let box_side = (size.icon_size() * 1.25).round();
+
+    container(
+        crate::widgets::Icon::new(crate::icons::IconName::ChevronDown)
+            .size(box_side)
+            .into_element(size),
+    )
+    .width(Length::Fixed(box_side))
+    .height(Length::Fixed(box_side))
+    .align_x(Alignment::Center)
+    .align_y(Alignment::Center)
+    .into()
 }
 
 /// Everything that can be open over the application content this frame.

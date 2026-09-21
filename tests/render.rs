@@ -1746,3 +1746,60 @@ fn a_filtered_settings_panel_renders_only_matching_groups() {
 
     assert_renders("settings_panel_filtered", element, false);
 }
+
+/// The caret beside a select's own arrow, so the two menu affordances are
+/// compared rather than judged separately.
+#[test]
+fn a_caret_matches_a_selects_arrow() {
+    use iced_kit::widgets::button::Button;
+
+    assert_renders(
+        "caret_versus_select_arrow",
+        column![
+            Button::<Message>::new("Menu")
+                .dropdown_caret()
+                .on_press(Message::Noop),
+            iced_kit::widgets::select(
+                vec!["Blue".to_owned(), "Violet".to_owned()],
+                Some("Blue".to_owned()),
+                |_| Message::Noop,
+            ),
+        ]
+        .spacing(8),
+        false,
+    );
+}
+
+/// The dropdown caret at every size, beside the label it has to line up with.
+///
+/// A caret is the one piece of a button that is not text, so it is the piece
+/// most likely to drift: an earlier version drew a `▾` on the text baseline,
+/// which read small and rode high. This pins the sizes and the alignment.
+#[test]
+fn dropdown_carets_render_at_every_size() {
+    use iced_kit::widgets::button::Button;
+
+    assert_renders(
+        "dropdown_carets",
+        column![
+            Button::<Message>::new("Menu")
+                .dropdown_caret()
+                .size(Size::Xs)
+                .on_press(Message::Noop),
+            Button::<Message>::new("Menu")
+                .dropdown_caret()
+                .size(Size::Sm)
+                .on_press(Message::Noop),
+            Button::<Message>::new("Menu")
+                .dropdown_caret()
+                .size(Size::Md)
+                .on_press(Message::Noop),
+            Button::<Message>::new("Menu")
+                .dropdown_caret()
+                .size(Size::Lg)
+                .on_press(Message::Noop),
+        ]
+        .spacing(8),
+        false,
+    );
+}
