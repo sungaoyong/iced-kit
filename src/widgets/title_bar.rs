@@ -269,16 +269,18 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
         for control in &self.controls {
             let destructive = control.destructive;
 
-            // The glyph decides how the button is built: a named icon goes
-            // through the icon slot, a caller's character is the label. Either
-            // way the button is square, so a row of controls lines up whatever
-            // each one draws.
+            // The glyph decides how the button is built. A named icon goes
+            // through the icon slot with no label at all — `icon_button` is what
+            // expresses that, and passing an empty string instead would leave a
+            // label part in the content row, whose gap pushes the icon off
+            // centre. A caller's character is the label, which is already a
+            // single part.
             let button = match &control.glyph {
                 ControlGlyph::Named(icon) => {
                     let button = if destructive {
-                        kit_button::<Message>(String::new()).destructive()
+                        kit_button::icon_button::<Message>().destructive()
                     } else {
-                        kit_button::<Message>(String::new()).ghost()
+                        kit_button::icon_button::<Message>().ghost()
                     };
 
                     button.icon(Icon::new(*icon))

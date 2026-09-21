@@ -109,6 +109,11 @@ impl<'a, Message: Clone + 'a> Button<'a, Message> {
     }
 
     /// Creates a button with no label.
+    ///
+    /// Use this rather than `Button::new("")` for an icon-only button. An empty
+    /// string is still a label as far as this type is concerned: it leaves a
+    /// second part in the content row, and the gap before that empty part is
+    /// what pushes the icon off centre in a square button.
     pub fn icon_only() -> Self {
         Self::with_label(None)
     }
@@ -590,6 +595,7 @@ impl<'a, Message: Clone + 'a> From<Button<'a, Message>> for Element<'a, Message,
 #[cfg(test)]
 mod tests {
     use super::{icon_button, Button};
+    use crate::widgets::button::icon::Icon;
     use crate::theme::catalog::{ButtonRounded, ButtonVariant, Corners};
     use crate::theme::{Size, Theme};
     use iced::{Element, Length};
@@ -670,6 +676,42 @@ mod tests {
 
         let element: Element<'_, Message, Theme> = button.into();
         drop(element);
+    }
+
+    /// An empty label is not the same as no label.
+    ///
+    /// This is the trap that put a window control's icon off centre: the content
+    /// row then holds the icon *and* the empty label, and the gap between the two
+    /// shifts the icon left by half of it. `icon_only` is the constructor that
+    /// means what it says.
+    #[test]
+    fn an_empty_label_is_not_an_icon_only_button() {
+        let empty: Button<'_, Message> = Button::new("").icon(Icon::new("x".to_owned()));
+        assert!(
+            !empty.is_icon_only(),
+            "an empty string is still a label, so the content row keeps its gap"
+        );
+
+        let icon_only: Button<'_, Message> = Button::icon_only().icon(Icon::new("x".to_owned()));
+        assert!(icon_only.is_icon_only());
+    }
+
+    /// The content row is built from the parts actually present, so a button
+    /// with only an icon has exactly one.
+    #[test]
+    fn an_icon_only_button_has_a_single_content_part() {
+        let mut button: Button<'_, Message> = Button::icon_only().icon(Icon::new("x".to_owned()));
+        assert!(button.is_icon_only());
+
+        // With no label and no children, the icon is the whole row: a multi-part
+        // row would space the icon away from the centre.
+        let content = button.content();
+        assert_eq!(
+            button.children.len(),
+            0,
+            "an icon-only button carries no caller content"
+        );
+        drop(content);
     }
 
     #[test]
