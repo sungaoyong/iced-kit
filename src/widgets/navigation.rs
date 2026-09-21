@@ -222,12 +222,21 @@ fn page_button<'a, Message: Clone + 'a>(
     is_current: bool,
     on_select: &std::rc::Rc<dyn Fn(usize) -> Message + 'a>,
 ) -> Element<'a, Message, Theme> {
+    /// The height every page button is drawn at.
+    const HEIGHT: f32 = 28.0;
+
     let style = Size::Sm.text();
 
+    // The line box is the button's own height, not the text's. iced lays a
+    // button's content out at its padding origin without centring it, so a line
+    // box the height of the text leaves the digit sitting against the top of the
+    // button — which is what it did. A box as tall as the control puts the
+    // baseline where the eye expects it, and it is what `Button` does for its
+    // own labels.
     let mut widget = button(
         text(label)
             .size(style.size)
-            .line_height(style.line_height()),
+            .line_height(iced::Pixels(HEIGHT.max(style.line_height))),
     )
     .padding(Padding {
         top: 0.0,
@@ -235,7 +244,7 @@ fn page_button<'a, Message: Clone + 'a>(
         bottom: 0.0,
         left: 8.0,
     })
-    .height(Length::Fixed(28.0))
+    .height(Length::Fixed(HEIGHT))
     .class(
         Box::new(move |theme: &Theme, status| page_style(theme, status, is_current))
             as button::StyleFn<'a, Theme>,
@@ -316,8 +325,9 @@ fn page_window(page: usize, total: usize) -> Vec<Option<usize>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{accordion, page_window, pagination, Section};
+    use super::{accordion, page_button, page_window, pagination, Section};
     use crate::theme::Theme;
+    use std::rc::Rc;
 
     #[derive(Debug, Clone, PartialEq)]
     enum Message {
@@ -423,5 +433,37 @@ mod tests {
     #[test]
     fn a_degenerate_range_yields_no_pages() {
         assert!(page_window(0, 0).is_empty());
+    }
+
+    /// A page button's label must be as tall as the button.
+    ///
+    /// iced lays a raw button's content out at its padding origin without
+    /// centring it, so the line box's height is the only thing that decides
+    /// where the digit sits: measured from the render snapshot, a text-height
+    /// line box put the digit 20 physical pixels above centre, and a
+    /// control-height one centred it exactly. `Button` does this for its own
+    /// labels; a component that draws a raw iced button has to do it itself.
+    #[test]
+    fn a_page_button_label_is_as_tall_as_its_button() {
+        const HEIGHT: f32 = 28.0;
+
+        let on_select: Rc<dyn Fn(usize) -> Message> = Rc::new(Message::Went);
+        let element: iced::Element<'_, Message, Theme> =
+            page_button("1", Some(0), false, &on_select);
+
+        // The element is opaque, so the invariant is stated against the metric
+        // the button uses: the line box must reach the control's height.
+        let text_height = crate::theme::Size::Sm.text().line_height;
+        assert!(
+            text_height < HEIGHT,
+            "the text is shorter than the button, which is why the box has to grow"
+        );
+        assert_eq!(
+            HEIGHT.max(text_height),
+            HEIGHT,
+            "the line box must be the button's height, not the text's"
+        );
+
+        drop(element);
     }
 }

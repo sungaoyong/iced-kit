@@ -62,6 +62,7 @@ pub fn tabs<'a, Message: Clone + 'a>(
     on_select: impl Fn(usize) -> Message + 'a,
 ) -> Element<'a, Message, Theme> {
     let text_style = Size::Md.text();
+    let height = Size::Md.height() + 4.0;
 
     let strip =
         tabs.into_iter()
@@ -69,9 +70,14 @@ pub fn tabs<'a, Message: Clone + 'a>(
             .fold(row![].spacing(0), |row, (index, tab)| {
                 let is_selected = index == selected;
 
+                // The line box is the tab's own height, not the text's. A raw
+                // iced button lays its content out at the padding origin without
+                // centring it, so a text-height line box leaves the label against
+                // the top of the tab. Sizing the box to the control is what puts
+                // the baseline where the eye expects it.
                 let label = text(tab.label)
                     .size(text_style.size)
-                    .line_height(text_style.line_height());
+                    .line_height(iced::Pixels(height.max(text_style.line_height)));
 
                 let mut widget = button(label)
                     .padding(Padding {
@@ -80,7 +86,7 @@ pub fn tabs<'a, Message: Clone + 'a>(
                         bottom: 0.0,
                         left: 12.0,
                     })
-                    .height(Length::Fixed(Size::Md.height() + 4.0))
+                    .height(Length::Fixed(height))
                     .class(Box::new(move |theme: &Theme, status| {
                         tab_style(theme, status, is_selected)
                     }) as button::StyleFn<'a, Theme>);

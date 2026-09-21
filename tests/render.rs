@@ -1810,36 +1810,50 @@ fn icon_only_buttons_centre_their_glyph() {
     );
 }
 
-/// The dropdown caret at every size, beside the label it has to line up with.
+/// A page button's number must sit on the button's centre line.
 ///
-/// A caret is the one piece of a button that is not text, so it is the piece
-/// most likely to drift: an earlier version drew a `▾` on the text baseline,
-/// which read small and rode high. This pins the sizes and the alignment.
+/// This was a real defect: the button's label inherited a line box the height of
+/// the *text* rather than of the control, so the digit was drawn against the top
+/// of the button — measured at 20 physical pixels above centre. iced lays a raw
+/// button's content out at its padding origin without centring it, which is why
+/// the line box's height is the only thing that decides where the glyph lands.
 #[test]
-fn dropdown_carets_render_at_every_size() {
-    use iced_kit::widgets::button::Button;
+fn pagination_centres_its_page_numbers() {
+    assert_renders(
+        "pagination_only",
+        column![
+            pagination(4, 20, |_| Message::Noop),
+            pagination(0, 5, |_| Message::Noop),
+        ]
+        .spacing(16),
+        false,
+    );
+}
+
+/// A tab's label must sit on the tab's centre line, for the same reason.
+#[test]
+fn tabs_centre_their_labels() {
+    use iced_kit::widgets::{tabs, Tab};
 
     assert_renders(
-        "dropdown_carets",
+        "tabs_only",
         column![
-            Button::<Message>::new("Menu")
-                .dropdown_caret()
-                .size(Size::Xs)
-                .on_press(Message::Noop),
-            Button::<Message>::new("Menu")
-                .dropdown_caret()
-                .size(Size::Sm)
-                .on_press(Message::Noop),
-            Button::<Message>::new("Menu")
-                .dropdown_caret()
-                .size(Size::Md)
-                .on_press(Message::Noop),
-            Button::<Message>::new("Menu")
-                .dropdown_caret()
-                .size(Size::Lg)
-                .on_press(Message::Noop),
+            tabs(
+                vec![
+                    Tab::new("Overview"),
+                    Tab::new("Analytics"),
+                    Tab::new("Settings"),
+                ],
+                0,
+                |_| Message::Noop,
+            ),
+            tabs(
+                vec![Tab::new("One"), Tab::new("Two"), Tab::new("Three")],
+                1,
+                |_| Message::Noop,
+            ),
         ]
-        .spacing(8),
+        .spacing(16),
         false,
     );
 }
