@@ -16,7 +16,10 @@ impl DockIndex {
     #[must_use]
     pub fn rebuild_from_layout<K>(layout: &Layout<K>) -> Self {
         let mut index = Self::default();
-        for (id, entry) in &layout.nodes {
+        for id in layout.ids() {
+            let Some(entry) = layout.get(id) else {
+                continue;
+            };
             match &entry.kind {
                 NodeKind::Panel(panel) => {
                     index.panels.insert(panel.id.clone(), id);

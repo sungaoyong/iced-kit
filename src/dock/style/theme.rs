@@ -5,8 +5,8 @@
 use iced::{Border, Color, Theme};
 
 use super::{
-    CloseButtonStyle, DockBackgroundStyle, DockStyle, DropOverlayStyle, SplitterStyle, TabBarStyle,
-    TabStyle, TabTooltipStyle, WindowStyle,
+    CloseButtonStyle, ControlStyle, DockBackgroundStyle, DockStyle, DropOverlayStyle,
+    SplitterStyle, TabBarStyle, TabStyle, TabTooltipStyle, TitleStyle, WindowStyle,
 };
 
 impl DockStyle {
@@ -100,6 +100,28 @@ impl DockStyle {
                 border_radius: 4.0,
                 padding: [4.0, 8.0],
             },
+            title: TitleStyle {
+                height: 30.0,
+                background: Some(tab_bar_bg),
+                text_color: text,
+                padding: [0.0, 10.0],
+                gap: 6.0,
+                text_size: 12.0,
+            },
+            control: ControlStyle {
+                size: 22.0,
+                text_color: text_muted,
+                hovered_text: text,
+                hovered_background: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+                border_radius: 3.0,
+                gap: 2.0,
+                glyph_size: 14.0,
+                handle: SplitterStyle {
+                    idle_color: Color::TRANSPARENT,
+                    hover_color: accent,
+                    drag_color: accent,
+                },
+            },
         }
     }
 
@@ -182,6 +204,28 @@ impl DockStyle {
                 border_width: 1.0,
                 border_radius: 4.0,
                 padding: [4.0, 8.0],
+            },
+            title: TitleStyle {
+                height: 30.0,
+                background: Some(tab_bar_bg),
+                text_color: text,
+                padding: [0.0, 10.0],
+                gap: 6.0,
+                text_size: 12.0,
+            },
+            control: ControlStyle {
+                size: 22.0,
+                text_color: text_muted,
+                hovered_text: text,
+                hovered_background: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
+                border_radius: 3.0,
+                gap: 2.0,
+                glyph_size: 14.0,
+                handle: SplitterStyle {
+                    idle_color: Color::TRANSPARENT,
+                    hover_color: accent,
+                    drag_color: accent,
+                },
             },
         }
     }
@@ -294,6 +338,28 @@ pub fn default(theme: &Theme) -> DockStyle {
             border_width: 1.0,
             border_radius: 4.0,
             padding: [4.0, 8.0],
+        },
+        title: TitleStyle {
+            height: 30.0,
+            background: Some(tab_bar_bg),
+            text_color: text,
+            padding: [0.0, 10.0],
+            gap: 6.0,
+            text_size: 12.0,
+        },
+        control: ControlStyle {
+            size: 22.0,
+            text_color: text_muted,
+            hovered_text: text,
+            hovered_background: hover_overlay,
+            border_radius: 3.0,
+            gap: 2.0,
+            glyph_size: 14.0,
+            handle: SplitterStyle {
+                idle_color: Color::TRANSPARENT,
+                hover_color: splitter_hover,
+                drag_color: splitter_drag,
+            },
         },
     }
 }

@@ -25,6 +25,13 @@ pub struct PanelDef<K> {
     pub can_close: bool,
     pub can_drag: bool,
     pub can_drop: bool,
+    /// Whether the zoom affordance may maximize this panel.
+    pub can_zoom: bool,
+    /// Whether the tab bar offers this panel. A hidden panel keeps its place.
+    pub visible: bool,
+    /// A short name for an already-collapsed tab group, when the full title will
+    /// not fit. `None` falls back to the title.
+    pub tab_name: Option<String>,
     pub group: Option<String>,
 }
 
@@ -37,6 +44,9 @@ impl<K: Copy> PanelDef<K> {
             can_close: true,
             can_drag: true,
             can_drop: true,
+            can_zoom: true,
+            visible: true,
+            tab_name: None,
             group: None,
         }
     }
@@ -56,6 +66,30 @@ impl<K: Copy> PanelDef<K> {
     #[must_use]
     pub fn can_drop(mut self, value: bool) -> Self {
         self.can_drop = value;
+        self
+    }
+
+    /// Whether the zoom affordance may maximize this panel. Default `true`.
+    #[must_use]
+    pub fn can_zoom(mut self, value: bool) -> Self {
+        self.can_zoom = value;
+        self
+    }
+
+    /// Whether the tab bar offers this panel. Default `true`.
+    ///
+    /// A hidden panel stays in its pane and keeps its tab position, so showing
+    /// it again restores the layout; it is left out of the strip meanwhile.
+    #[must_use]
+    pub fn visible(mut self, value: bool) -> Self {
+        self.visible = value;
+        self
+    }
+
+    /// A short name used when the tab bar has no room for the full title.
+    #[must_use]
+    pub fn tab_name(mut self, name: impl Into<String>) -> Self {
+        self.tab_name = Some(name.into());
         self
     }
 
@@ -187,6 +221,157 @@ impl<K: Copy> LayoutTree<K> {
 
 /// Create a panel definition (for use inside [`tabs`]).
 pub fn panel<K: Copy>(id: impl Into<String>, title: impl Into<String>, content: K) -> PanelDef<K> {
+    PanelDef::new(id, title, content)
+}
+
+/// A whole window layout: a centre tree plus any edge docks.
+///
+/// This is what a workspace template describes, as opposed to a single
+/// [`LayoutTree`], which is one region's contents. Compile it with
+/// [`build_area`](crate::dock::builder::build_area) to get the regions a
+/// [`DockSession`](crate::dock::DockSession) installs.
+///
+/// ```ignore
+/// let area = LayoutArea::new(single(PanelDef::new("editor", "main.rs", Panel::Editor)))
+///     .dock(DockPlacement::Left, 240.0, tabs([PanelDef::new("files", "Files", Panel::Files)]))
+///     .dock(DockPlacement::Bottom, 200.0, tabs([PanelDef::new("term", "Terminal", Panel::Terminal)]));
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "dock-serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct LayoutArea<K> {
+    /// The centre tree.
+    pub center: LayoutTree<K>,
+    /// Each edge dock that should exist, with its initial size and whether it
+    /// starts open.
+    pub docks: Vec<DockSpec<K>>,
+}
+
+/// One edge dock in a [`LayoutArea`].
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "dock-serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DockSpec<K> {
+    pub placement: crate::dock::model::DockPlacement,
+    pub tree: LayoutTree<K>,
+    /// Initial size along the dock's own axis. `None` uses the default.
+    pub size: Option<f32>,
+    /// Whether the dock starts open. Default `true`.
+    pub open: bool,
+    /// Whether the toggle affordance may close it. Default `true`.
+    pub collapsible: bool,
+}
+
+impl<K: Copy> LayoutArea<K> {
+    /// An area whose centre holds `center` and which has no edge docks.
+    pub fn new(center: LayoutTree<K>) -> Self {
+        Self {
+            center,
+            docks: Vec::new(),
+        }
+    }
+
+    /// Add an edge dock of `size` pixels, open.
+    #[must_use]
+    pub fn dock(
+        mut self,
+        placement: crate::dock::model::DockPlacement,
+        size: f32,
+        tree: LayoutTree<K>,
+    ) -> Self {
+        self.docks.push(DockSpec {
+            placement,
+            tree,
+            size: Some(size),
+            open: true,
+            collapsible: true,
+        });
+        self
+    }
+
+    /// Add an edge dock with a stated size and open flag.
+    #[must_use]
+    pub fn dock_with(
+        mut self,
+        placement: crate::dock::model::DockPlacement,
+        size: Option<f32>,
+        open: bool,
+        tree: LayoutTree<K>,
+    ) -> Self {
+        self.docks.push(DockSpec {
+            placement,
+            tree,
+            size,
+            open,
+            collapsible: true,
+        });
+        self
+    }
+
+    /// Mark a dock as not collapsible, so its toggle refuses to close it.
+    #[must_use]
+    pub fn not_collapsible(mut self, placement: crate::dock::model::DockPlacement) -> Self {
+        for spec in &mut self.docks {
+            if spec.placement == placement {
+                spec.collapsible = false;
+            }
+        }
+        self
+    }
+}
+
+/// Validate a whole area before compilation.
+pub(crate) fn validate_area<K>(area: &LayoutArea<K>) -> crate::dock::Result {
+    validate_tree(&area.center)?;
+
+    // Panel ids are unique across the whole area, not per region: the runtime index
+    // is a single map, so two regions holding `"editor"` would leave one of them
+    // unreachable by id — and it would be whichever the rebuild happened to visit
+    // last, which is not something to leave to chance.
+    let mut panel_ids = HashSet::new();
+    collect_panel_ids(&area.center, &mut panel_ids)?;
+
+    let mut seen = HashSet::new();
+    for spec in &area.docks {
+        if !spec.placement.is_dock() {
+            return Err(Error::InvalidDockPlacement(spec.placement));
+        }
+        if !seen.insert(spec.placement) {
+            return Err(Error::DuplicateDockPlacement(spec.placement));
+        }
+        validate_tree(&spec.tree)?;
+        collect_panel_ids(&spec.tree, &mut panel_ids)?;
+    }
+    Ok(())
+}
+
+/// Gather a tree's panel ids into `seen`, rejecting one already there.
+fn collect_panel_ids<K>(
+    tree: &LayoutTree<K>,
+    seen: &mut HashSet<String>,
+) -> crate::dock::Result {
+    match tree {
+        LayoutTree::Tabs(node) => {
+            for def in &node.panels {
+                if !seen.insert(def.id.clone()) {
+                    return Err(Error::DuplicatePanelId(def.id.clone()));
+                }
+            }
+        }
+        LayoutTree::Split(node) => {
+            for child in &node.children {
+                collect_panel_ids(child, seen)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Create a panel definition (for use inside [`tabs`]).
+#[must_use]
+pub fn panel_def<K: Copy>(
+    id: impl Into<String>,
+    title: impl Into<String>,
+    content: K,
+) -> PanelDef<K> {
     PanelDef::new(id, title, content)
 }
 

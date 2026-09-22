@@ -62,8 +62,8 @@
 //! ```
 
 use crate::dock::style::{
-    CloseButtonStyle, DockBackgroundStyle, DockStyle, DropOverlayStyle, SplitterStyle, TabBarStyle,
-    TabStyle, TabTooltipStyle, WindowStyle,
+    CloseButtonStyle, ControlStyle, DockBackgroundStyle, DockStyle, DropOverlayStyle,
+    SplitterStyle, TabBarStyle, TabStyle, TabTooltipStyle, TitleStyle, WindowStyle,
 };
 use crate::theme::{Theme, Tokens};
 use iced::{Background, Border, Color};
@@ -71,10 +71,17 @@ use iced::{Background, Border, Color};
 // Re-exported so an application depends on one crate rather than two.
 pub use crate::dock::widget::DockBuilder;
 pub use crate::dock::{
-    dock, horizontal, panel, single, tabs, vertical, Dock, DockAction, DockEvent, DockSession,
-    DockWidgetState, InitialFocus, Layout, LayoutTree, PaneTarget, PanelCycle, PanelDef, SplitNode,
+    dock, horizontal, panel, panel_def, single, tabs, vertical, DockAction, DockEvent, DockSession,
+    DockSpec, DockWidgetState, InitialFocus, Layout, LayoutArea, LayoutTree, PaneTarget,
+    PanelControl, PanelCycle, PanelDef, PanelPresentation, PanelStyle, PlainPanels, SplitNode,
     TabAction, TabBarScrollbarAttachment, TabsNode,
 };
+// `DockPlacement`, `DockRegion` and `DockRegions` are the region model, and
+// `model::Dock` — one dock's open flag and size — is reachable as
+// `iced_kit::dock::model::Dock`. They are re-exported here under their own names so
+// an application describing an area depends on this module alone.
+pub use crate::dock::model::{DockPlacement, DockRegion, DockRegions};
+pub use crate::dock::persist::{DockAreaState, DockSlot};
 
 /// Bridges the dock's style catalog onto this crate's [`Theme`].
 ///
@@ -181,6 +188,38 @@ pub fn style(theme: &Theme) -> DockStyle {
             border_radius: small_radius,
             padding: [6.0, 10.0],
         },
+        // A group holding one panel draws this bar instead of a strip of tabs.
+        // It is the same height as the strip, so a group that gains or loses a
+        // tab does not move its content.
+        title: TitleStyle {
+            height: tab_bar_height(),
+            background: Some(colors.background),
+            text_color: colors.foreground,
+            padding: [0.0, 12.0],
+            gap: 6.0,
+            // The `xs` step, matching the tab labels beside it.
+            text_size: tokens.typography.xs.size,
+        },
+        // The dock's own buttons — zoom, dock toggles, the ellipsis menu — are
+        // quiet until hovered, so a busy layout's chrome stays out of the way.
+        control: ControlStyle {
+            size: crate::theme::Size::Sm.height(),
+            text_color: colors.muted_foreground,
+            hovered_text: colors.foreground,
+            hovered_background: colors.accent,
+            border_radius: small_radius,
+            gap: 2.0,
+            // A step below the control, so the glyph reads as an icon rather
+            // than as a letter.
+            glyph_size: tokens.typography.xs.size,
+            handle: SplitterStyle {
+                // Invisible at rest, exactly like an inner splitter: the handle
+                // is there to be grabbed, not to draw a line down the window.
+                idle_color: Color::TRANSPARENT,
+                hover_color: colors.ring,
+                drag_color: colors.primary,
+            },
+        },
     };
 
     // The focused-pane border uses the focus ring, which is the same color form
@@ -243,7 +282,7 @@ where
     Key: Copy + 'static,
     Message: Clone + 'static,
     Renderer: iced::advanced::Renderer
-        + iced::advanced::text::Renderer
+        + iced::advanced::text::Renderer<Font = iced::Font>
         + iced::advanced::svg::Renderer
         + 'static,
 {
@@ -251,6 +290,7 @@ where
         .tab_bar_height(tab_bar_height())
         .min_pane_width(min_pane_size())
         .min_pane_height(min_pane_size())
+        .dock_handle_width(splitter_grab_width())
 }
 
 /// A bordered pane body, for use as a dock panel's content.

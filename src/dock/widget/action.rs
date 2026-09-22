@@ -2,7 +2,7 @@
 
 //! Internal dock commands (stable [`NodeId`] handles). Applied by the widget or [`DockSession::dispatch`].
 
-use crate::dock::model::NodeId;
+use crate::dock::model::{DockPlacement, NodeId};
 
 /// A tab-level action within a dock pane.
 ///
@@ -66,5 +66,22 @@ pub enum DockAction {
         splitter_index: usize,
         /// Fraction of the adjacent pair's space allocated to the left/top pane.
         pair_ratio: f32,
+    },
+    /// Maximize the pane `pane` fills the area, or restore it.
+    ToggleZoom {
+        /// The pane to zoom or restore.
+        pane: NodeId,
+    },
+    /// Show or hide an edge dock.
+    ToggleDock {
+        /// The dock to toggle.
+        placement: DockPlacement,
+    },
+    /// An edge dock's handle was dragged to a pointer position.
+    DockResize {
+        /// The dock whose handle is being dragged.
+        placement: DockPlacement,
+        /// Current pointer position.
+        cursor: iced::Point,
     },
 }

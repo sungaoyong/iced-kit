@@ -48,6 +48,8 @@ pub mod error;
 pub(crate) mod factory;
 pub(crate) mod manager;
 pub mod model;
+pub mod panel;
+pub mod persist;
 pub mod prelude;
 pub mod spatial;
 pub mod style;
@@ -55,11 +57,19 @@ pub mod unstable;
 pub mod widget;
 
 pub use builder::{
-    horizontal, panel, single, tabs, vertical, DockSession, InitialFocus, LayoutTree, PaneTarget,
-    PanelCycle, PanelDef, SplitNode, TabsNode,
+    build_area, build_tree, horizontal, panel, panel_def, single, tabs, vertical, BuiltLayout,
+    DockSession, DockSpec, InitialFocus, LayoutArea, LayoutTree, PaneTarget, PanelCycle, PanelDef,
+    SplitNode, TabsNode,
 };
 pub use error::{Error, Result};
-pub use model::Layout;
+// `model::Dock` — one dock's open flag, collapsibility and size — is
+// deliberately *not* re-exported at the root, and neither is
+// `widget::Dock`. That name has meant "the whole dock widget" in every released
+// version of this crate, so handing it back with a different meaning would be
+// worse than requiring the qualified path `model::Dock` for the state struct.
+pub use model::{DockPlacement, DockRegion, DockRegions, Layout};
+pub use panel::{PanelControl, PanelPresentation, PanelStyle, PlainPanels};
+pub use persist::{DockAreaState, DockSlot};
 pub use spatial::{adjacent_pane, pane_bounds_map, Direction};
 pub use style::{
     close_button_style, constant, default, preset, Catalog, CloseButtonStyle, DockBackgroundStyle,

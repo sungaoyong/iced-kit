@@ -25,6 +25,54 @@ pub struct DockStyle {
     pub drop_overlay: DropOverlayStyle,
     /// Hover tooltip shown below tabs (see [`crate::dock::widget::DockBuilder::tab_tooltip`]).
     pub tooltip: TabTooltipStyle,
+    /// The title shown when a single panel fills its group.
+    ///
+    /// A group with one panel and no
+    /// [`PanelStyle::TabBar`](crate::dock::PanelStyle) draws a title rather than
+    /// a strip of tabs, so it needs its own metrics.
+    pub title: TitleStyle,
+    /// The buttons the dock adds to a title bar or tab strip: the zoom control,
+    /// the dock collapse toggles and the ellipsis menu.
+    pub control: ControlStyle,
+}
+
+/// The one-panel title bar.
+#[derive(Debug, Clone)]
+pub struct TitleStyle {
+    /// Height of the bar. Matches the tab strip by default, so switching between
+    /// a titled panel and a tab strip does not move the content.
+    pub height: f32,
+    /// Background fill. `None` uses the tab bar's.
+    pub background: Option<Color>,
+    /// Title text color.
+    pub text_color: Color,
+    /// Inner padding: `[vertical, horizontal]`.
+    pub padding: [f32; 2],
+    /// Space between the title and whatever follows it.
+    pub gap: f32,
+    /// Font size for a title drawn from the panel's own title string.
+    pub text_size: f32,
+}
+
+/// The dock's own buttons, wherever they appear.
+#[derive(Debug, Clone)]
+pub struct ControlStyle {
+    /// Square size of a control button.
+    pub size: f32,
+    /// Icon color when the button is idle.
+    pub text_color: Color,
+    /// Icon color when the button is hovered or pressed.
+    pub hovered_text: Color,
+    /// Background when the button is hovered or pressed.
+    pub hovered_background: Color,
+    /// Corner radius of a control button.
+    pub border_radius: f32,
+    /// The gap between two controls in a row.
+    pub gap: f32,
+    /// Size of the glyph inside a control button.
+    pub glyph_size: f32,
+    /// The resize handle on an edge dock's inner edge.
+    pub handle: SplitterStyle,
 }
 
 /// Background fill for the dock root.
@@ -162,6 +210,15 @@ impl DockStyle {
     /// Set the tab strip background to match [`DockBackgroundStyle::color`].
     pub fn sync_tab_bar_with_dock(&mut self) {
         self.tab_bar.background = self.background.color;
+    }
+
+    /// The height a one-panel title bar and a tab strip both use.
+    ///
+    /// They are the same bar in two presentations, so a group that switches
+    /// between them does not move the content below.
+    #[must_use]
+    pub fn bar_height(&self) -> f32 {
+        self.title.height
     }
 }
 

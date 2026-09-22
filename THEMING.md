@@ -274,7 +274,10 @@ at.
 
 - **Component metrics.** Tab bar heights, splitter widths and pane minimums are
   functions, not tokens (`dock::tab_bar_height()`, `resizable::min_pane_size()`).
-  They are set through the relevant builder.
+  They are set through the relevant builder. A dock's own controls — the zoom
+  button, the dock toggles, the ellipsis menu — are sized by
+  `ControlStyle::size` in the dock style, because an application that wants a
+  denser dock chrome changes all three at once.
 - **Layout.** Nothing in the token set affects sizing beyond text and control
   height; containers and spacing are the application's business.
 - **The dock's internal composition.** The ported dock code lays out its own

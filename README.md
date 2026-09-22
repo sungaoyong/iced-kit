@@ -79,7 +79,7 @@ drag-to-snap)
 
 **Shell** — `TitleBar` (with window controls), `Resizable` (draggable split
 panes), and — behind the `dock` feature — a full docking layout with draggable
-tabs, nested splits and drop targets
+tabs, nested splits, drop targets, collapsible edge docks and panel zoom
 
 **Settings** — `Settings` (a panel with a searchable sidebar), `SettingPage`,
 `SettingGroup`, `SettingItem` and `SettingField`
@@ -477,12 +477,14 @@ Docking is opt-in, because it is a large subsystem:
 iced-kit = { version = "0.1", features = ["dock"] }
 ```
 
-The docking machinery is a code-level port of `iced_dock` (MIT), inlined under
-`src/dock/` so the crate ships without a second dependency — upstream is not
-published to crates.io. See [`NOTICE`](NOTICE) for the attribution.
+The docking machinery starts as a code-level port of `iced_dock` (MIT), inlined
+under `src/dock/` so the crate ships without a second dependency — upstream is not
+published to crates.io. See [`NOTICE`](NOTICE) for the attribution. On top of it,
+the region model, panel zoom, panel chrome and workspace persistence follow the
+dock in gpui-kit, so a workspace built here behaves the way the reference does.
 
 `src/widgets/dock.rs` is the design-system layer over it: the layout logic,
-dragging and focus tracking are upstream's, while the styling comes from this
+dragging and focus tracking are the port's, while the styling comes from this
 crate's tokens, so a dock's tabs, panes, splitters and drop highlights match
 everything else:
 
@@ -502,6 +504,54 @@ The dock types are generic over the theme and renderer, so both are named
 explicitly. The theme also implements the dock's own `Catalog`, so a dock picks
 up the token-derived style even without the `.style(...)` call. Switching
 light/dark recolors the dock with no dock-specific code.
+
+### Regions, zoom and persistence
+
+A workspace is described as a **centre plus edge docks**, not only as a split tree,
+so the three regions a user expects — a sidebar, a panel across the bottom — can be
+collapsed to a strip and reopened, each remembering its own size:
+
+```rust
+use iced_kit::widgets::dock::{self, DockPlacement, LayoutArea, PanelDef};
+
+let area = LayoutArea::new(dock::tabs([PanelDef::new("editor", "main.rs", Panel::Editor)]))
+    .dock(DockPlacement::Left, 240.0, dock::tabs([PanelDef::new("files", "Files", Panel::Files)]))
+    .dock(DockPlacement::Bottom, 200.0, dock::tabs([PanelDef::new("term", "Terminal", Panel::Terminal)]));
+
+let session = dock::DockSession::from_area(area)?;
+```
+
+Each dock has a resize handle on its inner edge, a toggle in the tab bar of the
+group beside it, and an optional zoom on the panel it shows. `LayoutArea` compiles
+to the same centre tree the simpler `LayoutTree` did, so a layout written against
+one keeps working.
+
+Save and restore the whole workspace with `DockSession::capture` and
+`restore`. Panels are keyed by the string in their `PanelDef`, so a saved file
+outlives a Rust type being renamed, and a key nothing rebuilds still restores as an
+"unknown panel" that keeps its own payload — saving again preserves a layout written
+by a build that knew more than this one.
+
+### Panel chrome
+
+A panel's title, toolbar and menu come from a `PanelPresentation` the application
+implements. Every method has a default that draws nothing, so a dock whose panels
+are plain implements none of them:
+
+```rust
+impl dock::PanelPresentation<Panel, Message> for Panels {
+    fn title(&self, panel: Panel) -> Option<Element<'static, Message>> {
+        Some(row![icon(panel.icon()), text(panel.title())].into())
+    }
+
+    fn toolbar(&self, panel: Panel) -> Vec<Element<'static, Message>> {
+        vec![icon_button(IconName::Save).into()]
+    }
+}
+```
+
+`PanelStyle::Auto`, the default, draws a plain title bar for a group holding one
+panel and a tab strip for more; `PanelStyle::TabBar` always draws the strip.
 
 `Resizable` covers the simpler case — a handful of panes separated by draggable
 splitters — without requiring a layout tree:

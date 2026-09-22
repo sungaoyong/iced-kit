@@ -3,6 +3,8 @@
 //! Custom iced widgets for docking.
 
 mod action;
+mod area;
+mod controls;
 mod compose;
 mod dock;
 mod event;
@@ -10,6 +12,7 @@ mod split;
 mod state;
 mod tab_dock;
 mod tab_strip;
+mod title_drag;
 
 pub use crate::dock::style::PaneContent;
 pub use action::{DockAction, TabAction};

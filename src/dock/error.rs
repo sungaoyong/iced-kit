@@ -36,6 +36,18 @@ pub enum Error {
     #[error("invalid pane target")]
     InvalidTarget,
 
+    #[error("{0} is not an edge dock placement")]
+    InvalidDockPlacement(crate::dock::model::DockPlacement),
+
+    #[error("duplicate dock placement: {0:?}")]
+    DuplicateDockPlacement(crate::dock::model::DockPlacement),
+
+    #[error("the dock holding panel {0:?} is not open")]
+    DockClosed(NodeId),
+
+    #[error("no panel is registered under the name `{0}`")]
+    UnregisteredPanel(String),
+
     // --- Factory / layout mutations ---
     #[error("node {node:?} is not a panel leaf")]
     NotPanel { node: NodeId },

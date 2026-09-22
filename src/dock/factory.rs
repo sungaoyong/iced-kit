@@ -19,14 +19,14 @@ impl Factory {
         title: impl Into<String>,
         content: K,
     ) -> NodeId {
-        layout.nodes.insert(NodeEntry {
+        layout.insert(NodeEntry {
             kind: NodeKind::Panel(Panel::new(id, title, content)),
             owner: None,
         })
     }
 
     pub fn create_pane<K>(&self, layout: &mut Layout<K>) -> NodeId {
-        layout.nodes.insert(NodeEntry {
+        layout.insert(NodeEntry {
             kind: NodeKind::Pane(Pane::new()),
             owner: None,
         })
@@ -38,7 +38,7 @@ impl Factory {
         axis: Axis,
         children: Vec<NodeId>,
     ) -> NodeId {
-        let id = layout.nodes.insert(NodeEntry {
+        let id = layout.insert(NodeEntry {
             kind: NodeKind::Proportional(ProportionalGroup::new(axis, children.clone())),
             owner: None,
         });
@@ -202,7 +202,7 @@ impl Factory {
             .and_then(|e| e.owner)
             .ok_or(Error::NoOwner { panel })?;
         self.remove_from_parent(layout, panel)?;
-        layout.nodes.remove(panel);
+        layout.remove(panel);
         self.collapse_owner(layout, owner);
         Ok(())
     }
@@ -479,6 +479,15 @@ impl Factory {
         }
     }
 
+    /// Collapse the group `owner` if holding nothing leaves it redundant.
+    ///
+    /// Public because a cross-tree move detaches the panel itself — outside
+    /// [`Self::move_panel_to_pane_at`] and friends — and still owes its old group
+    /// the same tidy-up.
+    pub fn collapse_owner_of<K>(&self, layout: &mut Layout<K>, owner: NodeId) {
+        self.collapse_owner(layout, owner);
+    }
+
     fn collapse_owner<K>(&self, layout: &mut Layout<K>, owner: NodeId) {
         if owner == layout.root {
             let empty_child = match layout.kind(layout.root) {
@@ -517,14 +526,14 @@ impl Factory {
         if let Some(go) = grand_owner {
             if let Some(rep) = replacement {
                 let _ = self.replace_child(layout, go, owner, rep);
-                layout.nodes.remove(owner);
+                layout.remove(owner);
                 self.collapse_owner(layout, go);
             } else if go == layout.root {
                 layout.set_root_child(None);
-                layout.nodes.remove(owner);
+                layout.remove(owner);
             } else {
                 let _ = self.remove_from_parent(layout, owner);
-                layout.nodes.remove(owner);
+                layout.remove(owner);
                 self.collapse_owner(layout, go);
             }
         }

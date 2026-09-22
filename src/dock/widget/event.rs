@@ -55,6 +55,27 @@ pub enum DockEvent<K> {
     },
     /// The tab drag was cancelled.
     DragCancelled,
+    /// A panel was zoomed to fill the area, or restored to the layout.
+    ZoomChanged {
+        /// Whether the panel is now zoomed.
+        zoomed: bool,
+        /// Content key of the panel the zoom applies to.
+        panel: Option<K>,
+    },
+    /// An edge dock was shown or hidden.
+    DockToggled {
+        /// The dock that changed.
+        placement: crate::dock::model::DockPlacement,
+        /// Whether the dock is now open.
+        open: bool,
+    },
+    /// An edge dock was resized, by its handle or by an API call.
+    DockResized {
+        /// The dock that changed.
+        placement: crate::dock::model::DockPlacement,
+        /// The dock's new size along its own axis.
+        size: f32,
+    },
     /// Structural layout change (tab close, dock drop, split resize, etc.).
     LayoutChanged,
 }
@@ -75,6 +96,20 @@ pub fn action_to_event<K: Clone>(layout: &Layout<K>, action: &DockAction) -> Opt
             splitter_index: *splitter_index,
             pair_ratio: *pair_ratio,
         }),
+        DockAction::ToggleZoom { pane } => {
+            let panel = match layout.kind(*pane) {
+                Some(NodeKind::Pane(p)) => p.active.or_else(|| p.tabs.first().copied()),
+                _ => None,
+            };
+            Some(DockEvent::ZoomChanged {
+                zoomed: true,
+                panel: panel.and_then(|p| panel_key(layout, p)),
+            })
+        }
+        // The dock's new open flag and size live in the region, which this
+        // function cannot see — the widget has already applied the action by the
+        // time it is reported, so they are filled in from state at that point.
+        DockAction::ToggleDock { .. } | DockAction::DockResize { .. } => None,
     }
 }
 

@@ -6,7 +6,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::dock::builder::compile::{
-    active_panel_in_pane, build_tree, first_pane, insert_panel_into_state, pane_for_panel,
+    active_panel_in_pane, first_pane, insert_panel_into_state, pane_for_panel,
     BuiltLayout,
 };
 use crate::dock::builder::spec::{LayoutTree, PanelDef};
@@ -57,15 +57,36 @@ where
     K: Copy,
 {
     /// Build a session from a declarative layout tree.
+    ///
+    /// The tree becomes the centre; the session has no edge docks. Use
+    /// [`from_area`](Self::from_area) to describe docks as well.
     pub fn from_tree(tree: LayoutTree<K>) -> Result<Self> {
         Self::from_tree_with_focus(tree, InitialFocus::default())
     }
 
     /// Build a session and set initial pane focus.
     pub fn from_tree_with_focus(tree: LayoutTree<K>, focus: InitialFocus<'_>) -> Result<Self> {
-        let built = build_tree(&tree)?;
+        Self::from_area_with_focus(crate::dock::LayoutArea::new(tree), focus)
+    }
+
+    /// Build a session from a whole area: a centre tree plus its edge docks.
+    pub fn from_area(area: crate::dock::LayoutArea<K>) -> Result<Self> {
+        Self::from_area_with_focus(area, InitialFocus::default())
+    }
+
+    /// Build a session from a whole area and set initial pane focus.
+    pub fn from_area_with_focus(
+        area: crate::dock::LayoutArea<K>,
+        focus: InitialFocus<'_>,
+    ) -> Result<Self> {
+        let (built, regions) = crate::dock::builder::compile::build_area(&area)?;
         let focused_pane = resolve_initial_focus(&built, focus)?;
-        Ok(Self::from_built(built, focused_pane))
+        let mut state = DockWidgetState::from_built(built, focused_pane);
+        state.regions = regions;
+        state.layout_dirty = true;
+        Ok(Self {
+            inner: Rc::new(RefCell::new(state)),
+        })
     }
 
     /// Build a session from a compiled layout and index.
@@ -81,6 +102,91 @@ where
     #[must_use]
     pub fn state(&self) -> Rc<RefCell<DockWidgetState<K>>> {
         Rc::clone(&self.inner)
+    }
+
+    /// Whether the tab bar should offer panel `id`.
+    #[must_use]
+    pub fn is_panel_visible(&self, id: &str) -> bool {
+        self.inner.borrow().is_panel_visible(id)
+    }
+
+    /// Hide or show a panel, without touching the layout.
+    ///
+    /// Visibility is application state that changes without the layout changing, so
+    /// this is the dock's own answer to it rather than a re-install: a hidden panel
+    /// keeps its node and its tab slot, is left out of the strip, and is passed over
+    /// when the displayed tab is resolved. Showing it again restores the order.
+    ///
+    /// Calling this is what makes hiding work — a presentation that only draws a
+    /// different icon changes nothing on its own.
+    #[expect(clippy::must_use_candidate)]
+    pub fn set_panel_visible(&self, id: &str, visible: bool) -> bool {
+        let mut state = self.inner.borrow_mut();
+        let changed = state.set_panel_visible(id, visible);
+        if changed {
+            let pane = state
+                .index
+                .panels
+                .get(id)
+                .copied()
+                .and_then(|panel| state.layout.get(panel).and_then(|e| e.owner));
+            if let Some(pane) = pane {
+                state.focus(pane);
+            }
+        }
+        changed
+    }
+
+    /// Save the whole workspace: the centre, every edge dock, and the zoom.
+    #[must_use]
+    pub fn capture(&self, version: Option<usize>) -> crate::dock::DockAreaState<K>
+    where
+        K: Clone,
+    {
+        let state = self.inner.borrow();
+        crate::dock::DockAreaState::capture(&state.layout, &state.regions, version)
+    }
+
+    /// Replace the whole workspace with a new area.
+    ///
+    /// The dock sizes and open flags the user dragged are carried across by
+    /// placement, so installing a preset does not reset a dock the user resized to
+    /// suit their screen. Use [`restore`](Self::restore) to load a saved workspace
+    /// instead, which sets those deliberately.
+    pub fn set_area(&self, area: crate::dock::LayoutArea<K>) -> Result
+    where
+        K: Copy,
+    {
+        self.inner.borrow_mut().set_area(area)
+    }
+
+    /// Replace the workspace with a saved one.
+    ///
+    /// Docks the saved state does not mention are dropped, and the zoom is restored
+    /// by looking its panel key up — a key nothing holds any more simply opens
+    /// unzoomed. Both are deliberate: a workspace restored from a file describes the
+    /// whole layout, and a panel a later build removed should not block the load.
+    pub fn restore(&self, saved: &crate::dock::DockAreaState<K>) -> Result
+    where
+        K: Clone,
+    {
+        let mut state = self.inner.borrow_mut();
+        state.regions.restore(&saved.docks)?;
+        state.layout = saved.center.clone();
+        state.drag = None;
+        state.sync_index();
+        let focused = first_pane(&state.layout);
+        state.focused_pane = focused;
+        state.focus_frame_pane = focused;
+        state.hidden.clear();
+        // The saved zoom is a panel key; the pane holding it is what a zoom is
+        // recorded against, so the key is resolved through this session's index.
+        let zoomed_pane = saved.zoomed.as_deref().and_then(|key| {
+            crate::dock::builder::compile::pane_for_panel(&state.layout, &state.index, key)
+        });
+        state.regions.restore_zoom(zoomed_pane);
+        state.layout_dirty = true;
+        Ok(())
     }
 
     /// Apply a [`DockAction`] programmatically (not for widget-originated input).
@@ -136,7 +242,6 @@ where
     }
 
     /// Panel node id for a string panel id.
-    #[must_use]
     pub fn panel_node(&self, panel_id: &str) -> Option<NodeId> {
         self.inner.borrow().index.panel_node(panel_id)
     }
@@ -144,8 +249,7 @@ where
     /// Pane that owns a panel identified by string id.
     #[must_use]
     pub fn pane_for_panel(&self, panel_id: &str) -> Option<NodeId> {
-        let state = self.inner.borrow();
-        pane_for_panel(&state.layout, &state.index, panel_id)
+        self.inner.borrow().pane_for_panel_id(panel_id)
     }
 
     /// Pane that last received focus, if any.
@@ -360,14 +464,16 @@ where
     pub fn active_panel(&self) -> Option<String> {
         let state = self.inner.borrow();
         let pane = state.focused_pane?;
-        active_panel_in_pane(&state.layout, &state.index, pane)
+        let tree = state.tree_of(pane).unwrap_or(&state.layout);
+        active_panel_in_pane(tree, &state.index, pane)
     }
 
     /// Active panel id string in a specific pane (regardless of global focus).
     #[must_use]
     pub fn active_panel_in_pane(&self, pane: NodeId) -> Option<String> {
         let state = self.inner.borrow();
-        active_panel_in_pane(&state.layout, &state.index, pane)
+        let tree = state.tree_of(pane).unwrap_or(&state.layout);
+        active_panel_in_pane(tree, &state.index, pane)
     }
 
     fn resolve_pane(&self, target: &PaneTarget) -> Result<NodeId> {

@@ -1909,3 +1909,92 @@ fn tabs_centre_their_labels() {
         false,
     );
 }
+
+/// The `dock` example's workspace, rendered so its layout is checked rather than
+/// only compiled.
+///
+/// The example is the crate's own demonstration of the dock, so a regression that
+/// only shows up on screen — a region taking no space, a bar drawn over its
+/// content — would otherwise go unnoticed until someone ran it.
+#[cfg(feature = "dock")]
+#[test]
+fn the_dock_example_workspace_renders() {
+    use iced_kit::widgets::dock::{
+        self, DockEvent, DockPlacement, DockSession, LayoutArea, PanelDef, PanelPresentation,
+        PanelStyle,
+    };
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    enum Panel {
+        Files,
+        Editor,
+        Terminal,
+    }
+
+    struct Panels;
+    impl PanelPresentation<Panel, DockMessage, Theme> for Panels {
+        fn title(&self, panel: Panel) -> Option<Element<'static, DockMessage, Theme>> {
+            let title = match panel {
+                Panel::Files => "Explorer",
+                Panel::Editor => "main.rs",
+                Panel::Terminal => "Terminal",
+            };
+            Some(iced::widget::text(title).into())
+        }
+    }
+
+    /// The event is carried but never inspected: this test checks what the dock
+    /// draws, not what it reports.
+    #[derive(Debug, Clone)]
+    enum DockMessage {
+        #[allow(dead_code)]
+        Dock(DockEvent<Panel>),
+    }
+
+    let area = LayoutArea::new(dock::horizontal([
+        dock::tabs([PanelDef::new("editor", "main.rs", Panel::Editor)]),
+        dock::tabs([PanelDef::new("files", "Explorer", Panel::Files)]),
+    ]))
+    .dock(
+        DockPlacement::Bottom,
+        140.0,
+        dock::tabs([PanelDef::new("terminal", "Terminal", Panel::Terminal)]),
+    );
+    let session = DockSession::from_area(area).expect("the workspace is valid");
+
+    let element: Element<'_, DockMessage, Theme> = dock::apply_metrics(
+        dock::dock::<Panel, DockMessage, Theme, iced::Renderer>()
+            .state(session.state())
+            .on_event(DockMessage::Dock)
+            .style(dock::style)
+            .panel_style(PanelStyle::Auto)
+            .presentation(Panels),
+    )
+    .content(|panel| {
+        iced::widget::text(match panel {
+            Panel::Files => "explorer",
+            Panel::Editor => "editor body",
+            Panel::Terminal => "terminal output",
+        })
+        .into()
+    })
+    .build()
+    .into();
+
+    let mut simulator = iced_test::Simulator::with_size(
+        iced::Settings::default(),
+        iced::Size::new(640.0, 480.0),
+        element,
+    );
+    let theme = Theme::light();
+    let snapshot = simulator.snapshot(&theme).expect("the dock must render");
+    let path = "tests/snapshots/dock-example.png";
+    let matches = snapshot
+        .matches_image(path)
+        .expect("dock example comparison must succeed");
+    assert!(
+        matches,
+        "the dock example no longer matches {path}. \
+         If the change was intentional, delete that file and rerun."
+    );
+}

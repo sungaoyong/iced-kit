@@ -32,12 +32,12 @@ include = [
 ]
 
 [features]
-# Docking layout: draggable tabs, resizable splits, drag-and-drop docking.
-dock = ["dep:slotmap", "dep:thiserror"]
+# Docking layout: draggable tabs, resizable splits, drag-and-drop docking,
+# collapsible edge docks and panel zoom.
+dock = ["dep:thiserror"]
 
-# Serialization of dock layouts. `slotmap/serde` is required because
-# layout node ids are slotmap keys.
-dock-serde = ["dock", "dep:serde", "slotmap/serde"]
+# Serialization of dock layouts.
+dock-serde = ["dock", "dep:serde"]
 
 [dependencies]
 iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"] }
@@ -45,7 +45,6 @@ iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"
 # off: it generates a named function per icon, which the `From` conversions here
 # make unnecessary.
 lucide-icons = { version = "1.31", default-features = false }
-slotmap = { version = "1.0", optional = true }
 thiserror = { version = "2.0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
@@ -133,3 +132,33 @@ required-features = ["dock"]
 name = "dock_serde_roundtrip"
 path = "tests/dock/serde_roundtrip.rs"
 required-features = ["dock-serde"]
+
+[[test]]
+name = "dock_regions"
+path = "tests/dock/regions.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_cross_tree"
+path = "tests/dock/cross_tree.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_drag"
+path = "tests/dock/drag.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_example_workspace"
+path = "tests/dock/example_workspace.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_runtime_drag"
+path = "tests/dock/runtime_drag.rs"
+required-features = ["dock"]
+
+[[test]]
+name = "dock_app_runtime"
+path = "tests/dock/app_runtime.rs"
+required-features = ["dock"]

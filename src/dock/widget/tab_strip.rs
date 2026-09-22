@@ -94,6 +94,13 @@ struct TabStripState<Theme: menu::Catalog> {
     suppress_hover: bool,
     /// Theme used for the last [`build_tabs_row`] rebuild.
     built_theme: Option<Theme>,
+    /// X of each tab-insertion slot in layout space, recorded while laying out.
+    ///
+    /// Kept in the state so a caller can ask for the slots at any point in the frame.
+    /// Recomputing them from a layout node needs the node, and the caller that wants
+    /// them — the group, registering drop targets — runs in a pass where the node is
+    /// gone.
+    insert_slots: Vec<f32>,
 }
 
 impl<Theme> TabStripState<Theme>
@@ -133,6 +140,7 @@ where
             drag_blocked: false,
             suppress_hover: false,
             built_theme: theme,
+            insert_slots: Vec::new(),
         }
     }
 }
@@ -790,17 +798,19 @@ fn insert_marker_color(drop: &DropOverlayStyle, blocked: bool) -> Color {
     }
 }
 
-/// Horizontal scroll offset of a tab strip widget tree.
-pub(crate) fn scroll_offset<Theme: menu::Catalog + 'static>(tab_strip_tree: &Tree) -> f32 {
-    tab_strip_tree
-        .state
-        .downcast_ref::<TabStripState<Theme>>()
-        .scroll_offset
-}
-
 /// Layout-space X coordinates for each tab insertion slot.
 ///
 /// Uses the same coordinate system as [`hit_test_tab`] (`cursor.x + scroll_offset`).
+/// The insertion slots and scroll offset the strip last laid out.
+///
+/// What a caller registering tab-bar drop targets needs, read from the strip's state
+/// so it survives the layout pass a drag triggers. The caller must hold a `TabStrip`
+/// — the downcast is unchecked, as it is for every widget's state.
+pub(crate) fn insert_slots<Theme: menu::Catalog + 'static>(tree: &Tree) -> (Vec<f32>, f32) {
+    let state = tree.state.downcast_ref::<TabStripState<Theme>>();
+    (state.insert_slots.clone(), state.scroll_offset)
+}
+
 pub(crate) fn build_insert_x(row_layout: &Layout<'_>) -> Vec<f32> {
     let children: Vec<_> = row_layout.children().collect();
     if children.is_empty() {
@@ -1379,16 +1389,16 @@ where
         Tag::of::<TabStripState<Theme>>()
     }
 
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.tabs_row)]
+    }
+
     fn state(&self) -> State {
         State::new(TabStripState::new(
             self.resolved_theme(),
             self.scrollbar_fade_duration,
             self.scrollbar_animated,
         ))
-    }
-
-    fn children(&self) -> Vec<Tree> {
-        vec![Tree::new(&self.tabs_row)]
     }
 
     fn diff(&self, tree: &mut Tree) {
@@ -1433,6 +1443,13 @@ where
             &viewport_limits,
         );
         let content_width = row_node.size().width;
+
+        // The insertion slots, recorded where the row's own layout is available.
+        {
+            let insert_x = build_insert_x(&Layout::new(&row_node));
+            let state = tree.state.downcast_mut::<TabStripState<Theme>>();
+            state.insert_slots = insert_x;
+        }
 
         let state = tree.state.downcast_mut::<TabStripState<Theme>>();
         let show_overflow_button = content_width > viewport_width + f32::EPSILON;
@@ -2222,10 +2239,18 @@ mod tests {
     use iced::time::{Duration, Instant};
     use iced::{Font, Pixels, Point, Rectangle, Theme};
     use iced_test::renderer::Renderer;
-    use slotmap::SlotMap;
-
     fn test_node_id() -> NodeId {
-        SlotMap::<NodeId, ()>::with_key().insert(())
+        let mut layout: crate::dock::model::Layout<()> = crate::dock::model::Layout::new();
+        let mut id = layout.root;
+        for _ in 0..16 {
+            id = layout.insert(crate::dock::model::NodeEntry {
+                kind: crate::dock::model::NodeKind::Root(crate::dock::model::RootState {
+                    child: None,
+                }),
+                owner: None,
+            });
+        }
+        id
     }
 
     fn headless_renderer() -> Renderer {

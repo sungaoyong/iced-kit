@@ -14,7 +14,7 @@
 )]
 
 use iced_kit::dock::model::{Axis, NodeId, NodeKind};
-use iced_kit::dock::unstable::{build_tree, dispatch_action, owning_pane};
+use iced_kit::dock::unstable::{build_tree, dispatch_action};
 use iced_kit::dock::{
     adjacent_pane, horizontal, pane_bounds_map, panel, tabs, vertical, Direction, DockAction,
     DockSession, DockWidgetState, InitialFocus, PaneTarget, PanelCycle, TabAction,
@@ -92,9 +92,11 @@ fn tab_select_sets_focused_pane() {
     let session: DockSession<u32> = DockSession::from_tree(nested_layout()).expect("session");
     let initial = session.focused_pane().expect("initial focus");
 
-    let built = build_tree(&nested_layout()).expect("build");
-    let preview_panel = built.index.panel_node("preview").expect("preview");
-    let preview_pane = owning_pane(&built.layout, preview_panel).expect("preview pane");
+    // Node ids come from one process-wide counter, so a second tree built here
+    // would give the same logical nodes different ids. The session is asked
+    // instead, which is the tree the test actually drives.
+    let preview_pane = session.pane_for_panel("preview").expect("preview pane");
+    let preview_panel = session.panel_node("preview").expect("preview");
     assert_ne!(initial, preview_pane);
 
     session.dispatch(DockAction::Tab(TabAction::Select {
@@ -126,19 +128,11 @@ fn pane_focused_updates_focus_without_layout_dirty() {
         })
         .expect("pane b");
 
-    let mut state = DockWidgetState {
-        layout: built.layout,
-        index: built.index,
-        drag: None,
-        drop_targets: Vec::new(),
-        tab_bar_targets: Vec::new(),
-        pane_bounds: Vec::new(),
-        focused_pane: Some(pane_a),
-        focus_frame_pane: Some(pane_a),
-        focus_frame_groups: None,
-        focus_dirty: false,
-        layout_dirty: false,
-    };
+    // Built through `from_built` rather than a struct literal, so a field added
+    // to `DockWidgetState` does not rewrite every test that makes one.
+    let mut state = DockWidgetState::from_built(built, Some(pane_a));
+    state.focus_dirty = false;
+    state.layout_dirty = false;
 
     let changed = dispatch_action(
         &mut state,
@@ -157,10 +151,8 @@ fn pane_focused_updates_focus_without_layout_dirty() {
 #[test]
 fn active_panel_uses_focused_pane_in_multi_pane_layout() {
     let session: DockSession<u32> = DockSession::from_tree(nested_layout()).expect("session");
-    let built = build_tree(&nested_layout()).expect("built");
-
-    let props_panel = built.index.panel_node("props").expect("props");
-    let props_pane = owning_pane(&built.layout, props_panel).expect("props pane");
+    let props_pane = session.pane_for_panel("props").expect("props pane");
+    let props_panel = session.panel_node("props").expect("props");
 
     session.dispatch(DockAction::Tab(TabAction::Select {
         pane: props_pane,
@@ -174,9 +166,7 @@ fn active_panel_uses_focused_pane_in_multi_pane_layout() {
 #[test]
 fn focus_pane_api() {
     let session: DockSession<u32> = DockSession::from_tree(nested_layout()).expect("session");
-    let built = build_tree(&nested_layout()).expect("built");
-    let explorer_panel = built.index.panel_node("explorer").expect("explorer");
-    let explorer_pane = owning_pane(&built.layout, explorer_panel).expect("pane");
+    let explorer_pane = session.pane_for_panel("explorer").expect("explorer pane");
 
     session.focus_pane(explorer_pane).expect("focus pane");
     assert_eq!(session.focused_pane(), Some(explorer_pane));
@@ -186,9 +176,7 @@ fn focus_pane_api() {
 #[test]
 fn open_panel_active_targets_focused_pane() {
     let session: DockSession<u32> = DockSession::from_tree(nested_layout()).expect("session");
-    let built = build_tree(&nested_layout()).expect("built");
-    let output_panel = built.index.panel_node("output").expect("output");
-    let output_pane = owning_pane(&built.layout, output_panel).expect("pane");
+    let output_pane = session.pane_for_panel("output").expect("output pane");
 
     session.focus_pane(output_pane).expect("focus output pane");
     session
@@ -312,9 +300,7 @@ fn select_panel_by_string_id() {
 #[test]
 fn active_panel_in_pane_non_focused() {
     let session: DockSession<u32> = DockSession::from_tree(nested_layout()).expect("session");
-    let built = build_tree(&nested_layout()).expect("built");
-    let output_panel = built.index.panel_node("output").expect("output");
-    let output_pane = owning_pane(&built.layout, output_panel).expect("pane");
+    let output_pane = session.pane_for_panel("output").expect("output pane");
 
     session.select_panel("main").expect("focus main pane");
     assert_eq!(
@@ -522,9 +508,10 @@ fn from_tree_with_focus_named_panel() {
         InitialFocus::NamedPanel("props".into()),
     )
     .expect("session");
-    let built = build_tree(&nested_layout()).expect("built");
-    let props_panel = built.index.panel_node("props").expect("props");
-    let props_pane = owning_pane(&built.layout, props_panel).expect("pane");
+    // The pane is resolved through the session's own tree: node ids come from one
+    // process-wide counter, so a second tree built here would have different ids
+    // for the same logical nodes.
+    let props_pane = session.pane_for_panel("props").expect("props pane");
 
     assert_eq!(session.focused_pane(), Some(props_pane));
     assert_eq!(

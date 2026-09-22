@@ -18,9 +18,12 @@ use iced::widget::text::{LineHeight, Shaping};
 use iced::widget::{self, button, container, svg, text as iced_text};
 use iced::{Background, Element, Event, Length, Rectangle, Size, Vector};
 
-use crate::dock::model::{Layout as ModelLayout, NodeId, NodeKind, Pane};
+use crate::dock::model::{Axis, Layout as ModelLayout, NodeId, NodeKind, Pane};
 use crate::dock::style::{Catalog, DockStyle, PaneContent, StyleFn};
 use crate::dock::widget::action::DockAction;
+use crate::dock::panel::PanelPresentation;
+use crate::dock::widget::area::DockArea;
+use crate::dock::widget::controls as controls_mod;
 use crate::dock::widget::event::{action_to_event, DockEvent};
 use crate::dock::widget::split::SplitContainer;
 use crate::dock::widget::state::{dispatch_action, DockWidgetState};
@@ -62,10 +65,14 @@ where
 /// * `Message` — The application message type.
 /// * `Theme` — The iced theme (must implement [`Catalog`]).
 /// * `Renderer` — The iced renderer.
+// The metric fields are all named `tab_bar_*` / `dock_*` on purpose: they are the
+// names the builder setters expose, so a reader can match a field to its setter
+// without a lookup table.
+#[allow(clippy::struct_field_names)]
 pub struct Dock<'a, K, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer,
+    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     content: Box<dyn Fn(K) -> PaneContent<'a, Message, Theme, Renderer> + 'a>,
     modified: Option<ModifiedFn<'a, K>>,
@@ -106,6 +113,28 @@ where
     close_icon: Option<Rc<dyn Fn() -> Element<'static, Message, Theme, Renderer>>>,
     overflow_icon: Option<Rc<dyn Fn() -> Element<'static, Message, Theme, Renderer>>>,
     on_close_requested: Option<Rc<dyn Fn(K) -> Message>>,
+    /// Width of an edge dock's resize grab area.
+    ///
+    /// Named rather than `handle_width` so it reads as a setting at the call site:
+    /// an application writing `.dock_handle_width(8.0)` should not have to remember
+    /// what kind of handle it is.
+    dock_handle_width: f32,
+    /// What each panel adds to its own chrome.
+    presentation: Rc<dyn PanelPresentation<K, Message, Theme, Renderer>>,
+    /// How a group presents itself: a title bar for a lone panel, or always tabs.
+    panel_style: crate::dock::panel::PanelStyle,
+    /// Whether tab bars offer the affordance that collapses a neighbouring dock.
+    toggle_button_visible: bool,
+    /// Panes that belong to a closed dock, and so draw collapsed.
+    ///
+    /// Recomputed on every build, because which region owns a pane is not something
+    /// a pane can answer on its own.
+    collapsed_panes: Rc<RefCell<HashSet<NodeId>>>,
+    /// Panes that are the only group of their region.
+    ///
+    /// A panel that is alone there cannot be dragged out, so its title is not a drag
+    /// source. Also recomputed per build, for the same reason as `collapsed_panes`.
+    alone_panes: Rc<RefCell<HashSet<NodeId>>>,
 }
 
 impl<'a, K, Message, Theme, Renderer> Dock<'a, K, Message, Theme, Renderer>
@@ -121,7 +150,10 @@ where
         + Clone
         + PartialEq
         + 'static,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer + 'static,
+    Renderer: advanced::Renderer
+        + advanced::text::Renderer<Font = iced::Font>
+        + advanced::svg::Renderer
+        + 'static,
     <Theme as button::Catalog>::Class<'static>: From<button::StyleFn<'static, Theme>>,
     for<'c> <Theme as svg::Catalog>::Class<'c>: From<svg::StyleFn<'c, Theme>>,
     <Theme as container::Catalog>::Class<'static>: From<container::StyleFn<'static, Theme>>,
@@ -236,8 +268,47 @@ where
             }
         }
         let mut state = holder.borrow_mut();
+        // A dock action's outcome lives in the region rather than the tree, so it
+        // is read back after the action is applied: `action_to_event` only sees
+        // the tree, and would have to guess otherwise.
+        let dock_placement = match &action {
+            DockAction::ToggleDock { placement } | DockAction::DockResize { placement, .. } => {
+                Some(*placement)
+            }
+            _ => None,
+        };
+        let pane_for_zoom = match &action {
+            DockAction::ToggleZoom { pane } => Some(*pane),
+            _ => None,
+        };
         let event = action_to_event(&state.layout, &action).unwrap_or(DockEvent::LayoutChanged);
         dispatch_action(&mut state, action);
+        let event = match event {
+            DockEvent::LayoutChanged => match (dock_placement, pane_for_zoom) {
+                (Some(placement), _) => state.regions.dock(placement).map_or(event, |dock| {
+                    DockEvent::DockToggled {
+                        placement,
+                        open: dock.is_open(),
+                    }
+                }),
+                (None, Some(pane)) => DockEvent::ZoomChanged {
+                    zoomed: state.is_zoomed(pane),
+                    panel: state
+                        .layout
+                        .kind(pane)
+                        .and_then(|k| match k {
+                            NodeKind::Pane(p) => p.active.or_else(|| p.tabs.first().copied()),
+                            _ => None,
+                        })
+                        .and_then(|p| match state.layout.kind(p) {
+                            Some(NodeKind::Panel(panel)) => Some(panel.content),
+                            _ => None,
+                        }),
+                },
+                _ => event,
+            },
+            other => other,
+        };
         (on_event)(event)
     }
 
@@ -328,23 +399,25 @@ where
                     .into(),
             );
         }
-        let active = pane.active.or_else(|| pane.tabs.first().copied())?;
-        let entry = layout.get(active)?;
-        let content_key: K = match &entry.kind {
-            NodeKind::Panel(m) => m.content,
-            _ => return None,
-        };
+        // The pane's tabs, the visible set: a hidden panel keeps its node and its
+        // slot but is left out of the strip, which is what "hidden" means to a
+        // user. Both halves are consulted: the declared `visible` flag from the
+        // layout, and the runtime set the application toggles through
+        // `DockWidgetState::set_panel_visible`.
+        let hidden = holder.borrow().hidden.clone();
         let tabs: Vec<TabInfo> = pane
             .tabs
             .iter()
             .filter_map(|&id| {
                 let e = layout.get(id)?;
                 match &e.kind {
-                    NodeKind::Panel(m) => Some(TabInfo {
+                    NodeKind::Panel(m) if m.visible && !hidden.contains(&m.id) => Some(TabInfo {
                         id,
                         title: m.title.clone(),
+                        tab_name: m.tab_name.clone(),
                         can_close: m.can_close,
                         can_drag: m.can_drag,
+                        can_zoom: m.can_zoom,
                         is_modified: self.modified.as_ref().is_some_and(|f| f(m.content)),
                         tooltip: self.tooltip.as_ref().and_then(|f| f(m.content)),
                     }),
@@ -352,6 +425,30 @@ where
                 }
             })
             .collect();
+
+        // What the group *displays* is the stored active tab when it is one of the
+        // visible ones, otherwise the first visible tab takes over. Resolving
+        // through the raw `active` alone is what let a hidden panel keep the
+        // stage: its tab left the strip, but its body went on filling the pane,
+        // and the panel that should have replaced it drew nothing. Taking simply
+        // the first visible tab would be wrong the other way — a click on a later
+        // tab activates it, and the pane must show what was clicked.
+        let displayed = pane
+            .active
+            .filter(|&active| tabs.iter().any(|tab| tab.id == active))
+            .or_else(|| tabs.first().map(|tab| tab.id));
+        let Some(displayed) = displayed else {
+            // Every tab is hidden. A pane with nothing to draw does not *draw an
+            // empty frame* — it does not exist, the same rule an emptied pane
+            // follows. Returning an element here would keep the pane's slot in
+            // the split, so hiding a group's last panel would leave a blank
+            // region holding space its neighbours never receive.
+            return None;
+        };
+        let content_key: K = match layout.get(displayed).map(|e| &e.kind) {
+            Some(NodeKind::Panel(m)) => m.content,
+            _ => return None,
+        };
 
         let pane_content = (self.content)(content_key);
         let pane_class = pane_content
@@ -365,16 +462,72 @@ where
         let on_tab = Rc::new(move |action: DockAction| {
             Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
         });
+
+        // Whether a lone panel gets a title bar rather than a strip of tabs. A
+        // panel with its own chrome declines, and is then just its content.
+        let lone_panel = tabs.len() == 1;
+        let wants_title = lone_panel
+            && self.presentation.title_bar(content_key)
+            && matches!(self.panel_style, crate::dock::panel::PanelStyle::Auto);
+
+        // The title is a drag source, because a group holding one panel otherwise
+        // has no way to be picked up at all — and most groups in a workspace hold
+        // one panel.
+        let title = wants_title.then(|| {
+            let title = self.build_title(content_key, &tabs);
+            let on_title_drag = {
+                let h = Rc::clone(holder);
+                let on_ev = Rc::clone(&self.on_event);
+                let on_close = self.on_close_requested.as_ref().map(Rc::clone);
+                Rc::new(move |action: DockAction| {
+                    Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
+                })
+            };
+            // A panel that is the only one in the only group cannot be dragged out:
+            // there would be nothing left to show, and no way to put it back.
+            let alone = holder.borrow().layout.root_child().is_none() || self.is_only_group(pane_id);
+            let draggable = tabs
+                .first()
+                .is_some_and(|tab| tab.can_drag)
+                && !alone;
+            crate::dock::widget::title_drag::TitleDrag::new(
+                pane_id,
+                displayed,
+                draggable,
+                title,
+                on_title_drag,
+                self.drag_threshold,
+                self.drop_edge_fraction,
+            )
+            .into()
+        });
+
+        let leading = self.build_dock_toggles(pane_id, holder);
+        let trailing = self.build_trailing(pane_id, content_key, holder, &tabs);
+
+        let inner_padding = if tabs.len() > 1 {
+            // A strip of tabs already separates the content from the chrome, and
+            // padding on top of that would sink the content for no reason.
+            false
+        } else {
+            self.presentation.inner_padding(content_key)
+        };
+
         Some(
             TabDock::new(
                 Rc::clone(holder),
                 pane_id,
                 tabs,
-                active,
+                displayed,
                 content,
+                title,
+                leading,
+                trailing,
                 on_tab,
                 pane_class,
                 Rc::clone(theme_cell),
+                inner_padding,
+                self.is_pane_collapsed(pane_id),
                 self.tab_bar_height,
                 self.tab_bar_spacing,
                 self.tab_bar_padding,
@@ -406,17 +559,366 @@ where
         )
     }
 
+    /// Whether `pane` is the only group in its region, and holds one panel.
+    ///
+    /// Dragging such a panel out would leave the region empty — nothing on screen,
+    /// and no target to drag it back to — so the gesture is refused for it. This is
+    /// the title-bar counterpart of the rule the tab strip applies to the last tab of
+    /// the last group.
+    fn is_only_group(&self, pane: NodeId) -> bool {
+        // The panel's owning tree is found by walking, because a pane does not know
+        // which region it belongs to.
+        let holder = &self;
+        let _ = holder;
+        let _ = pane;
+        // Filled in by `collapsed_panes`' sibling: the set of panes that are alone.
+        self.alone_panes.borrow().contains(&pane)
+    }
+
+    /// Whether a pane belongs to a dock that is closed, and so draws collapsed.
+    fn is_pane_collapsed(&self, pane: NodeId) -> bool {
+        let holder = &self;
+        let _ = holder;
+        let _ = pane;
+        // Filled in by the caller through `collapsed_panes`: a pane cannot tell
+        // which region owns it without walking every tree, which the area has
+        // already done.
+        self.collapsed_panes.borrow().contains(&pane)
+    }
+
+    /// The title element for a lone panel: the panel's own element when it has
+    /// one, styled text otherwise.
+    fn build_title(&self, key: K, tabs: &[TabInfo]) -> Element<'a, Message, Theme, Renderer> {
+        if let Some(element) = self.presentation.title(key) {
+            return element;
+        }
+        // No title element of its own, so the panel's title string is drawn in the
+        // title bar's own color rather than a tab's.
+        let label = tabs
+            .first()
+            .map_or_else(String::new, |tab| tab.label().to_owned());
+        let class = Rc::clone(&self.class);
+        let text_size = self.tab_text_size;
+        iced::widget::text(label)
+            .size(text_size)
+            .style(move |theme: &Theme| iced::widget::text::Style {
+                color: Some(Catalog::style(theme, &class).title.text_color),
+            })
+            .into()
+    }
+
+    /// The dock toggles this group offers, if it is the one that carries them.
+    ///
+    /// Only one group per dock shows the affordance, and a zoomed or
+    /// non-collapsible dock shows none — otherwise every tab bar in a dock would
+    /// carry a duplicate button, and a dock that refuses to close would offer a
+    /// button that does nothing.
+    fn build_dock_toggles(
+        &self,
+        pane_id: NodeId,
+        holder: &Rc<RefCell<DockWidgetState<K>>>,
+    ) -> Vec<Element<'a, Message, Theme, Renderer>> {
+        if !self.toggle_button_visible {
+            return Vec::new();
+        }
+        let state = holder.borrow();
+        if state.regions.zoomed().is_some() {
+            return Vec::new();
+        }
+        let mut controls = Vec::new();
+        for placement in crate::dock::model::DockPlacement::DOCKS {
+            if !state.regions.has_dock(placement) || !state.regions.is_dock_collapsible(placement) {
+                continue;
+            }
+            if !self.is_toggle_group(placement, pane_id, &state) {
+                continue;
+            }
+            let open = state.regions.is_dock_open(placement);
+            let Some(icon) = controls_mod::dock_toggle_icon(placement, open) else {
+                continue;
+            };
+            drop(state);
+            let h = Rc::clone(holder);
+            let on_ev = Rc::clone(&self.on_event);
+            let on_close = self.on_close_requested.as_ref().map(Rc::clone);
+            let on_event = Rc::new(move |action: DockAction| {
+                Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
+            });
+            controls.push(
+                controls_mod::ToggleButton::new(
+                    iced::advanced::widget::Id::from(format!("dock-toggle:{}", placement.name())),
+                    icon,
+                    DockAction::ToggleDock { placement },
+                    on_event,
+                    Rc::clone(&self.class),
+                    self.control_size(),
+                    // An open dock shows its button lit, so the state is readable
+                    // without hovering.
+                    open,
+                )
+                .into(),
+            );
+            return controls;
+        }
+        controls
+    }
+
+    /// Whether `pane` is the group a dock's toggle button belongs to.
+    ///
+    /// The designated group is the top-most one on the dock's own side of the
+    /// centre, which mirrors where the dock itself sits: a left dock's button
+    /// belongs in the top-left group, a bottom dock's in the left-most group of
+    /// the bottom region.
+    fn is_toggle_group(
+        &self,
+        placement: crate::dock::model::DockPlacement,
+        pane: NodeId,
+        state: &DockWidgetState<K>,
+    ) -> bool {
+        use crate::dock::model::DockPlacement;
+        let tree = match placement {
+            DockPlacement::Bottom => state
+                .regions
+                .region(DockPlacement::Bottom)
+                .map(|r| &r.tree),
+            DockPlacement::Left | DockPlacement::Right | DockPlacement::Center => {
+                Some(&state.layout)
+            }
+        };
+        let Some(tree) = tree else {
+            return false;
+        };
+        let designated = match placement {
+            DockPlacement::Right => right_top_group(tree),
+            DockPlacement::Left | DockPlacement::Bottom => left_top_group(tree),
+            DockPlacement::Center => None,
+        };
+        designated == Some(pane)
+    }
+
+    fn control_size(&self) -> f32 {
+        self.tab_bar_height.min(24.0)
+    }
+
+    /// The trailing controls for a group: the panel's toolbar, then zoom, then
+    /// the menu.
+    fn build_trailing(
+        &self,
+        pane_id: NodeId,
+        key: K,
+        holder: &Rc<RefCell<DockWidgetState<K>>>,
+        tabs: &[TabInfo],
+    ) -> Vec<Element<'a, Message, Theme, Renderer>> {
+        let mut controls = Vec::new();
+        if self.is_collapsed_in(holder, pane_id) {
+            // A collapsed group is a way back in, not a place to work, so its
+            // chrome carries nothing that acts on the hidden panel.
+            return controls;
+        }
+        let active = self.active_of(tabs).and_then(|id| tabs.iter().find(|tab| tab.id == id));
+        let can_zoom = active.is_some_and(|tab| tab.can_zoom);
+        let zoomed = holder.borrow().regions.zoomed().is_some();
+        let control = self.presentation.zoom_control(key);
+
+        for (index, button) in self.presentation.toolbar(key).into_iter().enumerate() {
+            let _ = index;
+            controls.push(controls_mod::fit_to_bar(button, self.control_size()));
+        }
+
+        if can_zoom && control.is_some_and(crate::dock::panel::PanelControl::toolbar_visible) {
+            let h = Rc::clone(holder);
+            let on_ev = Rc::clone(&self.on_event);
+            let on_close = self.on_close_requested.as_ref().map(Rc::clone);
+            let on_event = Rc::new(move |action: DockAction| {
+                Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
+            });
+            controls.push(
+                controls_mod::ToggleButton::new(
+                    iced::advanced::widget::Id::from(format!("dock-zoom:{}", pane_id.as_u64())),
+                    if zoomed {
+                        controls_mod::DockIcon::Minimize
+                    } else {
+                        controls_mod::DockIcon::Maximize
+                    },
+                    DockAction::ToggleZoom { pane: pane_id },
+                    on_event,
+                    Rc::clone(&self.class),
+                    self.control_size(),
+                    zoomed,
+                )
+                .into(),
+            );
+        }
+
+        if control.is_some_and(crate::dock::panel::PanelControl::menu_visible) {
+            let entries: Vec<controls_mod::MenuEntry<Message>> = self
+                .presentation
+                .menu(key)
+                .into_iter()
+                .map(|(label, message)| controls_mod::MenuEntry::new(label, message))
+                .collect();
+            let h = Rc::clone(holder);
+            let on_ev = Rc::clone(&self.on_event);
+            let on_close = self.on_close_requested.as_ref().map(Rc::clone);
+            let on_event = Rc::new(move |action: DockAction| {
+                Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
+            });
+            let can_close = active.is_some_and(|tab| tab.can_close);
+            controls.push(
+                controls_mod::PanelMenu::new(
+                    // Unique per pane: iced keys element state by id, so a shared
+                    // literal would collapse two groups' menus into one and make
+                    // only one of them reachable.
+                    iced::advanced::widget::Id::from(format!("dock-panel-menu:{}", pane_id.as_u64())),
+                    pane_id,
+                    // The panel the entry acts on is the one displayed, not the
+                    // pane itself: `Close` names a *panel* node, and a pane id
+                    // here would close nothing — the state would refuse to remove
+                    // a pane as if it were a tab.
+                    active.map(|tab| tab.id),
+                    zoomed,
+                    can_zoom,
+                    can_close,
+                    entries,
+                    on_event,
+                    Rc::clone(&self.class),
+                    self.control_size(),
+                )
+                .into(),
+            );
+        }
+
+        controls
+    }
+
+    /// The tab the group displays: the first one it offers.
+    ///
+    /// The tabs list is already the *visible* set — a hidden panel never reaches
+    /// it — so the first entry is what is on screen, and a hidden active tab
+    /// falls back to it without a special case.
+    fn active_of(&self, tabs: &[TabInfo]) -> Option<NodeId> {
+        tabs.first().map(|tab| tab.id)
+    }
+
+    fn is_collapsed_in(&self, holder: &Rc<RefCell<DockWidgetState<K>>>, pane: NodeId) -> bool {
+        holder.borrow().collapsed_panes.contains(&pane)
+    }
+
     fn build_root_element(
         &self,
         holder: &Rc<RefCell<DockWidgetState<K>>>,
         theme_cell: &Rc<RefCell<Option<Theme>>>,
     ) -> Element<'a, Message, Theme, Renderer> {
+        // Which panes belong to a closed dock has to be known before the groups
+        // are built, because a collapsed group draws no content and no controls.
+        // It cannot be answered by a pane: ownership is a property of the region,
+        // so the walk happens here, once, over every tree.
+        {
+            let state = holder.borrow();
+            let mut collapsed = std::collections::HashSet::new();
+            let mut alone = std::collections::HashSet::new();
+
+            // The centre, then every dock: a region's only group cannot relinquish
+            // its last panel by dragging it elsewhere.
+            let regions: Vec<&ModelLayout<K>> = std::iter::once(&state.layout)
+                .chain(state.regions.iter().map(|(_, region)| &region.tree))
+                .collect();
+            for (index, tree) in regions.iter().enumerate() {
+                let is_dock = index > 0;
+                let placement = if is_dock {
+                    state.regions.iter().nth(index - 1).map(|(p, _)| p)
+                } else {
+                    None
+                };
+                if let Some(placement) = placement {
+                    if state.regions.dock(placement).is_some_and(|d| !d.is_open()) {
+                        for pane in panes_in_tree(tree) {
+                            collapsed.insert(pane);
+                        }
+                    }
+                }
+                let panes = panes_in_tree(tree);
+                if panes.len() <= 1 {
+                    alone.extend(panes);
+                }
+            }
+
+            *self.collapsed_panes.borrow_mut() = collapsed;
+            *self.alone_panes.borrow_mut() = alone;
+        }
         let state = holder.borrow();
-        let root = state
-            .layout
-            .root_child()
-            .and_then(|r| self.build_node(holder, theme_cell, &state.layout, r));
-        root.unwrap_or_else(|| Element::new(widget::space::Space::new()))
+
+        // A zoomed panel is the whole area, so nothing else is built for it: the
+        // docks would be laid out and then thrown away.
+        let zoomed = state
+            .regions
+            .zoomed()
+            .and_then(|node| self.build_zoomed(holder, theme_cell, node));
+
+        let center = self.build_region(holder, theme_cell, &state.layout);
+        let dock = |placement| {
+            state.regions.region(placement).map_or_else(
+                || Element::new(widget::space::Space::new()),
+                |region| self.build_region(holder, theme_cell, &region.tree),
+            )
+        };
+        let left = dock(crate::dock::model::DockPlacement::Left);
+        let bottom = dock(crate::dock::model::DockPlacement::Bottom);
+        let right = dock(crate::dock::model::DockPlacement::Right);
+        drop(state);
+
+        let h = Rc::clone(holder);
+        let on_ev = Rc::clone(&self.on_event);
+        let on_close = self.on_close_requested.as_ref().map(Rc::clone);
+        let on_event = Rc::new(move |action: DockAction| {
+            Self::wrap_action(&h, &on_ev, on_close.as_ref(), action)
+        });
+
+        DockArea::new(
+            Rc::clone(holder),
+            [center, left, bottom, right],
+            zoomed,
+            on_event,
+            Rc::clone(&self.class),
+            Rc::clone(theme_cell),
+            self.dock_handle_width,
+        )
+        .into()
+    }
+
+    /// The root of one region's tree, or an empty element when the region has
+    /// nothing to draw.
+    fn build_region(
+        &self,
+        holder: &Rc<RefCell<DockWidgetState<K>>>,
+        theme_cell: &Rc<RefCell<Option<Theme>>>,
+        tree: &ModelLayout<K>,
+    ) -> Element<'a, Message, Theme, Renderer> {
+        tree.root_child()
+            .and_then(|root| self.build_node(holder, theme_cell, tree, root))
+            .unwrap_or_else(|| Element::new(widget::space::Space::new()))
+    }
+
+    /// The single pane that fills the area while zoomed.
+    ///
+    /// The zoomed node lives in whichever region owns it, so the tree is looked
+    /// up by node rather than assumed to be the centre.
+    fn build_zoomed(
+        &self,
+        holder: &Rc<RefCell<DockWidgetState<K>>>,
+        theme_cell: &Rc<RefCell<Option<Theme>>>,
+        node: crate::dock::model::NodeId,
+    ) -> Option<Element<'a, Message, Theme, Renderer>> {
+        let state = holder.borrow();
+        if state.layout.contains_key(node) {
+            return self.build_node(holder, theme_cell, &state.layout, node);
+        }
+        for (_, region) in state.regions.iter() {
+            if region.tree.contains_key(node) {
+                return self.build_node(holder, theme_cell, &region.tree, node);
+            }
+        }
+        None
     }
 
     fn rebuild_root(&mut self, tree: &mut Tree) {
@@ -447,10 +949,11 @@ type TooltipFn<'a, K> = Box<dyn Fn(K) -> Option<String> + 'a>;
 ///     .content(|key| view_panel(key))
 ///     .build()
 /// ```
+#[allow(clippy::struct_field_names)]
 pub struct DockBuilder<'a, K, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer,
+    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     content: Option<ContentFn<'a, K, Message, Theme, Renderer>>,
     modified: Option<ModifiedFn<'a, K>>,
@@ -490,12 +993,24 @@ where
     close_icon: Option<Rc<dyn Fn() -> Element<'static, Message, Theme, Renderer>>>,
     overflow_icon: Option<Rc<dyn Fn() -> Element<'static, Message, Theme, Renderer>>>,
     on_close_requested: Option<Rc<dyn Fn(K) -> Message>>,
+    /// Width of an edge dock's resize grab area.
+    ///
+    /// Named rather than `handle_width` so it reads as a setting at the call site:
+    /// an application writing `.dock_handle_width(8.0)` should not have to remember
+    /// what kind of handle it is.
+    dock_handle_width: f32,
+    /// What each panel adds to its own chrome.
+    presentation: Rc<dyn PanelPresentation<K, Message, Theme, Renderer>>,
+    /// How a group presents itself: a title bar for a lone panel, or always tabs.
+    panel_style: crate::dock::panel::PanelStyle,
+    /// Whether tab bars offer the affordance that collapses a neighbouring dock.
+    toggle_button_visible: bool,
 }
 
 impl<K, Message, Theme, Renderer> Default for DockBuilder<'_, K, Message, Theme, Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer,
+    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     fn default() -> Self {
         Self {
@@ -537,6 +1052,10 @@ where
             close_icon: None,
             overflow_icon: None,
             on_close_requested: None,
+            dock_handle_width: 6.0,
+            presentation: Rc::new(crate::dock::panel::PlainPanels),
+            panel_style: crate::dock::panel::PanelStyle::Auto,
+            toggle_button_visible: true,
         }
     }
 }
@@ -554,7 +1073,10 @@ where
         + Clone
         + PartialEq
         + 'static,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer + 'static,
+    Renderer: advanced::Renderer
+        + advanced::text::Renderer<Font = iced::Font>
+        + advanced::svg::Renderer
+        + 'static,
     <Theme as button::Catalog>::Class<'static>: From<button::StyleFn<'static, Theme>>,
     for<'c> <Theme as svg::Catalog>::Class<'c>: From<svg::StyleFn<'c, Theme>>,
     <Theme as container::Catalog>::Class<'static>: From<container::StyleFn<'static, Theme>>,
@@ -907,6 +1429,52 @@ where
         self
     }
 
+    /// Width of an edge dock's resize grab area.
+    ///
+    /// Wider than the line it draws, so a thin divider is still easy to grab.
+    /// Default `6.0`.
+    #[must_use]
+    pub fn dock_handle_width(mut self, width: f32) -> Self {
+        self.dock_handle_width = width.max(1.0);
+        self
+    }
+
+    /// Set what each panel adds to its own chrome: a title, a toolbar, a menu.
+    ///
+    /// Every method on the presentation has a default, so a dock whose panels are
+    /// plain needs no implementation — see
+    /// [`PlainPanels`](crate::dock::PlainPanels).
+    #[must_use]
+    pub fn presentation(
+        mut self,
+        presentation: impl PanelPresentation<K, Message, Theme, Renderer> + 'static,
+    ) -> Self {
+        self.presentation = Rc::new(presentation);
+        self
+    }
+
+    /// How a group presents itself.
+    ///
+    /// [`PanelStyle::Auto`](crate::dock::PanelStyle::Auto), the default, draws a
+    /// title bar for a group holding one panel and a strip of tabs for more;
+    /// [`PanelStyle::TabBar`](crate::dock::PanelStyle::TabBar) always draws the
+    /// strip.
+    #[must_use]
+    pub fn panel_style(mut self, style: crate::dock::panel::PanelStyle) -> Self {
+        self.panel_style = style;
+        self
+    }
+
+    /// Whether tab bars offer the affordance that collapses a neighbouring dock.
+    ///
+    /// Default `true`. A dock that is not collapsible never shows one, whatever
+    /// this says, because the button would have nothing to do.
+    #[must_use]
+    pub fn toggle_button_visible(mut self, visible: bool) -> Self {
+        self.toggle_button_visible = visible;
+        self
+    }
+
     /// Register a callback that fires when a tab close button is clicked,
     /// **before** the tab is removed from the layout. Return the application
     /// message to dispatch. If this hook is set the close action is suppressed;
@@ -974,6 +1542,12 @@ where
             close_icon: self.close_icon,
             overflow_icon: self.overflow_icon,
             on_close_requested: self.on_close_requested,
+            dock_handle_width: self.dock_handle_width,
+            presentation: self.presentation,
+            panel_style: self.panel_style,
+            toggle_button_visible: self.toggle_button_visible,
+            collapsed_panes: Rc::new(RefCell::new(HashSet::new())),
+            alone_panes: Rc::new(RefCell::new(HashSet::new())),
         }
     }
 }
@@ -1006,7 +1580,10 @@ where
         + Clone
         + PartialEq
         + 'static,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer + 'static,
+    Renderer: advanced::Renderer
+        + advanced::text::Renderer<Font = iced::Font>
+        + advanced::svg::Renderer
+        + 'static,
     <Theme as button::Catalog>::Class<'static>: From<button::StyleFn<'static, Theme>>,
     for<'c> <Theme as svg::Catalog>::Class<'c>: From<svg::StyleFn<'c, Theme>>,
     <Theme as container::Catalog>::Class<'static>: From<container::StyleFn<'static, Theme>>,
@@ -1029,7 +1606,10 @@ where
         + Clone
         + PartialEq
         + 'static,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer + 'static,
+    Renderer: advanced::Renderer
+        + advanced::text::Renderer<Font = iced::Font>
+        + advanced::svg::Renderer
+        + 'static,
     <Theme as button::Catalog>::Class<'static>: From<button::StyleFn<'static, Theme>>,
     for<'c> <Theme as svg::Catalog>::Class<'c>: From<svg::StyleFn<'c, Theme>>,
     <Theme as container::Catalog>::Class<'static>: From<container::StyleFn<'static, Theme>>,
@@ -1070,9 +1650,11 @@ where
         let holder = tree.state.downcast_ref::<DockTreeHolder<K, Theme>>();
         let dock_state = Rc::clone(&holder.dock_state);
         dock_state.borrow_mut().commit_layout();
-        dock_state.borrow_mut().drop_targets.clear();
-        dock_state.borrow_mut().tab_bar_targets.clear();
 
+        // The drop geometry is *not* cleared here. `layout` runs before `update` — and
+        // `update` is where a drop resolves — so clearing here would leave `finish_drag`
+        // reading an empty buffer on the very frame the user let go. It is cleared in
+        // `draw` instead, next to the pass that refills it.
         self.rebuild_root(tree);
 
         let size = limits.max();
@@ -1099,7 +1681,20 @@ where
     ) {
         let holder = tree.state.downcast_ref::<DockTreeHolder<K, Theme>>();
         *holder.resolved_theme.borrow_mut() = Some(theme.clone());
-        holder.dock_state.borrow_mut().pane_bounds.clear();
+
+        // A fresh frame's geometry. The children are drawn below and register theirs,
+        // so by the time this returns the buffers describe the layout that is on
+        // screen — and the events of the *next* frame resolve against exactly that.
+        //
+        // Cleared here rather than in `layout`: a layout pass can run in the middle of
+        // the `update` that handles a drop, and emptying the buffers then would leave
+        // the drop with nothing to resolve against.
+        {
+            let mut state = holder.dock_state.borrow_mut();
+            state.pane_bounds.clear();
+            state.drop_targets.clear();
+            state.tab_bar_targets.clear();
+        }
 
         let dock_style = Catalog::style(theme, &self.class);
         renderer.fill_quad(
@@ -1109,6 +1704,7 @@ where
             },
             dock_style.background.color,
         );
+
 
         let Some(child_layout) = layout.children().next() else {
             return;
@@ -1125,6 +1721,7 @@ where
             cursor,
             viewport,
         );
+
     }
 
     fn update(
@@ -1144,6 +1741,7 @@ where
         let Some(child_tree) = tree.children.first_mut() else {
             return;
         };
+
         self.root.as_widget_mut().update(
             child_tree,
             event,
@@ -1252,7 +1850,10 @@ where
         + Clone
         + PartialEq
         + 'static,
-    Renderer: advanced::Renderer + advanced::text::Renderer + advanced::svg::Renderer + 'static,
+    Renderer: advanced::Renderer
+        + advanced::text::Renderer<Font = iced::Font>
+        + advanced::svg::Renderer
+        + 'static,
     <Theme as button::Catalog>::Class<'static>: From<button::StyleFn<'static, Theme>>,
     for<'c> <Theme as svg::Catalog>::Class<'c>: From<svg::StyleFn<'c, Theme>>,
     <Theme as container::Catalog>::Class<'static>: From<container::StyleFn<'static, Theme>>,
@@ -1261,4 +1862,66 @@ where
     fn from(widget: Dock<'a, K, Message, Theme, Renderer>) -> Self {
         Element::new(widget)
     }
+}
+
+/// The group a left dock's toggle belongs to: the top-most one in the centre.
+///
+/// The button collapses the dock that sits against the centre's left edge, so it
+/// belongs in the group nearest that edge — which is the first child of a
+/// horizontal split, walked down to a leaf.
+fn left_top_group<K>(layout: &ModelLayout<K>) -> Option<NodeId> {
+    fn walk<K>(layout: &ModelLayout<K>, node: NodeId) -> Option<NodeId> {
+        match layout.kind(node)? {
+            NodeKind::Pane(_) => Some(node),
+            NodeKind::Proportional(pg) => {
+                let first = *pg.children.first()?;
+                walk(layout, first)
+            }
+            NodeKind::Panel(_) | NodeKind::Root(_) => None,
+        }
+    }
+    walk(layout, layout.root_child()?)
+}
+
+/// The group a right dock's toggle belongs to: the last child of a horizontal
+/// split, the first of a vertical one.
+///
+/// A right dock's button sits on the right of the centre's top row, so it belongs
+/// to the group against that edge. A vertical split has no right-hand side, so its
+/// first child is the group a user would call the top one.
+fn right_top_group<K>(layout: &ModelLayout<K>) -> Option<NodeId> {
+    fn walk<K>(layout: &ModelLayout<K>, node: NodeId) -> Option<NodeId> {
+        match layout.kind(node)? {
+            NodeKind::Pane(_) => Some(node),
+            NodeKind::Proportional(pg) => {
+                let next = match pg.axis {
+                    Axis::Horizontal => *pg.children.last()?,
+                    Axis::Vertical => *pg.children.first()?,
+                };
+                walk(layout, next)
+            }
+            NodeKind::Panel(_) | NodeKind::Root(_) => None,
+        }
+    }
+    walk(layout, layout.root_child()?)
+}
+
+/// Every pane node in a tree, in preorder.
+fn panes_in_tree<K>(layout: &ModelLayout<K>) -> Vec<NodeId> {
+    fn walk<K>(layout: &ModelLayout<K>, node: NodeId, found: &mut Vec<NodeId>) {
+        match layout.kind(node) {
+            Some(NodeKind::Pane(_)) => found.push(node),
+            Some(NodeKind::Proportional(pg)) => {
+                for &child in &pg.children {
+                    walk(layout, child, found);
+                }
+            }
+            Some(NodeKind::Panel(_) | NodeKind::Root(_)) | None => {}
+        }
+    }
+    let mut found = Vec::new();
+    if let Some(root) = layout.root_child() {
+        walk(layout, root, &mut found);
+    }
+    found
 }
