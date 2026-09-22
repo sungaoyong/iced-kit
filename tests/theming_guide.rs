@@ -253,3 +253,53 @@ fn a_themed_field_renders_in_a_guide_style_view() {
         assert!(theme.colors().background.a > 0.0);
     }
 }
+
+/// The guide documents the motion group's shape and what its tokens are for.
+#[test]
+fn the_motion_tokens_are_documented_ones() {
+    let motion = *Theme::light().motion();
+
+    // The four steps, in the order the guide lists them.
+    assert_eq!(motion.instant, std::time::Duration::ZERO);
+    assert!(motion.instant < motion.fast);
+    assert!(motion.fast < motion.normal);
+    assert!(motion.normal < motion.slow);
+
+    // The curves are reachable as the function pointers the guide describes,
+    // and each holds its endpoints.
+    for curve in [motion.enter(), motion.exit(), motion.r#move()] {
+        assert_eq!(curve(0.0), 0.0);
+        assert_eq!(curve(1.0), 1.0);
+    }
+
+    // The guide calls `enter` a strong ease-out: it must lead its progress.
+    assert!(motion.enter()(0.5) > 0.5);
+}
+
+/// The guide tells an application to ask for reduced motion itself, because iced
+/// exposes no way to read the operating system's preference.
+#[test]
+fn reduced_motion_is_a_switch_the_application_owns() {
+    // The flag defaults to unreduced, which is what an application that never
+    // mentions it gets. It is not toggled here: it is process-wide, and the
+    // tests in this binary run in parallel.
+    assert!(!iced_kit::motion::reduce_motion());
+}
+
+/// The guide describes a presence as the piece an application owns to keep a
+/// surface mounted while it leaves.
+#[test]
+fn a_presence_keeps_a_leaving_surface_mounted() {
+    use iced_kit::motion::Presence;
+
+    let now = std::time::Instant::now();
+    let mut presence = Presence::visible();
+
+    presence.dismiss(now);
+
+    assert!(!presence.is_visible(), "the surface was closed");
+    assert!(
+        presence.should_render(),
+        "but its exit is still being drawn"
+    );
+}

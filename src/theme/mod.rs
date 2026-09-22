@@ -11,7 +11,7 @@ mod tokens;
 
 pub mod catalog;
 
-pub use tokens::{Colors, Radius, Size, Spacing, TextStyle, Tokens, Typography};
+pub use tokens::{Colors, Motion, Radius, Size, Spacing, TextStyle, Tokens, Typography};
 
 use iced::theme::{self, Mode, Palette};
 use iced::{Color, Font};
@@ -85,6 +85,12 @@ impl Theme {
     #[must_use]
     pub fn typography(&self) -> &Typography {
         &self.tokens.typography
+    }
+
+    /// Returns this theme's motion scale.
+    #[must_use]
+    pub fn motion(&self) -> &Motion {
+        &self.tokens.motion
     }
 
     /// Whether this theme is a dark theme.

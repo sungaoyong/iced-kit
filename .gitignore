@@ -16,6 +16,7 @@
 *~
 .idea/
 .vscode/
+.zcode/
 
 # Scratch files from profiling or manual rendering checks.
 *.profraw

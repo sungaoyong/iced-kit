@@ -24,12 +24,12 @@ use iced_kit::widgets::plot::{
     SankeyNode,
 };
 use iced_kit::widgets::{
-    accordion, addon, alert, avatar, avatar_with_name, badge, code, divider, empty_state,
+    accordion, addon, alert, avatar, avatar_with_name, badge, carousel, code, divider, empty_state,
     group_button, heading, input_group, kbd, list, muted_text, number_input, otp_input, pagination,
     paragraph, password, progress, ring_progress, shortcut, skeleton, skeleton_list_item,
     spinner_styled, tag, text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel,
-    Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem, Modal, SkeletonShape, SpinnerStyle,
-    TitleBar, Tone, VirtualList, VirtualListState, WindowControl,
+    CarouselAxis, CarouselState, Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem, Modal,
+    SkeletonShape, SpinnerStyle, TitleBar, Tone, VirtualList, VirtualListState, WindowControl,
 };
 use iced_kit::{Size, Theme};
 
@@ -43,7 +43,24 @@ enum Message {
 ///
 /// The content may borrow, since a list built over local data is still rendered
 /// before this function returns.
+///
+/// # Why every snapshot is rendered with motion reduced
+///
+/// A snapshot is a single frame. An animated surface would be captured at
+/// whatever point in its transition that frame happened to land, which is a
+/// different image on every run — and the pixel comparison would flake rather
+/// than catch a real change. Asking for reduced motion makes every component
+/// adopt its target immediately, so a reference shows the state the user
+/// settles on.
+///
+/// The request is made once for the whole test binary rather than around each
+/// render: the flag is process-wide, and the tests in this file run in parallel,
+/// so toggling it per call would let one test disarm another one's render.
+/// Testing the motion itself is the job of the unit tests beside each component.
 fn assert_renders<'a>(name: &str, content: impl Into<Element<'a, Message, Theme>>, dark: bool) {
+    static REDUCE_MOTION: std::sync::Once = std::sync::Once::new();
+    REDUCE_MOTION.call_once(|| iced_kit::motion::set_reduce_motion(true));
+
     let theme = if dark { Theme::dark() } else { Theme::light() };
     let element: Element<'a, Message, Theme> = container(content.into()).padding(16).into();
 
@@ -1442,27 +1459,23 @@ fn a_settings_panel_renders() {
                                         .default_value(true),
                                 ),
                         )
-                        .item(
-                            SettingItem::new("Accent")
-                                .field(SettingField::select(
-                                    vec![
-                                        ("blue".to_owned(), "Blue".to_owned()),
-                                        ("violet".to_owned(), "Violet".to_owned()),
-                                    ],
-                                    Some("blue".to_owned()),
-                                    |_| Message::Noop,
-                                )),
-                        ),
+                        .item(SettingItem::new("Accent").field(SettingField::select(
+                            vec![
+                                ("blue".to_owned(), "Blue".to_owned()),
+                                ("violet".to_owned(), "Violet".to_owned()),
+                            ],
+                            Some("blue".to_owned()),
+                            |_| Message::Noop,
+                        ))),
                 )
                 .group(
                     SettingGroup::new()
                         .title("Typography")
                         .item(
-                            SettingItem::new("Font size")
-                                .field(
-                                    SettingField::number(14.0, 8.0..=72.0, |_| Message::Noop)
-                                        .default_value(14.0),
-                                ),
+                            SettingItem::new("Font size").field(
+                                SettingField::number(14.0, 8.0..=72.0, |_| Message::Noop)
+                                    .default_value(14.0),
+                            ),
                         )
                         .item(
                             SettingItem::new("Font family")
@@ -1495,12 +1508,10 @@ fn a_settings_panel_renders_in_dark_mode() {
     let element: Element<'_, Message, Theme> = Settings::<Message>::new(&state)
         .page(
             SettingPage::new("General").group(
-                SettingGroup::new()
-                    .title("Startup")
-                    .item(SettingItem::new("Launch at login").field(SettingField::switch(
-                        true,
-                        |_| Message::Noop,
-                    ))),
+                SettingGroup::new().title("Startup").item(
+                    SettingItem::new("Launch at login")
+                        .field(SettingField::switch(true, |_| Message::Noop)),
+                ),
             ),
         )
         .into();
@@ -1520,12 +1531,10 @@ fn a_stacked_settings_panel_renders() {
         .stacked(true)
         .page(
             SettingPage::new("General").group(
-                SettingGroup::new()
-                    .title("Updates")
-                    .item(SettingItem::new("Automatic updates").field(SettingField::switch(
-                        true,
-                        |_| Message::Noop,
-                    ))),
+                SettingGroup::new().title("Updates").item(
+                    SettingItem::new("Automatic updates")
+                        .field(SettingField::switch(true, |_| Message::Noop)),
+                ),
             ),
         )
         .into();
@@ -1547,14 +1556,15 @@ fn a_disabled_settings_group_renders_inert() {
                 SettingGroup::new()
                     .title("Experimental")
                     .disabled(true)
-                    .item(SettingItem::new("Unsafe mode").field(SettingField::switch(
-                        false,
-                        |_| Message::Noop,
-                    )))
                     .item(
-                        SettingItem::new("Buffer size")
-                            .field(SettingField::number(64.0, 1.0..=512.0, |_| Message::Noop)),
-                    ),
+                        SettingItem::new("Unsafe mode")
+                            .field(SettingField::switch(false, |_| Message::Noop)),
+                    )
+                    .item(SettingItem::new("Buffer size").field(SettingField::number(
+                        64.0,
+                        1.0..=512.0,
+                        |_| Message::Noop,
+                    ))),
             ),
         )
         .into();
@@ -1622,7 +1632,8 @@ mod settings_interaction {
     use super::{Element, Message, Theme};
     use iced::Task;
     use iced_kit::setting::{
-        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent, SettingsState,
+        SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent,
+        SettingsState,
     };
 
     fn app(state: &SettingsState, dark: bool) -> Element<'_, Message, Theme> {
@@ -1630,12 +1641,10 @@ mod settings_interaction {
             .on_event(|_event| Message::Noop)
             .page(
                 SettingPage::new("Appearance").group(
-                    SettingGroup::new()
-                        .title("Theme")
-                        .item(SettingItem::new("Dark mode").field(SettingField::switch(
-                            dark,
-                            |_| Message::Noop,
-                        ))),
+                    SettingGroup::new().title("Theme").item(
+                        SettingItem::new("Dark mode")
+                            .field(SettingField::switch(dark, |_| Message::Noop)),
+                    ),
                 ),
             )
             .into()
@@ -1659,8 +1668,10 @@ mod settings_interaction {
         let state = SettingsState::new();
         let mut sim = simulator(&state, false);
 
-        sim.snapshot(&Theme::light()).expect("the panel must render");
-        sim.snapshot(&Theme::dark()).expect("the panel must render dark");
+        sim.snapshot(&Theme::light())
+            .expect("the panel must render");
+        sim.snapshot(&Theme::dark())
+            .expect("the panel must render dark");
     }
 
     #[test]
@@ -1672,7 +1683,8 @@ mod settings_interaction {
 
         // And the panel still renders on the page that was selected.
         let mut sim = simulator(&state, false);
-        sim.snapshot(&Theme::light()).expect("the panel must render");
+        sim.snapshot(&Theme::light())
+            .expect("the panel must render");
     }
 
     #[test]
@@ -1726,21 +1738,18 @@ fn a_filtered_settings_panel_renders_only_matching_groups() {
         .page(
             SettingPage::new("Appearance")
                 .group(
-                    SettingGroup::new()
-                        .title("Theme")
-                        .item(SettingItem::new("Dark mode").field(SettingField::switch(
-                            true,
-                            |_| Message::Noop,
-                        ))),
+                    SettingGroup::new().title("Theme").item(
+                        SettingItem::new("Dark mode")
+                            .field(SettingField::switch(true, |_| Message::Noop)),
+                    ),
                 )
-                .group(
-                    SettingGroup::new()
-                        .title("Typography")
-                        .item(
-                            SettingItem::new("Font size")
-                                .field(SettingField::number(14.0, 8.0..=72.0, |_| Message::Noop)),
-                        ),
-                ),
+                .group(SettingGroup::new().title("Typography").item(
+                    SettingItem::new("Font size").field(SettingField::number(
+                        14.0,
+                        8.0..=72.0,
+                        |_| Message::Noop,
+                    )),
+                )),
         )
         .into();
 
@@ -1786,8 +1795,14 @@ fn icon_only_buttons_centre_their_glyph() {
         column![
             // A text glyph and an icon-font glyph, so both paths are covered.
             row![
-                icon_button::<Message>().icon("✕").primary().on_press(Message::Noop),
-                icon_button::<Message>().icon("＋").primary().on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon("✕")
+                    .primary()
+                    .on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon("＋")
+                    .primary()
+                    .on_press(Message::Noop),
                 icon_button::<Message>()
                     .icon(iced_kit::icons::IconName::Plus)
                     .primary()
@@ -1799,9 +1814,18 @@ fn icon_only_buttons_centre_their_glyph() {
             ]
             .spacing(8),
             row![
-                icon_button::<Message>().icon("✕").outline().on_press(Message::Noop),
-                icon_button::<Message>().icon("＋").outline().on_press(Message::Noop),
-                icon_button::<Message>().icon("⊙").outline().on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon("✕")
+                    .outline()
+                    .on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon("＋")
+                    .outline()
+                    .on_press(Message::Noop),
+                icon_button::<Message>()
+                    .icon("⊙")
+                    .outline()
+                    .on_press(Message::Noop),
             ]
             .spacing(8),
         ]
@@ -1824,6 +1848,34 @@ fn pagination_centres_its_page_numbers() {
         column![
             pagination(4, 20, |_| Message::Noop),
             pagination(0, 5, |_| Message::Noop),
+        ]
+        .spacing(16),
+        false,
+    );
+}
+
+/// A carousel in each orientation, with and without its controls, must draw the
+/// slides inside its viewport rather than over the content beside it.
+#[test]
+fn carousels_clip_their_slides() {
+    let horizontal = CarouselState::new(3);
+    let vertical = CarouselState::new(3).with_axis(CarouselAxis::Vertical);
+
+    let slide = |index: usize| -> Element<'static, Message, Theme> {
+        container(iced::widget::text(format!("Slide {}", index + 1))).into()
+    };
+
+    assert_renders(
+        "carousel",
+        column![
+            carousel(&horizontal, (0..3).map(slide).collect(), |_| Message::Noop,)
+                .height(Length::Fixed(100.0))
+                .indicators(true),
+            carousel(&horizontal, (0..3).map(slide).collect(), |_| Message::Noop,)
+                .controls(false)
+                .height(Length::Fixed(100.0)),
+            carousel(&vertical, (0..3).map(slide).collect(), |_| Message::Noop,)
+                .height(Length::Fixed(100.0)),
         ]
         .spacing(16),
         false,

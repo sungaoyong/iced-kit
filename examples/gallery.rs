@@ -5,25 +5,25 @@
 use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Length, Task};
 use iced_kit::icons::IconName;
+use iced_kit::motion::Presence;
 use iced_kit::prelude::*;
 use iced_kit::setting::{
-    SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent,
-    SettingsState,
+    SettingField, SettingGroup, SettingItem, SettingPage, Settings, SettingsEvent, SettingsState,
 };
-use iced_kit::widgets::{group_box, GroupBoxVariant};
 use iced_kit::widgets::overlay::{self, Layer, Toast, ToastKind, ToastPlacement, Toasts};
 use iced_kit::widgets::plot::{
     AreaChart, AreaSeries, BarAlignment, BarChart, Candle, CandlestickChart, LineChart, LineSeries,
     PieChart, PieSlice, RadarChart, RadarSeries, SankeyAlign, SankeyChart, SankeyLink, SankeyNode,
 };
 use iced_kit::widgets::{
-    accordion, addon, alert, avatar, avatar_with_name, code, empty_state, group_button, heading,
-    icon_button, input_group, kbd, muted_text, number_input, otp_input, pagination, paragraph,
-    ring_progress, shortcut, skeleton, skeleton_list_item, spinner_styled, text_area, text_input,
-    tooltip, AccordionSection, AddonAlignment, AvatarLabel, Button, ButtonGroup, Dropdown,
-    DropdownButton, Heading, MenuItem, Modal, SkeletonShape, SpinnerStyle, Toggle, ToggleGroup,
-    Tone,
+    accordion, addon, alert, avatar, avatar_with_name, carousel, code, empty_state, group_button,
+    heading, icon_button, input_group, kbd, muted_text, number_input, otp_input, pagination,
+    paragraph, ring_progress, shortcut, skeleton, skeleton_list_item, spinner_styled, text_area,
+    text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel, Button, ButtonGroup,
+    CarouselAxis, CarouselState, Dropdown, DropdownButton, Heading, MenuItem, Modal, SkeletonShape,
+    SpinnerStyle, Toggle, ToggleGroup, Tone,
 };
+use iced_kit::widgets::{group_box, GroupBoxVariant};
 
 fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
@@ -106,12 +106,17 @@ struct App {
     underline: bool,
     page: usize,
     accordion_open: Option<usize>,
+    /// The carousel demo's selection, in both orientations.
+    carousel: CarouselState,
+    carousel_vertical: CarouselState,
     /// A counter that only exists to give the spinner something to be busy with.
     busy: bool,
     port: f64,
     otp: String,
     list_selection: usize,
     drawer_open: bool,
+    /// Keeps the drawer mounted while its exit is drawn.
+    drawer_presence: Presence,
     menu_at: Option<(f32, f32)>,
     popover_open: bool,
     /// Scroll state for the virtualized list and table.
@@ -211,6 +216,9 @@ enum Message {
     SettingsTelemetry(bool),
     SettingsLaunchAtLogin(bool),
     AccordionToggled(usize),
+    /// The carousel demos report the slide they moved to.
+    CarouselSelected(usize),
+    CarouselVerticalSelected(usize),
     ToggleBusy,
     PortChanged(f64),
     OtpChanged(String),
@@ -254,11 +262,16 @@ impl Default for App {
             underline: true,
             page: 0,
             accordion_open: None,
+            // Looping is on so the demo shows the wrap-around, which is the
+            // part of the behaviour a still screenshot cannot otherwise convey.
+            carousel: CarouselState::new(4).with_looping(true),
+            carousel_vertical: CarouselState::new(3).with_axis(CarouselAxis::Vertical),
             busy: false,
             port: 8080.0,
             otp: String::new(),
             list_selection: 0,
             drawer_open: false,
+            drawer_presence: Presence::new(),
             menu_at: None,
             popover_open: false,
             list_state: VirtualListState::new(),
@@ -394,6 +407,10 @@ impl App {
                 // accordion feel like a toggle rather than a selector.
                 self.accordion_open = (self.accordion_open != Some(index)).then_some(index);
             }
+            Message::CarouselSelected(index) => self.carousel.select_index(index),
+            Message::CarouselVerticalSelected(index) => {
+                self.carousel_vertical.select_index(index);
+            }
             Message::Settings(event) => {
                 self.settings.apply(event);
 
@@ -429,7 +446,14 @@ impl App {
             Message::PortChanged(value) => self.port = value,
             Message::OtpChanged(value) => self.otp = value,
             Message::ListPicked(index) => self.list_selection = index,
-            Message::ToggleDrawer => self.drawer_open = !self.drawer_open,
+            Message::ToggleDrawer => {
+                self.drawer_open = !self.drawer_open;
+
+                // The presence has to be told, or the drawer would stop being
+                // drawn the instant it closed rather than sliding out.
+                self.drawer_presence
+                    .show(self.drawer_open, std::time::Instant::now());
+            }
             Message::OpenContextMenu => self.menu_at = Some((120.0, 320.0)),
             Message::CloseContextMenu => self.menu_at = None,
             Message::TogglePopover => self.popover_open = !self.popover_open,
@@ -457,6 +481,7 @@ impl App {
             self.overlay_section(),
             self.tabs_section(),
             self.navigation_section(),
+            self.carousel_section(),
             self.data_section(),
             self.settings_section(),
             Self::group_box_section(),
@@ -513,7 +538,9 @@ impl App {
             ));
         }
 
-        if self.drawer_open {
+        // The drawer is kept mounted while it leaves, so its exit is drawn. The
+        // presence is what tells the gallery to keep supplying it.
+        if self.drawer_open || self.drawer_presence.should_render() {
             open = open.drawer(
                 Drawer::new(
                     "Details",
@@ -524,6 +551,7 @@ impl App {
                     .spacing(12),
                 )
                 .side(DrawerSide::Right)
+                .presence(&self.drawer_presence)
                 .on_dismiss(Message::ToggleDrawer),
             );
         }
@@ -1057,18 +1085,20 @@ impl App {
                                         .default_value(true),
                                     ),
                             )
-                            .item(SettingItem::new("Accent color").field(
-                                SettingField::select(
-                                    vec![
-                                        ("blue".to_owned(), "Blue".to_owned()),
-                                        ("violet".to_owned(), "Violet".to_owned()),
-                                        ("rose".to_owned(), "Rose".to_owned()),
-                                    ],
-                                    Some(self.settings_accent.clone()),
-                                    Message::SettingsAccent,
-                                )
-                                .default_value("blue"),
-                            )),
+                            .item(
+                                SettingItem::new("Accent color").field(
+                                    SettingField::select(
+                                        vec![
+                                            ("blue".to_owned(), "Blue".to_owned()),
+                                            ("violet".to_owned(), "Violet".to_owned()),
+                                            ("rose".to_owned(), "Rose".to_owned()),
+                                        ],
+                                        Some(self.settings_accent.clone()),
+                                        Message::SettingsAccent,
+                                    )
+                                    .default_value("blue"),
+                                ),
+                            ),
                     )
                     .group(
                         SettingGroup::new()
@@ -1092,59 +1122,59 @@ impl App {
                     ),
             )
             .page(
-                SettingPage::new("General")
-                    .icon(IconName::Settings2)
-                    .group(
-                        SettingGroup::new()
-                            .title("Startup")
-                            .item(SettingItem::new("Launch at login").field(
-                                SettingField::switch(
-                                    self.settings_launch_at_login,
-                                    Message::SettingsLaunchAtLogin,
+                SettingPage::new("General").icon(IconName::Settings2).group(
+                    SettingGroup::new()
+                        .title("Startup")
+                        .item(
+                            SettingItem::new("Launch at login").field(SettingField::switch(
+                                self.settings_launch_at_login,
+                                Message::SettingsLaunchAtLogin,
+                            )),
+                        )
+                        .item(
+                            SettingItem::new("Autosave")
+                                .description("Write changes as you make them.")
+                                .field(
+                                    SettingField::switch(
+                                        self.settings_autosave,
+                                        Message::SettingsAutosave,
+                                    )
+                                    .default_value(true),
                                 ),
-                            ))
-                            .item(
-                                SettingItem::new("Autosave")
-                                    .description("Write changes as you make them.")
-                                    .field(
-                                        SettingField::switch(
-                                            self.settings_autosave,
-                                            Message::SettingsAutosave,
-                                        )
-                                        .default_value(true),
-                                    ),
-                            ),
-                    ),
+                        ),
+                ),
             )
             .page(
                 SettingPage::new("Privacy")
                     .icon(IconName::User)
-                    .group(SettingGroup::new().title("Telemetry").item(
-                        SettingItem::new("Send usage data")
-                            .description("Anonymous, and never sold.")
-                            .keywords(["analytics", "tracking"])
-                            .field(
-                                SettingField::checkbox(
-                                    self.settings_telemetry,
-                                    Message::SettingsTelemetry,
-                                )
-                                .default_value(false),
-                            ),
-                    ))
+                    .group(
+                        SettingGroup::new().title("Telemetry").item(
+                            SettingItem::new("Send usage data")
+                                .description("Anonymous, and never sold.")
+                                .keywords(["analytics", "tracking"])
+                                .field(
+                                    SettingField::checkbox(
+                                        self.settings_telemetry,
+                                        Message::SettingsTelemetry,
+                                    )
+                                    .default_value(false),
+                                ),
+                        ),
+                    )
                     .group(
                         SettingGroup::new()
                             .title("Experimental")
                             .disabled(true)
-                            .item(SettingItem::new("Differential sync").field(
-                                SettingField::<Message>::switch(false, |_| Message::ToggleBusy),
-                            )),
+                            .item(SettingItem::new("Differential sync").field(SettingField::<
+                                Message,
+                            >::switch(
+                                false,
+                                |_| Message::ToggleBusy,
+                            ))),
                     ),
             );
 
-        Self::section(
-            "Settings",
-            container(panel).height(Length::Fixed(560.0)),
-        )
+        Self::section("Settings", container(panel).height(Length::Fixed(560.0)))
     }
 
     /// The three group box variants, standalone.
@@ -1523,6 +1553,68 @@ impl App {
                     .spacing(12)
                     .align_y(Alignment::Center)
                     .wrap(),
+                ]
+                .spacing(8),
+            ]
+            .spacing(16),
+        )
+    }
+
+    /// A carousel in both orientations, with the controls and the dot
+    /// indicator, which is the whole of the surface a caller can configure.
+    fn carousel_section(&self) -> Element<'_, Message, Theme> {
+        let slide = |index: usize, height: f32| -> Element<'_, Message, Theme> {
+            container(
+                column![
+                    heading(format!("Slide {}", index + 1), Heading::H3),
+                    label("A snapping viewport, dragged or stepped through."),
+                ]
+                .spacing(4),
+            )
+            .width(Length::Fill)
+            .height(Length::Fixed(height))
+            .center_x(Length::Fill)
+            .center_y(Length::Fixed(height))
+            .into()
+        };
+
+        Self::section(
+            "Carousel",
+            column![
+                column![
+                    label("Horizontal, looping, with indicators").size(13),
+                    carousel(
+                        &self.carousel,
+                        (0..4).map(|index| slide(index, 120.0)).collect(),
+                        Message::CarouselSelected,
+                    )
+                    .height(Length::Fixed(120.0))
+                    .indicators(true),
+                ]
+                .spacing(8),
+                divider(),
+                column![
+                    label("Two per view").size(13),
+                    carousel(
+                        &self.carousel,
+                        (0..4).map(|index| slide(index, 110.0)).collect(),
+                        Message::CarouselSelected,
+                    )
+                    .per_view(2)
+                    .gap(12.0)
+                    .height(Length::Fixed(110.0)),
+                ]
+                .spacing(8),
+                divider(),
+                column![
+                    label("Vertical").size(13),
+                    row![carousel(
+                        &self.carousel_vertical,
+                        (0..3).map(|index| slide(index, 90.0)).collect(),
+                        Message::CarouselVerticalSelected,
+                    )
+                    .height(Length::Fixed(90.0))
+                    .width(Length::Fixed(360.0)),],
                 ]
                 .spacing(8),
             ]

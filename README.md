@@ -39,6 +39,7 @@ Token names follow shadcn/ui so they map one-to-one onto gpui-kit's
 | Spacing | `xxs` … `xxl` |
 | Typography | `sans`, `mono`, and the `xs`/`sm`/`md`/`lg`/`xl` scale |
 | Size | `Xs`, `Sm`, `Md`, `Lg`, or `Custom(px)` — control height, padding, icon and text step together |
+| Motion | `instant`, `fast`, `normal`, `slow`, and the `enter`/`exit`/`move` curves |
 
 Build a theme from tokens when you need a custom palette:
 
@@ -72,7 +73,9 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 **Typography** — `heading`, `paragraph`, `muted_text`, `code`, `kbd`,
 `shortcut`, `avatar`, `avatar_with_name`
 
-**Navigation** — `tabs`, `accordion`, `pagination`
+**Navigation** — `tabs`, `accordion`, `pagination`, `carousel` (horizontal or
+vertical, with previous/next controls, a dot indicator, looping, arrow keys and
+drag-to-snap)
 
 **Shell** — `TitleBar` (with window controls), `Resizable` (draggable split
 panes), and — behind the `dock` feature — a full docking layout with draggable
@@ -87,6 +90,15 @@ title bar's window controls (`─`/`□`/`✕` are `IconName::Minus`/`Square`/`X
 
 **Overlays** — `Modal`, `Dialog`, `Drawer`, `Toast`/`Toasts`,
 `Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`
+
+**Motion** — surfaces animate as they arrive: a drawer slides in from its edge, a
+dialog rises, a dropdown drops, a toast comes in from the corner it sits in. The
+tabs indicator glides between tabs, an accordion panel grows open, a progress bar
+eases to its value, and a skeleton breathes while it waits. `Presence` is the
+piece an application owns to keep a surface mounted while it leaves, since iced
+cannot animate something that has stopped being built. See
+[THEMING.md](THEMING.md#motion) for the tokens, and for what iced's renderer does
+and does not allow.
 
 ## Buttons
 

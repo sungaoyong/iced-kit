@@ -13,6 +13,7 @@
 
 pub mod avatar;
 pub mod button;
+pub mod carousel;
 pub mod chart;
 pub mod data_table;
 pub mod display;
@@ -27,6 +28,7 @@ pub mod number;
 pub mod overlay;
 pub mod plot;
 pub mod resizable;
+pub(crate) mod reveal;
 pub mod select;
 pub mod skeleton;
 pub mod spinner;
@@ -41,6 +43,7 @@ pub use button::{
     button, icon_button, Button, ButtonGroup, ButtonGroupLayout, DropdownButton, Icon, IconSource,
     LoadingIcon, Toggle, ToggleGroup, ToggleVariant,
 };
+pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
 pub use chart::{Chart, ChartKind, Series};
 pub use data_table::{Column, DataTable, SortDirection, SortKey, TableState, Width};
 pub use display::{alert, badge, card, divider, empty_state, progress, vertical_divider, Tone};

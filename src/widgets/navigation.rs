@@ -3,6 +3,7 @@
 //! Both are stateless: the caller owns which section is open, and which page is
 //! current, and receives a message when either changes.
 
+use crate::icons::IconName;
 use crate::theme::{Size, Theme};
 use iced::widget::{button, column, container, row, text};
 use iced::{Color, Element, Length, Padding};
@@ -72,7 +73,16 @@ pub fn accordion<'a, Message: Clone + 'a>(
         let is_open = open == Some(index);
 
         let mut heading = row![
-            text(if is_open { "▾" } else { "▸" }).size(title_style.size - 2.0),
+            // The chevron is a glyph from the bundled icon font rather than a
+            // text character. A character like `▾` is sized and weighted by
+            // whichever system font happens to resolve it, so it could not be
+            // made to agree with the icons elsewhere in the library.
+            crate::widgets::Icon::new(if is_open {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .into_element(Size::Md),
             text(section.title)
                 .size(title_style.size)
                 .line_height(title_style.line_height()),
@@ -107,14 +117,20 @@ pub fn accordion<'a, Message: Clone + 'a>(
 
         items = items.push(header);
 
-        if is_open {
-            items = items.push(container(body(index)).width(Length::Fill).padding(Padding {
-                top: 4.0,
-                right: 12.0,
-                bottom: 12.0,
-                left: 12.0,
-            }));
-        }
+        // The body stays mounted whatever the state, and the panel decides how
+        // much of it to show. Pushing it only when open — which is what this
+        // used to do — leaves nothing to animate: the panel would have to be
+        // built and measured in the same frame it appears.
+        items = items.push(
+            crate::widgets::reveal::Reveal::new(body(index), is_open)
+                .padding(Padding {
+                    top: 4.0,
+                    right: 12.0,
+                    bottom: 12.0,
+                    left: 12.0,
+                })
+                .duration(crate::motion::DURATION_NORMAL),
+        );
 
         items = items.push(
             container(iced::widget::Space::new().height(Length::Fixed(1.0)))

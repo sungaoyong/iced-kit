@@ -6,6 +6,7 @@
 //! button color".
 
 use iced::{Color, Font};
+use std::time::Duration;
 
 /// The full semantic token set of a theme.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -14,6 +15,7 @@ pub struct Tokens {
     pub radius: Radius,
     pub spacing: Spacing,
     pub typography: Typography,
+    pub motion: Motion,
 }
 
 impl Tokens {
@@ -274,7 +276,6 @@ pub struct Typography {
     pub lg: TextStyle,
     pub xl: TextStyle,
 }
-
 impl Default for Typography {
     fn default() -> Self {
         Self {
@@ -301,6 +302,74 @@ impl Default for Typography {
                 line_height: 28.0,
             },
         }
+    }
+}
+
+/// The motion scale: how long things take and how they are shaped in time.
+///
+/// Following `gpui-kit`, an interface animates in one of three ways and the
+/// tokens are named for those roles rather than for components:
+///
+/// - **Entering** uses [`Self::enter`], a strong ease-out, so an appearance
+///   covers most of its distance early and settles gently.
+/// - **Leaving** uses [`Self::exit`], which starts at full speed so a dismissal
+///   does not linger.
+/// - **Moving** uses [`Self::r#move`], symmetric enough that a value travelling
+///   either way looks the same.
+///
+/// Almost everything uses [`Self::normal`]; the other steps are for a change too
+/// small to deserve its own moment, and for a whole surface arriving.
+///
+/// # Why the curves are functions and not control points
+///
+/// The curves are the three functions in [`crate::motion`], each documented
+/// with its cubic-Bézier control points. They are exposed that way because
+/// iced's `Easing::Custom` holds a plain `fn` pointer, which cannot carry
+/// captured control points — so a field holding `(f32, f32, f32, f32)` could not
+/// drive an animation, and would be a second source of truth able to drift from
+/// the curve actually drawn. A component that needs a different curve passes its
+/// own function to `Progress::with_timing`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Motion {
+    /// No time at all: the value is adopted on the spot.
+    pub instant: Duration,
+    /// A color or another small state change.
+    pub fast: Duration,
+    /// The default for a value that moves or grows.
+    pub normal: Duration,
+    /// A whole surface arriving or leaving.
+    pub slow: Duration,
+}
+
+impl Default for Motion {
+    fn default() -> Self {
+        Self {
+            instant: Duration::ZERO,
+            fast: Duration::from_millis(120),
+            normal: Duration::from_millis(180),
+            slow: Duration::from_millis(280),
+        }
+    }
+}
+
+impl Motion {
+    /// Returns the curve an arriving value follows.
+    #[must_use]
+    pub fn enter(self) -> fn(f32) -> f32 {
+        crate::motion::ease_enter
+    }
+
+    /// Returns the curve a leaving value follows.
+    #[must_use]
+    pub fn exit(self) -> fn(f32) -> f32 {
+        crate::motion::ease_exit
+    }
+
+    /// Returns the curve a value moving within the interface follows.
+    #[must_use]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn r#move(self) -> fn(f32) -> f32 {
+        crate::motion::ease_move
     }
 }
 

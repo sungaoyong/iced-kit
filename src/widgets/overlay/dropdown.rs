@@ -4,8 +4,10 @@
 //! rendered by [`Layer`](crate::widgets::overlay::Layer), which is what lets it
 //! float over the rest of the page.
 
+use crate::motion::DURATION_FAST;
 use crate::theme::{Size, Theme};
 use crate::widgets::overlay::floating_shadow;
+use crate::widgets::overlay::{Enter, EnterFrom};
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{Alignment, Color, Element, Length, Padding};
 
@@ -211,6 +213,12 @@ impl<'a, Message: Clone + 'a> Dropdown<'a, Message> {
                     ..container::Style::default()
                 }
             }) as container::StyleFn<'a, Theme>);
+
+        // The menu drops into place, which is the direction it belongs to. The
+        // wrapper goes around the menu rather than around the full-area
+        // placement container: sliding the placement would move the whole layer
+        // instead of the menu.
+        let menu = Enter::new(menu, EnterFrom::Above).duration(DURATION_FAST);
 
         // The anchor is applied with padding rather than absolute positioning,
         // since iced lays overlays out in flow.

@@ -27,6 +27,7 @@
 pub mod dialog;
 pub mod drawer;
 pub mod dropdown;
+mod enter;
 pub mod popover;
 pub mod toast;
 pub mod tooltip;
@@ -38,9 +39,12 @@ use iced::{Alignment, Color, Element, Length};
 pub use dialog::{Dialog, DialogWidth, Modal};
 pub use drawer::{drawer_actions, drawer_header, Drawer, DrawerSide, DrawerSize};
 pub use dropdown::{Dropdown, DropdownAlign, MenuItem};
+pub use enter::EnterFrom;
 pub use popover::{ContextMenu, Popover, PopoverPlacement};
 pub use toast::{Toast, ToastKind, ToastPlacement, Toasts};
 pub use tooltip::{tooltip, tooltip_at, tooltip_bubble, TooltipPosition};
+
+pub(crate) use enter::Enter;
 
 /// A downward chevron, for the trigger of a menu.
 ///

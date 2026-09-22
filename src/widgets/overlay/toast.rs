@@ -6,9 +6,10 @@
 //! dismissed, so an application that never expires them gets a persistent
 //! notification instead of a surprise disappearance.
 
+use crate::motion::DURATION_NORMAL;
 use crate::theme::{Size, Theme};
 use crate::widgets::display::Tone;
-use crate::widgets::overlay::{floating_shadow, scrim};
+use crate::widgets::overlay::{floating_shadow, scrim, Enter, EnterFrom};
 use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Color, Element, Length, Padding};
 
@@ -173,7 +174,18 @@ impl<'a, Message: Clone + 'a> Toasts<'a, Message> {
             ToastPlacement::BottomCenter => (Alignment::Center, Alignment::End, 16.0),
         };
 
-        container(stack)
+        // The stack arrives from whichever edge it is pinned to, so a toast
+        // reads as coming from that side of the window rather than appearing on
+        // top of everything at once. The wrapper goes around the stack rather
+        // than the full-area container, which would slide the whole layer.
+        let from = match placement {
+            ToastPlacement::TopCenter | ToastPlacement::TopRight => EnterFrom::Above,
+            ToastPlacement::BottomRight | ToastPlacement::BottomCenter => EnterFrom::Below,
+        };
+
+        let arriving = Enter::new(stack, from).duration(DURATION_NORMAL);
+
+        container(arriving)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(align_x)

@@ -35,11 +35,12 @@
 pub mod dock;
 
 pub mod icons;
+pub mod motion;
 pub mod setting;
 pub mod theme;
 pub mod widgets;
 
-pub use theme::{Colors, Size, Theme, Tokens};
+pub use theme::{Colors, Motion, Size, Theme, Tokens};
 
 /// The imports most applications want.
 pub mod prelude {

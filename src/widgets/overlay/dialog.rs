@@ -4,11 +4,18 @@
 //! swallows clicks, so the dialog is the only interactive region until it is
 //! dismissed.
 
+use crate::motion::DURATION_SLOW;
 use crate::theme::{Size, Theme};
 use crate::widgets::button as kit_button;
-use crate::widgets::overlay::{floating_shadow, scrim};
+use crate::widgets::overlay::{floating_shadow, scrim, Enter, EnterFrom};
 use iced::widget::{column, container, row, text, MouseArea};
 use iced::{Alignment, Element, Length, Padding};
+
+/// How far a dialog rises as it arrives, in logical pixels.
+///
+/// Short on purpose: a dialog appears at the centre of attention rather than
+/// travelling there, and a long slide would read as it coming from somewhere.
+const DIALOG_TRAVEL: f32 = 12.0;
 
 /// How wide a dialog is allowed to grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -201,7 +208,14 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
             scrim()
         };
 
-        iced::widget::stack![backdrop, centered].into()
+        // A dialog rises into place by a short distance: it is the arrival of a
+        // surface at the centre of attention, so a long slide would read as the
+        // dialog coming from somewhere rather than simply appearing.
+        let surface = Enter::new(centered, EnterFrom::Below)
+            .distance(DIALOG_TRAVEL)
+            .duration(DURATION_SLOW);
+
+        iced::widget::stack![backdrop, surface].into()
     }
 }
 

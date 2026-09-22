@@ -105,7 +105,8 @@ impl From<&String> for Icon {
 /// An icon placed beside a button's label, or standing in for it.
 #[must_use = "an Icon does nothing unless it is given to a Button"]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Icon {    source: IconSource,
+pub struct Icon {
+    source: IconSource,
     size: Option<f32>,
 }
 
@@ -291,32 +292,8 @@ pub(crate) fn loading_indicator<'a, Message: 'a>(
 
 /// A rotating arc, drawn in the color the surrounding control set.
 ///
-/// The arc's rotation, accumulated from the redraw timestamps.
-///
-/// It is a phase in radians rather than a function of the wall clock, matching
-/// the standalone spinner: a clock-derived angle would render differently on
-/// every run, which a snapshot test cannot pin down. Starting at zero also
-/// makes the first frame reproducible.
-#[derive(Debug, Default)]
-struct SpinnerState {
-    phase: f32,
-    last: Option<iced::time::Instant>,
-}
-
-impl SpinnerState {
-    /// Advances the phase to the given instant.
-    fn advance(&mut self, now: iced::time::Instant) {
-        if let Some(last) = self.last {
-            let delta = now.duration_since(last).as_secs_f32();
-            // A long stall — a window dragged, a debugger paused — would
-            // otherwise jump the arc forward by seconds at once.
-            let turn = std::f32::consts::TAU;
-            self.phase = (self.phase + delta.min(0.1) * turn) % turn;
-        }
-
-        self.last = Some(now);
-    }
-}
+/// The phase is read in turns, which is what turns it into a rotation.
+type SpinnerState = crate::motion::Clock;
 
 /// A rotating arc drawn where an icon would go.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -389,7 +366,9 @@ where
             return;
         }
 
-        let phase = tree.state.downcast_ref::<SpinnerState>().phase;
+        // The clock accumulates seconds; a full turn a second is the rate the
+        // arc rotates at.
+        let phase = tree.state.downcast_ref::<SpinnerState>().phase() * std::f32::consts::TAU;
 
         // `Frame::new` builds a canvas whose origin is the widget's own
         // top-left, so the center is expressed in that local space and the whole
@@ -438,7 +417,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{Icon, IconSource};
-    use crate::icons::{IconName, glyph};
+    use crate::icons::{glyph, IconName};
     use crate::theme::Size;
 
     #[test]
@@ -468,8 +447,14 @@ mod tests {
     /// font's own enum does not implement `PartialEq`.
     #[test]
     fn named_icons_compare_by_their_glyphs() {
-        assert_eq!(IconSource::from(IconName::Search), IconSource::from(IconName::Search));
-        assert_ne!(IconSource::from(IconName::Search), IconSource::from(IconName::X));
+        assert_eq!(
+            IconSource::from(IconName::Search),
+            IconSource::from(IconName::Search)
+        );
+        assert_ne!(
+            IconSource::from(IconName::Search),
+            IconSource::from(IconName::X)
+        );
 
         // A named icon and a raw glyph that happen to share a character are
         // still different sources: one carries the font, the other does not.
@@ -492,8 +477,7 @@ mod tests {
             IconSource::Named(IconName::Search),
             IconSource::Glyph("✕".to_owned()),
         ] {
-            let element: Element<'_, (), crate::Theme> =
-                Icon::new(source).into_element(Size::Md);
+            let element: Element<'_, (), crate::Theme> = Icon::new(source).into_element(Size::Md);
             drop(element);
         }
     }

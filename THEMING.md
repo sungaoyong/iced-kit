@@ -11,7 +11,7 @@ aspirational.
 
 ## The token set
 
-`Tokens` has four groups. Nothing in them names a component — a component asks
+`Tokens` has five groups. Nothing in them names a component — a component asks
 for `colors.primary`, never for "the button color" — so restyling one component
 cannot silently change another.
 
@@ -21,6 +21,7 @@ cannot silently change another.
 | `radius` | `none`, `sm`, `md`, `lg`, `xl`, `full` |
 | `spacing` | `xxs`, `xs`, `sm`, `md`, `lg`, `xl`, `xxl` |
 | `typography` | `sans`, `mono`, and the `xs`/`sm`/`md`/`lg`/`xl` scale, each a `TextStyle { size, line_height }` |
+| `motion` | `instant`, `fast`, `normal`, `slow`, and the `enter`/`exit`/`move` curves |
 
 Every `*_foreground` is meant to be legible on top of the color it is named
 after. The test suite asserts WCAG contrast ratios on those pairs in both
@@ -217,6 +218,58 @@ let card = iced::widget::container(content)
 `catalog::card` and `catalog::muted` are the two surfaces the crate uses for
 raised panels and inert regions.
 
+## Motion
+
+The `motion` group names how long things take and how they are shaped in time,
+following `gpui-kit`. An interface animates in one of three ways, and the curves
+are named for those roles rather than for components:
+
+| Curve | Reads as |
+| --- | --- |
+| `enter` | A strong ease-out, `cubic-bezier(0.16, 1, 0.3, 1)`. An arrival covers most of its distance early and settles gently. |
+| `exit` | `cubic-bezier(0.4, 0, 1, 1)`. A dismissal starts at full speed so it does not linger. |
+| `move` | `cubic-bezier(0.2, 0, 0, 1)`. Symmetric enough that a value travelling either way looks the same. |
+
+Durations are four steps: `instant` (0ms) for something too small to deserve its
+own moment, `fast` (120ms) for a color or another small state change, `normal`
+(180ms) for the default — a value that moves or grows — and `slow` (280ms) for a
+whole surface arriving or leaving.
+
+Curves are reached through `theme.motion().enter()`, `.exit()` and `.r#move()`,
+which yield the `fn(f32) -> f32` that iced's `Easing::Custom` takes. They are
+functions rather than stored control points because `Easing::Custom` holds a
+plain function pointer and cannot carry captured values — a tuple of control
+points could not drive an animation, and would be a second source of truth able
+to drift from the curve actually drawn. A component needing a different curve
+passes its own function to `Progress::with_timing`.
+
+### What can and cannot animate
+
+iced's renderer has no opacity. Its `Renderer` trait offers clipping
+(`with_layer`), a linear transform (`with_translation`) and `fill_quad`; there is
+no alpha anywhere in the graphics stack, and the `Style` a widget passes to its
+children carries only a text color. So a component can:
+
+- **Move and size** what it draws, which is how the drawer, dialog, dropdown,
+  toast, tabs indicator and accordion panel animate.
+- **Fade the colors it constructs itself** — backgrounds, borders, shadows,
+  scrims — because those are `Color` values it owns.
+
+It cannot fade an `Element` the caller handed it. That is why an arriving surface
+slides rather than fading in, and why `Enter` scales only its own chrome.
+
+### Reduced motion
+
+`iced_kit::motion::set_reduce_motion(true)` makes every animation in the crate
+adopt its target immediately and stop requesting frames. iced 0.14 exposes no way
+to read the operating system's preference — there is no accessibility API — so
+the application reads it however it can and says so here. It defaults to
+unreduced, which is what an application that never mentions it gets.
+
+The snapshot tests ask for reduced motion, so a reference image is the state a
+component settles on rather than whatever frame the transition happened to be
+at.
+
 ## What a theme does not control
 
 - **Component metrics.** Tab bar heights, splitter widths and pane minimums are
@@ -231,6 +284,10 @@ raised panels and inert regions.
   text they sit beside rather than from a token of their own. To recolor one,
   set the color on the control containing it. The set itself is fixed: an icon
   outside Lucide is passed to `Icon::new` as an `svg::Handle`.
+- **Hover and press transitions.** Following `gpui-kit`, semantic controls do
+  not animate their own hover, press or focus states: those resolve instantly
+  from the theme. Motion is for explaining a change of state, not for decorating
+  a pointer moving over a control.
 
 ## Watching for regressions
 

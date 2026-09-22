@@ -1,7 +1,7 @@
 //! Presentational components: cards, dividers, badges, progress and alerts.
 
 use crate::theme::{catalog, Size, Theme};
-use iced::widget::{container, progress_bar as iced_progress_bar, rule, text};
+use iced::widget::{container, rule, text};
 use iced::{Color, Element, Length, Padding};
 
 /// The emphasis of a [`badge`] or [`alert`].
@@ -152,27 +152,195 @@ pub fn badge<'a, Message: 'a>(
 ///
 /// The value is clamped to the `0.0..=1.0` range; passing a percentage is a
 /// common mistake that would otherwise silently overflow the track.
+///
+/// The bar eases to a new value rather than jumping to it. The value is driven
+/// by a spring, so it carries its momentum across a change: a bar that is
+/// retargeted mid-travel — a download whose total is revised, a step that
+/// completes faster than the last — turns around from where it is instead of
+/// restarting from a standstill.
 pub fn progress<'a, Message: 'a>(value: f32, tone: Tone) -> Element<'a, Message, Theme> {
-    iced_progress_bar(0.0..=1.0, value.clamp(0.0, 1.0))
-        .length(Length::Fill)
-        .girth(8)
-        .class(Box::new(move |theme: &Theme| {
-            let colors = theme.colors();
+    Progress::new(value.clamp(0.0, 1.0), tone).into()
+}
 
-            iced_progress_bar::Style {
-                background: iced::Background::Color(colors.secondary),
-                bar: iced::Background::Color(match tone {
-                    Tone::Neutral => colors.primary,
-                    other => other.accent(theme),
-                }),
+/// A progress bar that eases towards its value.
+struct Progress {
+    value: f32,
+    tone: Tone,
+}
+
+impl Progress {
+    /// Creates a bar showing `value`, which is already clamped.
+    const fn new(value: f32, tone: Tone) -> Self {
+        Self { value, tone }
+    }
+}
+
+/// The height of a progress bar, in logical pixels.
+const BAR_HEIGHT: f32 = 8.0;
+
+/// The spring a progress bar eases towards its value with.
+///
+/// Critically damped, so the bar never overshoots the value it reports — a bar
+/// that passed 100% and came back would be claiming work that had not happened.
+/// The tolerance is coarser than the default because the value is measured in
+/// pixels: a hundredth of a pixel is not worth a frame.
+const PROGRESS_SPRING: crate::motion::Spring =
+    crate::motion::Spring::new(std::time::Duration::from_millis(200)).with_epsilon(0.01);
+
+/// The state a [`Progress`] keeps between frames.
+#[derive(Debug, Clone, Copy)]
+struct ProgressState {
+    spring: crate::motion::SpringState,
+    /// The frame the bar was last advanced to.
+    last: Option<iced::time::Instant>,
+    /// Whether the bar has ever been laid out, so the first frame places it
+    /// rather than easing in from zero.
+    primed: bool,
+}
+
+impl Default for ProgressState {
+    fn default() -> Self {
+        Self {
+            spring: crate::motion::SpringState::new(0.0),
+            last: None,
+            primed: false,
+        }
+    }
+}
+
+impl<Message, Renderer> iced::advanced::Widget<Message, Theme, Renderer> for Progress
+where
+    Renderer: iced::advanced::Renderer,
+{
+    fn size(&self) -> iced::Size<Length> {
+        iced::Size::new(Length::Fill, Length::Fixed(BAR_HEIGHT))
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut iced::advanced::widget::tree::Tree,
+        _renderer: &Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        iced::advanced::layout::atomic(limits, Length::Fill, Length::Fixed(BAR_HEIGHT))
+    }
+
+    fn tag(&self) -> iced::advanced::widget::tree::Tag {
+        iced::advanced::widget::tree::Tag::of::<ProgressState>()
+    }
+
+    fn state(&self) -> iced::advanced::widget::tree::State {
+        iced::advanced::widget::tree::State::new(ProgressState::default())
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut iced::advanced::widget::tree::Tree,
+        event: &iced::Event,
+        _layout: iced::advanced::layout::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        _renderer: &Renderer,
+        _clipboard: &mut dyn iced::advanced::Clipboard,
+        shell: &mut iced::advanced::Shell<'_, Message>,
+        _viewport: &iced::Rectangle,
+    ) {
+        if let iced::Event::Window(iced::window::Event::RedrawRequested(now)) = event {
+            let state = tree.state.downcast_mut::<ProgressState>();
+
+            // The first frame places the bar at its value instead of sliding to
+            // it from empty, which would read as the work having just started.
+            // A reduced-motion application is placed on every frame, so the bar
+            // always reports the value it was given.
+            if !state.primed || crate::motion::reduce_motion() {
+                state.spring.set(self.value);
+                state.primed = true;
+                return;
+            }
+
+            let elapsed = state
+                .last
+                .map_or(std::time::Duration::ZERO, |last| now.duration_since(last));
+            state.last = Some(*now);
+
+            let spring = PROGRESS_SPRING;
+
+            state.spring.step(self.value, spring, elapsed);
+
+            if !state.spring.is_settled(self.value, spring) {
+                shell.request_redraw();
+            }
+        }
+    }
+
+    fn draw(
+        &self,
+        tree: &iced::advanced::widget::tree::Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::layout::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        viewport: &iced::Rectangle,
+    ) {
+        let bounds = layout.bounds();
+
+        if !bounds.intersects(viewport) {
+            return;
+        }
+
+        let state = tree.state.downcast_ref::<ProgressState>();
+        let colors = theme.colors();
+        let radius: iced::border::Radius = f32::from(theme.radius().full.min(8)).into();
+
+        renderer.fill_quad(
+            iced::advanced::renderer::Quad {
+                bounds,
                 border: iced::Border {
                     color: Color::TRANSPARENT,
                     width: 0.0,
-                    radius: f32::from(theme.radius().full.min(8)).into(),
+                    radius,
                 },
-            }
-        }) as iced_progress_bar::StyleFn<'a, Theme>)
-        .into()
+                shadow: iced::Shadow::default(),
+                snap: true,
+            },
+            colors.secondary,
+        );
+
+        // A fill of zero width is skipped rather than drawn, so a bar at rest
+        // at the bottom of its range leaves no sliver of color.
+        let filled = state.spring.value().clamp(0.0, 1.0);
+        if filled > 0.0 {
+            renderer.fill_quad(
+                iced::advanced::renderer::Quad {
+                    bounds: iced::Rectangle {
+                        width: bounds.width * filled,
+                        ..bounds
+                    },
+                    border: iced::Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius,
+                    },
+                    shadow: iced::Shadow::default(),
+                    snap: true,
+                },
+                match self.tone {
+                    Tone::Neutral => colors.primary,
+                    other => other.accent(theme),
+                },
+            );
+        }
+    }
+}
+
+impl<'a, Message, Renderer> From<Progress> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced::advanced::Renderer + 'a,
+{
+    fn from(progress: Progress) -> Self {
+        Element::new(progress)
+    }
 }
 
 /// Builds an alert: a full-width message with a tinted background.

@@ -4,11 +4,19 @@
 //! not centre itself: it occupies the full height (or width) of the window and
 //! leaves the page visible beside it.
 
+use crate::motion::DURATION_SLOW;
 use crate::theme::{Size, Theme};
-use crate::widgets::overlay::{floating_shadow, scrim};
+use crate::widgets::overlay::{floating_shadow, scrim, Enter, EnterFrom};
 use crate::widgets::{button as kit_button, Button};
 use iced::widget::{column, container, row, text, MouseArea, Space};
 use iced::{Alignment, Element, Length, Padding};
+
+/// The furthest a drawer slides as it arrives, in logical pixels.
+///
+/// A drawer wider than this still travels this far: the motion is meant to read
+/// as the panel entering, and a full-width slide would take longer to complete
+/// than the transition does, so it would appear to stop short and then snap.
+const DRAWER_TRAVEL: f32 = 96.0;
 
 /// Which edge a drawer slides in from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -63,6 +71,7 @@ pub struct Drawer<'a, Message> {
     size: DrawerSize,
     on_dismiss: Option<Message>,
     footer: Option<Element<'a, Message, Theme>>,
+    presence: Option<crate::motion::Presence>,
 }
 
 impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
@@ -75,6 +84,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             size: DrawerSize::default(),
             on_dismiss: None,
             footer: None,
+            presence: None,
         }
     }
 
@@ -96,6 +106,19 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
         self
     }
 
+    /// Makes the drawer slide back out as it closes.
+    ///
+    /// Without this the drawer slides in but is removed the moment it is closed,
+    /// because by then the application has stopped building it. Pass a
+    /// [`Presence`](crate::motion::Presence) the application owns and keeps
+    /// supplying the drawer while it reports
+    /// [`should_render`](crate::motion::Presence::should_render); the exit is
+    /// drawn from that.
+    pub fn presence(mut self, presence: &crate::motion::Presence) -> Self {
+        self.presence = Some(presence.clone());
+        self
+    }
+
     /// Sets the footer, usually a row of buttons.
     pub fn footer(mut self, footer: impl Into<Element<'a, Message, Theme>>) -> Self {
         self.footer = Some(footer.into());
@@ -111,6 +134,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             size,
             on_dismiss,
             footer,
+            presence,
         } = self;
 
         let title_style = Size::Lg.text();
@@ -173,7 +197,29 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             None => scrim(),
         };
 
-        iced::widget::stack![backdrop, positioned].into()
+        // The panel slides in from the edge it is pinned to; the backdrop is
+        // part of the same surface, so it arrives with it rather than appearing
+        // under a panel that is still on its way.
+        let from = match side {
+            DrawerSide::Left => EnterFrom::Left,
+            DrawerSide::Right => EnterFrom::Right,
+            // A drawer along the bottom rises into place; the top edge is not
+            // offered, so no direction travels downwards.
+            DrawerSide::Bottom => EnterFrom::Below,
+        };
+
+        let surface = Enter::new(positioned, from)
+            .distance(extent.min(DRAWER_TRAVEL))
+            .duration(DURATION_SLOW);
+
+        // With a presence the surface also slides back out, since the presence
+        // knows how far through its exit it is.
+        let surface = match &presence {
+            Some(presence) => surface.presence(presence),
+            None => surface,
+        };
+
+        iced::widget::stack![backdrop, surface].into()
     }
 }
 

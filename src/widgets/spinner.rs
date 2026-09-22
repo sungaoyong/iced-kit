@@ -50,27 +50,8 @@ pub fn spinner_styled<'a, Message: 'a>(
 
 /// The animation clock of a [`SpinnerProgram`].
 ///
-/// It is a free-running phase in seconds rather than a frame counter, so the
-/// spinner animates at the same speed regardless of how often iced redraws.
-#[derive(Debug, Default)]
-struct SpinnerState {
-    phase: f32,
-    last: Option<iced::time::Instant>,
-}
-
-impl SpinnerState {
-    /// Advances the phase to the given instant.
-    fn advance(&mut self, now: iced::time::Instant) {
-        if let Some(last) = self.last {
-            let delta = now.duration_since(last).as_secs_f32();
-            // A long stall (a window dragged, a debugger paused) would otherwise
-            // jump the spinner forward by seconds at once.
-            self.phase = (self.phase + delta.min(0.1)) % 10_000.0;
-        }
-
-        self.last = Some(now);
-    }
-}
+/// The phase is read in seconds, which is what turns it into a rotation.
+type SpinnerState = crate::motion::Clock;
 
 /// Draws an indeterminate spinner.
 struct SpinnerProgram {
@@ -111,7 +92,7 @@ where
     ) -> Vec<Geometry<Renderer>> {
         let mut frame = Frame::new(renderer, bounds.size());
         let color = theme.spinner_color();
-        let phase = state.phase;
+        let phase = state.phase();
 
         let center = frame.center();
         let radius = (frame.width().min(frame.height()) / 2.0 - 2.0).max(1.0);
@@ -390,6 +371,8 @@ mod tests {
         }
     }
 
+    /// The first redraw only records a frame time; the phase advances from the
+    /// second one onwards, which is what makes the arc turn.
     #[test]
     fn the_spinner_program_advances_its_clock_on_redraw() {
         let program = super::SpinnerProgram {
@@ -398,7 +381,7 @@ mod tests {
         let mut state = super::SpinnerState::default();
         let bounds = iced::Rectangle::new(iced::Point::ORIGIN, iced::Size::new(24.0, 24.0));
 
-        let event = iced::Event::Window(iced::window::Event::RedrawRequested(
+        let first = iced::Event::Window(iced::window::Event::RedrawRequested(
             std::time::Instant::now(),
         ));
 
@@ -406,7 +389,7 @@ mod tests {
             Program::<(), Theme, iced::Renderer>::update(
                 &program,
                 &mut state,
-                &event,
+                &first,
                 bounds,
                 iced::mouse::Cursor::Unavailable,
             );
@@ -415,7 +398,25 @@ mod tests {
             action.is_some(),
             "a redraw must be requested so it animates"
         );
-        assert!(state.last.is_some(), "the clock must record the frame time");
+        assert_eq!(state.phase(), 0.0, "the first frame only starts the clock");
+
+        let later = iced::Event::Window(iced::window::Event::RedrawRequested(
+            std::time::Instant::now() + std::time::Duration::from_millis(16),
+        ));
+
+        let _: Option<iced::widget::canvas::Action<()>> =
+            Program::<(), Theme, iced::Renderer>::update(
+                &program,
+                &mut state,
+                &later,
+                bounds,
+                iced::mouse::Cursor::Unavailable,
+            );
+
+        assert!(
+            state.phase() > 0.0,
+            "a later frame must advance the phase, so the arc turns"
+        );
     }
 
     #[test]
