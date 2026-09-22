@@ -736,7 +736,7 @@ where
                 controls_mod::ToggleButton::new(
                     iced::advanced::widget::Id::from(format!("dock-zoom:{}", pane_id.as_u64())),
                     if zoomed {
-                        controls_mod::DockIcon::Minimize
+                        controls_mod::DockIcon::Restore
                     } else {
                         controls_mod::DockIcon::Maximize
                     },

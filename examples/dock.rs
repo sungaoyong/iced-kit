@@ -17,7 +17,7 @@
 //!   strip, so it can be clicked back open.
 //! * **Zoom a panel** with its toolbar button, or through the tab bar's ⋯ menu.
 //!   Zoom fills the window with that panel; restoring puts the layout back.
-//! * **Hide a panel** with the toolbar's eye button. A hidden panel keeps its tab
+//! * **Hide a panel** with the toolbar's ✕ button. A hidden panel keeps its tab
 //!   slot, so showing it again restores the order.
 //! * **Save and Load** the whole workspace with the buttons at the top. The status
 //!   line shows what the dock reported and where each dock sits.
@@ -166,7 +166,7 @@ impl Panel {
 /// Every method has a default that draws nothing, so only the ones this example
 /// wants are implemented — the rest say "the dock's default is fine".
 ///
-/// The visibility the eye button reflects comes from the *session*, not from a list
+/// The visibility the hide button reflects comes from the *session*, not from a list
 /// kept here: the session is what the dock reads when it decides which tabs to draw,
 /// so a second copy could disagree with it. That disagreement was the bug that made
 /// the button look inert.
@@ -189,10 +189,15 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
         )
     }
 
-    /// The eye button, whose icon reflects the session's own record of visibility.
+    /// The visibility button, whose icon reflects the session's own record of
+    /// visibility.
     fn toolbar(&self, panel: Panel) -> Vec<Element<'static, Message, Theme>> {
         let hidden = self.hidden.contains(&panel);
-        let icon = if hidden { IconName::EyeOff } else { IconName::Eye };
+        // Each state draws the action, not the status: a visible panel offers
+        // the close-styled cross that hides it, and a hidden one (whose toolbar
+        // the dock does not draw today, but the seam allows) the eye that brings
+        // it back.
+        let icon = if hidden { IconName::Eye } else { IconName::X };
         vec![
             icon_button::<Message>()
                 .icon(icon)
@@ -634,7 +639,7 @@ mod tests {
             assert!(panels.zoom_control(panel).is_some());
         }
 
-        // A hidden panel's toolbar says so, which is what the eye button reflects.
+        // A hidden panel's toolbar says so, which is what the hide button reflects.
         let hiding = Panels {
             hidden: vec![Panel::Terminal],
         };
@@ -689,8 +694,6 @@ mod tests {
             assert!(!describe(event).is_empty(), "{event:?} has no description");
         }
     }
-
-    /// Renders the example's own app, so its layout can be looked at.
 
     /// Renders the example's own app, so a change in its layout can be looked at.
     ///
@@ -749,10 +752,10 @@ mod tests {
             .expect("the screenshot is written");
     }
 
-    /// Clicking the eye in a panel's title bar hides that panel, through the
+    /// Clicking the ✕ in a panel's title bar hides that panel, through the
     /// application's own `update`.
     #[test]
-    fn the_eye_button_hides_its_panel() {
+    fn the_hide_button_hides_its_panel() {
         let (mut app, _) = App::new();
         assert!(app.session.is_panel_visible("editor"), "it starts visible");
 
@@ -765,8 +768,8 @@ mod tests {
         // simulator has not drawn yet.
         let _ = ui.snapshot(&Theme::light());
 
-        // The eye sits among the trailing controls of the editor's title bar, after
-        // the panel's own toolbar and before the dock's zoom and menu.
+        // The hide button sits among the trailing controls of the editor's title
+        // bar, after the panel's own toolbar and before the dock's zoom and menu.
         let pane = pane_of(&app, "editor").expect("the editor pane");
         let bounds = pane_bounds(&app, pane);
         let at = iced::Point::new(bounds.x + bounds.width - 60.0, bounds.y + 16.0);
@@ -778,7 +781,7 @@ mod tests {
 
         assert!(
             !app.session.is_panel_visible("editor"),
-            "the eye button should have hidden the editor"
+            "the hide button should have hidden the editor"
         );
     }
 

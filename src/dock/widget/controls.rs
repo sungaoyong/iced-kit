@@ -38,22 +38,22 @@ use crate::dock::widget::action::DockAction;
 /// hover and press change the color, not the asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockIcon {
-    /// Put a left dock away.
+    /// Put a left dock away, folding it toward the left edge.
     PanelLeft,
-    /// Bring a left dock back.
+    /// Bring a left dock back, unfolding it over the centre.
     PanelLeftOpen,
-    /// Put a right dock away.
+    /// Put a right dock away, folding it toward the right edge.
     PanelRight,
-    /// Bring a right dock back.
+    /// Bring a right dock back, unfolding it over the centre.
     PanelRightOpen,
-    /// Put a bottom dock away.
+    /// Put a bottom dock away, folding it toward the bottom edge.
     PanelBottom,
-    /// Bring a bottom dock back.
+    /// Bring a bottom dock back, unfolding it over the centre.
     PanelBottomOpen,
     /// Maximize the panel.
     Maximize,
     /// Restore the panel from maximized.
-    Minimize,
+    Restore,
     /// Open the panel menu.
     Ellipsis,
 }
@@ -61,21 +61,23 @@ pub enum DockIcon {
 impl DockIcon {
     /// The character this glyph draws, in the icon font.
     ///
-    /// The mappings match the window controls where they overlap: the panel
-    /// menu is the same `Ellipsis` a title bar's overflow uses, and the zoom
-    /// pair is Lucide's own maximize/minimize, the same shapes a window
-    /// control's square and arrow belong to.
+    /// The mappings keep the dock in the same visual language as the window
+    /// controls: the zoom pair draws exactly what a title bar's maximize draws
+    /// — a square, and the overlapped pair a window restores to — and a dock
+    /// toggle draws a chevron pointing the way the dock will move, which stays
+    /// legible at the twelve-to-fourteen pixels a tab bar affords where a
+    /// filled panel pictogram turns to ink.
     #[must_use]
     pub fn glyph(self) -> crate::icons::IconName {
         match self {
-            Self::PanelLeft => crate::icons::IconName::PanelLeftClose,
-            Self::PanelLeftOpen => crate::icons::IconName::PanelLeftOpen,
-            Self::PanelRight => crate::icons::IconName::PanelRightClose,
-            Self::PanelRightOpen => crate::icons::IconName::PanelRightOpen,
-            Self::PanelBottom => crate::icons::IconName::PanelBottomClose,
-            Self::PanelBottomOpen => crate::icons::IconName::PanelBottomOpen,
-            Self::Maximize => crate::icons::IconName::Maximize,
-            Self::Minimize => crate::icons::IconName::Minimize,
+            // A left dock and a closed right dock both move the same way, so
+            // they share a chevron; likewise a closed left dock and a right one.
+            Self::PanelLeft | Self::PanelRightOpen => crate::icons::IconName::ChevronLeft,
+            Self::PanelLeftOpen | Self::PanelRight => crate::icons::IconName::ChevronRight,
+            Self::PanelBottom => crate::icons::IconName::ChevronDown,
+            Self::PanelBottomOpen => crate::icons::IconName::ChevronUp,
+            Self::Maximize => crate::icons::IconName::Square,
+            Self::Restore => crate::icons::IconName::Copy,
             Self::Ellipsis => crate::icons::IconName::Ellipsis,
         }
     }
@@ -172,7 +174,10 @@ pub fn draw_control(
             shaping: adv_text::Shaping::Basic,
             wrapping: adv_text::Wrapping::None,
         },
-        button.bounds.position(),
+        // Centered alignment anchors the text *at* this point, the contract
+        // iced's own checkbox relies on: the point is the centre, not the
+        // top-left corner.
+        button.bounds.center(),
         color,
         Rectangle::INFINITE,
     );
@@ -817,7 +822,7 @@ mod tests {
             DockIcon::PanelBottom,
             DockIcon::PanelBottomOpen,
             DockIcon::Maximize,
-            DockIcon::Minimize,
+            DockIcon::Restore,
             DockIcon::Ellipsis,
         ] {
             let glyph = icons::glyph(icon.glyph());
@@ -829,45 +834,43 @@ mod tests {
     }
 
     #[test]
-    fn the_zoom_pair_matches_the_window_control_shapes() {
-        // The maximize/restore pair is Lucide's own maximize/minimize — the same
-        // family a title bar's window control belongs to — so a dock panel and
-        // the window around it read as one interface. Compared through the
-        // resolved glyph, because the icon enum implements neither `PartialEq`
-        // nor `Eq`.
+    fn the_zoom_pair_matches_the_window_controls() {
+        // The zoom button draws exactly what the matching window control draws,
+        // so a maximized panel and the window around it read as one interface:
+        // a maximize square straight from the title bar's own mapping, and the
+        // overlapped pair a window restores to. Compared through the resolved
+        // glyph, because the icon enum implements neither `PartialEq` nor `Eq`.
         assert_eq!(
             icons::glyph(DockIcon::Maximize.glyph()),
-            icons::glyph(IconName::Maximize)
+            icons::glyph(crate::widgets::title_bar::WindowControl::Maximize.icon())
         );
         assert_eq!(
-            icons::glyph(DockIcon::Minimize.glyph()),
-            icons::glyph(IconName::Minimize)
+            icons::glyph(DockIcon::Restore.glyph()),
+            icons::glyph(IconName::Copy)
         );
     }
 
     #[test]
-    fn every_toggle_placement_has_a_glyph_in_both_states() {
-        for placement in DockPlacement::DOCKS {
-            for open in [true, false] {
-                assert!(
-                    dock_toggle_icon(placement, open).is_some(),
-                    "{placement:?} open={open} has no glyph"
-                );
-            }
-        }
-        assert!(dock_toggle_icon(DockPlacement::Center, true).is_none());
-    }
-
-    #[test]
-    fn toggle_glyphs_are_distinct_per_state() {
-        for placement in DockPlacement::DOCKS {
-            let open = dock_toggle_icon(placement, true).expect("open glyph");
-            let closed = dock_toggle_icon(placement, false).expect("closed glyph");
+    fn a_toggle_points_the_way_the_dock_moves() {
+        // An open dock folds toward its own edge; a closed one unfolds back
+        // over the centre. The chevron says which, the way a window's own
+        // collapse affordances do.
+        use DockIcon as I;
+        let expected = [
+            (DockPlacement::Left, I::PanelLeft, I::PanelLeftOpen),
+            (DockPlacement::Right, I::PanelRight, I::PanelRightOpen),
+            (DockPlacement::Bottom, I::PanelBottom, I::PanelBottomOpen),
+        ];
+        for (placement, open, closed) in expected {
+            assert_eq!(dock_toggle_icon(placement, true), Some(open));
+            assert_eq!(dock_toggle_icon(placement, false), Some(closed));
             assert_ne!(
                 icons::glyph(open.glyph()),
                 icons::glyph(closed.glyph()),
                 "{placement:?} must draw different glyphs open and closed"
             );
         }
+        // The centre is not a dock, so it draws no toggle.
+        assert!(dock_toggle_icon(DockPlacement::Center, true).is_none());
     }
 }
