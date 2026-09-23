@@ -194,6 +194,7 @@ pub struct Modal<'a, Message> {
     actions: Vec<Action<Message>>,
     dismissible: bool,
     close_button: bool,
+    draggable: bool,
 }
 
 impl<'a, Message: Clone + 'a> Modal<'a, Message> {
@@ -216,6 +217,7 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
             actions: Vec::new(),
             dismissible: true,
             close_button: true,
+            draggable: false,
         }
     }
 
@@ -287,6 +289,17 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
         self
     }
 
+    /// Whether the dialog can be carried around by its surface.
+    ///
+    /// A grabbed press on the card — the title, or any stretch of it a button
+    /// has not claimed — picks the dialog up, and it keeps where it was put
+    /// until it is closed; opened again, it starts from the centre. Off by
+    /// default, so a plain modal stays put.
+    pub fn draggable(mut self, draggable: bool) -> Self {
+        self.draggable = draggable;
+        self
+    }
+
     /// Builds the full-screen layer: backdrop plus centred dialog.
     pub fn into_element(self) -> Element<'a, Message, Theme> {
         let Self {
@@ -298,6 +311,7 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
             actions,
             dismissible,
             close_button,
+            draggable,
         } = self;
 
         let close = (dismissible && close_button).then(|| dialog_close(on_dismiss.clone()));
@@ -310,10 +324,14 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
             DIALOG_PADDING,
         );
 
-        modal_layer(
-            surface(content, width, close),
-            dismissible.then_some(on_dismiss),
-        )
+        let surface = surface(content, width, close);
+        let surface = if draggable {
+            Element::new(super::drag::DragSurface::new(surface))
+        } else {
+            surface
+        };
+
+        modal_layer(surface, dismissible.then_some(on_dismiss))
     }
 }
 
@@ -539,6 +557,7 @@ pub struct Dialog<'a, Message> {
     footer: Option<Element<'a, Message, Theme>>,
     width: DialogWidth,
     close: Option<Message>,
+    draggable: bool,
 }
 
 impl<'a, Message: Clone + 'a> Dialog<'a, Message> {
@@ -551,6 +570,7 @@ impl<'a, Message: Clone + 'a> Dialog<'a, Message> {
             footer: None,
             width: DialogWidth::default(),
             close: None,
+            draggable: false,
         }
     }
 
@@ -578,6 +598,16 @@ impl<'a, Message: Clone + 'a> Dialog<'a, Message> {
         self
     }
 
+    /// Whether the dialog can be carried around by its surface.
+    ///
+    /// The same grab a [`Modal`] gets: a press an interactive child has not
+    /// claimed picks the dialog up, and it keeps where it was put for as long
+    /// as it stays open. Off by default.
+    pub fn draggable(mut self, draggable: bool) -> Self {
+        self.draggable = draggable;
+        self
+    }
+
     /// Converts the dialog into an [`Element`].
     pub fn into_element(self) -> Element<'a, Message, Theme> {
         let Self {
@@ -587,13 +617,20 @@ impl<'a, Message: Clone + 'a> Dialog<'a, Message> {
             footer,
             width,
             close,
+            draggable,
         } = self;
 
         let close = close.map(dialog_close);
 
         let content = dialog_body(Some(title), description, body, footer, DIALOG_PADDING);
 
-        surface(content, width, close)
+        let surface = surface(content, width, close);
+
+        if draggable {
+            Element::new(super::drag::DragSurface::new(surface))
+        } else {
+            surface
+        }
     }
 }
 

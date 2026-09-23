@@ -579,7 +579,10 @@ impl App {
                 )
                 .description("Every file in it goes with it.")
                 .cancel("Cancel", Message::CloseModal)
-                .destructive("Delete", Message::ConfirmModal),
+                .destructive("Delete", Message::ConfirmModal)
+                // Grabbable by its surface, so the modal can be moved aside to
+                // read what it is covering.
+                .draggable(true),
             );
         }
 

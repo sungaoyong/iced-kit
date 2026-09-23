@@ -53,6 +53,7 @@
 //! reads as low rather than in the corner.
 
 pub mod alert_dialog;
+mod drag;
 pub mod content;
 pub mod description;
 pub mod footer;

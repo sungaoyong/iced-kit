@@ -108,6 +108,7 @@ pub struct AlertDialog<'a, Message> {
     on_dismiss: Option<Message>,
     dismissible: bool,
     close_button: bool,
+    draggable: bool,
     body: Vec<Element<'a, Message, Theme>>,
     footer: Option<Element<'a, Message, Theme>>,
 }
@@ -137,6 +138,7 @@ impl<'a, Message: Clone + 'a> AlertDialog<'a, Message> {
             on_dismiss: None,
             dismissible: true,
             close_button: false,
+            draggable: false,
             body: Vec::new(),
             footer: None,
         }
@@ -281,6 +283,7 @@ impl<'a, Message: Clone + 'a> AlertDialog<'a, Message> {
             on_dismiss,
             dismissible,
             close_button,
+            draggable,
             body,
             footer,
         } = self;
@@ -347,7 +350,23 @@ impl<'a, Message: Clone + 'a> AlertDialog<'a, Message> {
             }
         };
 
+        let card = if draggable {
+            Element::new(super::drag::DragSurface::new(card))
+        } else {
+            card
+        };
+
         alert_layer(card, dismissible.then_some(on_dismiss).flatten())
+    }
+
+    /// Whether the alert can be carried around by its surface.
+    ///
+    /// The same grab a [`Modal`](super::Modal) gets: a press an interactive
+    /// child has not claimed picks the alert up, and it keeps where it was put
+    /// until it is closed. Off by default, so an interrupting alert stays put.
+    pub fn draggable(mut self, draggable: bool) -> Self {
+        self.draggable = draggable;
+        self
     }
 }
 
