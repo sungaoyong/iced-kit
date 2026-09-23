@@ -22,12 +22,12 @@ use iced::advanced::widget::tree::{State, Tag, Tree};
 use iced::advanced::widget::{Operation, Widget};
 use iced::advanced::{Clipboard, Shell};
 use iced::mouse::{self, Cursor};
-use iced::widget::overlay::menu;
 use iced::{Element, Event, Length, Rectangle, Size, Vector};
 
 use crate::dock::model::DockPlacement;
 use crate::dock::style::Catalog;
 use crate::dock::widget::action::DockAction;
+use crate::widgets::overlay::menu;
 
 /// A glyph the dock can draw in one of its controls.
 ///
@@ -201,26 +201,36 @@ pub fn controls_width(count: usize, style: &crate::dock::style::ControlStyle) ->
 /// The menu's own data lives here rather than in the widget because the overlay
 /// borrows it for as long as the menu is open, and the widget is rebuilt every
 /// frame. Anything the overlay reads has to outlive the frame that opened it.
+///
+/// The open state is a shared [`menu::OpenFlag`] rather than a plain bool: the
+/// menu closes itself — a choice made, a press outside, `Escape` — by writing
+/// the flag from inside the overlay, where the widget's state is borrowed and
+/// no message could reach this widget anyway.
 pub struct PanelMenuState<Message, Theme>
 where
     Theme: menu::Catalog,
 {
-    open: bool,
+    open: menu::OpenFlag,
     menu: menu::State,
-    /// Index into the labels the pointer is over.
-    hovered: Option<usize>,
-    /// Bounds of the button, so a click outside can close the menu.
+    /// Bounds of the button, so the overlay can anchor to it.
     button_bounds: Rectangle,
-    /// The labels the menu was last built with.
-    labels: Vec<String>,
-    /// What each label does, in the same order as `labels`.
+    /// The entries the menu was last built with.
+    items: Vec<menu::Item<Message>>,
+    /// What each command entry does, keyed by its path in `items`.
     ///
     /// Kept as sources rather than as ready-made messages, because building a
     /// message from a dock action *is* dispatching it: a message built while
     /// laying the menu out would fire the action on the frame it was measured.
-    sources: Vec<MenuSource<Message>>,
-    /// The menu's style class, owned here for the same reason as the labels.
+    sources: Rc<Vec<(Vec<usize>, MenuSource<Message>)>>,
+    /// The menu's style class, owned here for the same reason as the items.
     class: <Theme as menu::Catalog>::Class<'static>,
+    /// The text sizes the menu measures its rows at.
+    ///
+    /// Recorded by `draw`, which is the one pass with a theme to resolve the
+    /// class against: an overlay lays out without one, and the width a label
+    /// is measured at has to be the width it is drawn at. It is a `Cell`
+    /// because `draw` borrows the tree immutably.
+    metrics: std::cell::Cell<menu::Metrics>,
 }
 
 impl<Message, Theme> Default for PanelMenuState<Message, Theme>
@@ -229,13 +239,13 @@ where
 {
     fn default() -> Self {
         Self {
-            open: false,
-            menu: menu::State::default(),
-            hovered: None,
+            open: menu::OpenFlag::closed(),
+            menu: menu::State::new(),
             button_bounds: Rectangle::default(),
-            labels: Vec::new(),
-            sources: Vec::new(),
+            items: Vec::new(),
+            sources: Rc::new(Vec::new()),
             class: <Theme as menu::Catalog>::default(),
+            metrics: std::cell::Cell::new(menu::Metrics::default()),
         }
     }
 }
@@ -256,6 +266,12 @@ pub struct MenuEntry<Message> {
     pub label: String,
     /// The message selecting it produces.
     pub message: Message,
+    /// The leading icon glyph, if the entry carries one.
+    icon: Option<crate::icons::IconName>,
+    /// The trailing keyboard hint, if the entry names one.
+    shortcut: Option<String>,
+    /// Whether the entry draws a check, if it is a toggle.
+    checked: Option<bool>,
 }
 
 impl<Message> MenuEntry<Message> {
@@ -264,7 +280,31 @@ impl<Message> MenuEntry<Message> {
         Self {
             label: label.into(),
             message,
+            icon: None,
+            shortcut: None,
+            checked: None,
         }
+    }
+
+    /// Adds a leading icon glyph to the entry.
+    #[must_use]
+    pub fn icon(mut self, icon: crate::icons::IconName) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Adds a trailing keyboard hint, e.g. `"Ctrl+C"`.
+    #[must_use]
+    pub fn shortcut(mut self, shortcut: impl Into<String>) -> Self {
+        self.shortcut = Some(shortcut.into());
+        self
+    }
+
+    /// Marks the entry with (or without) a check, for a toggle.
+    #[must_use]
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked = Some(checked);
+        self
     }
 }
 
@@ -375,32 +415,57 @@ where
         // A panel never has to implement either, and one that forgets to pass its
         // list back cannot drop them.
         let pane = self.pane;
-        let mut labels: Vec<String> = self
+        // The panel's own entries come first, then the dock's — zoom, then
+        // close. A panel never has to implement either, and one that forgets
+        // to pass its list back cannot drop them.
+        //
+        // Every entry is a command without a message of its own; what a
+        // choice does is resolved at choice time through `sources`, because
+        // building a dock action's message early would be dispatching it.
+        let mut items: Vec<menu::Item<Message>> = self
             .entries
             .iter()
-            .map(|entry| entry.label.clone())
+            .map(|entry| {
+                let mut item = menu::Item::command(entry.label.clone());
+                if let Some(icon) = entry.icon {
+                    item = item.icon(icon);
+                }
+                if let Some(shortcut) = &entry.shortcut {
+                    item = item.shortcut(shortcut.clone());
+                }
+                if let Some(checked) = entry.checked {
+                    item = item.checked(checked);
+                }
+                item
+            })
             .collect();
-        let mut sources: Vec<MenuSource<Message>> = self
+        let mut sources: Vec<(Vec<usize>, MenuSource<Message>)> = self
             .entries
             .iter()
-            .map(|entry| MenuSource::Panel(entry.message.clone()))
+            .enumerate()
+            .map(|(ix, entry)| (vec![ix], MenuSource::Panel(entry.message.clone())))
             .collect();
         if self.can_zoom {
-            labels.push(if self.zoomed { "Restore" } else { "Maximize" }.to_owned());
-            sources.push(MenuSource::Dock(DockAction::ToggleZoom { pane }));
+            let ix = items.len();
+            items.push(menu::Item::command(if self.zoomed { "Restore" } else { "Maximize" }));
+            sources.push((vec![ix], MenuSource::Dock(DockAction::ToggleZoom { pane })));
         }
         if self.can_close {
             if let Some(panel) = self.panel {
-                labels.push("Close".to_owned());
-                sources.push(MenuSource::Dock(DockAction::Tab(
-                    crate::dock::widget::action::TabAction::Close { panel },
-                )));
+                let ix = items.len();
+                items.push(menu::Item::command("Close"));
+                sources.push((
+                    vec![ix],
+                    MenuSource::Dock(DockAction::Tab(
+                        crate::dock::widget::action::TabAction::Close { panel },
+                    )),
+                ));
             }
         }
 
         let state = tree.state.downcast_mut::<PanelMenuState<Message, Theme>>();
-        state.labels = labels;
-        state.sources = sources;
+        state.items = items;
+        state.sources = Rc::new(sources);
         // The hit square, recorded here because the node this returns fills the whole
         // bar: the button is a square centred in it, and `draw` and `update` both need
         // to agree on where that square is.
@@ -426,13 +491,28 @@ where
     ) {
         let state = tree.state.downcast_ref::<PanelMenuState<Message, Theme>>();
         let style = Catalog::style(theme, &self.class);
+        // The rows are measured at the sizes they are drawn at: resolving the
+        // class is only possible with a theme, and this is the pass that has
+        // one.
+        // The rows are measured at the sizes they are drawn at: resolving the
+        // class is only possible with a theme, and this is the pass that has
+        // one.
+        state
+            .metrics
+            .set(menu::Metrics::from(&<Theme as menu::Catalog>::style(theme, &state.class)));
         let mut bounds = state.button_bounds;
         let origin = layout.position();
         bounds.x += origin.x;
         bounds.y += origin.y;
         let button = ControlButton::new(bounds, self.icon);
         let hovered = cursor.is_over(bounds);
-        draw_control(renderer, button, &style.control, hovered || state.open, false);
+        draw_control(
+            renderer,
+            button,
+            &style.control,
+            hovered || state.open.is_open(),
+            false,
+        );
     }
 
     fn update(
@@ -457,20 +537,30 @@ where
             | Event::Touch(iced::touch::Event::FingerPressed { .. }) => {
                 if let Some(point) = cursor.position() {
                     if bounds.contains(point) {
-                        state.open = !state.open;
+                        // While the menu is open, the overlay swallows every
+                        // press — including one on this button — so this
+                        // branch only ever runs to open the menu. Closing
+                        // happens inside the menu: a press anywhere else is
+                        // an outside press to it, and the overlay folds.
+                        state.open.open();
+                        state.menu.reset();
                         shell.capture_event();
                         shell.request_redraw();
                     }
                 }
             }
             Event::Keyboard(iced::keyboard::Event::KeyPressed { key, .. })
-                if state.open
+                if state.open.is_open()
                     && matches!(
                         key,
                         iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape)
                     ) =>
             {
-                state.open = false;
+                // The open menu swallows `Escape` itself, folding one level
+                // at a time; this branch is the fallback for a menu with no
+                // entries, where no overlay is built to do it.
+                state.open.close();
+                state.menu.reset();
                 shell.capture_event();
                 shell.request_redraw();
             }
@@ -517,53 +607,55 @@ where
         _translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let state = tree.state.downcast_mut::<PanelMenuState<Message, Theme>>();
-        if !state.open || state.labels.is_empty() {
+        if !state.open.is_open() {
+            // Reset a closed menu so a reopening one starts where a fresh
+            // menu would: no stale selection, no half-open submenu.
+            state.menu.reset();
+            return None;
+        }
+        if state.items.is_empty() {
             return None;
         }
 
         let origin = layout.position();
-        let anchor = iced::Point::new(
-            origin.x + state.button_bounds.x,
-            origin.y + state.button_bounds.y + state.button_bounds.height,
-        );
+        let trigger = Rectangle {
+            x: origin.x + state.button_bounds.x,
+            y: origin.y + state.button_bounds.y,
+            width: state.button_bounds.width,
+            height: state.button_bounds.height,
+        };
 
         // The entries live in the state, not here: the overlay borrows them for as
         // long as the menu is open, and this widget is rebuilt every frame.
         let on_event = Rc::clone(&self.on_event);
-        // Cloned out rather than moved: the overlay outlives this call, and the
-        // state must keep the entries for the frames that follow.
-        let sources = Rc::new(state.sources.clone());
-        let dispatch = Rc::new(move |source: &MenuSource<Message>| match source {
-            MenuSource::Panel(message) => message.clone(),
-            // Built only now, when the entry is chosen: building it while the menu
-            // was laid out would have fired the action then.
-            MenuSource::Dock(action) => (on_event)(action.clone()),
+        let sources = Rc::clone(&state.sources);
+        // Resolved only when a command entry is chosen: building a dock action's
+        // message while the menu is laid out would fire the action then.
+        let on_select = Rc::new(move |path: &[usize]| {
+            let (_, source) = sources
+                .iter()
+                .find(|(entry_path, _)| entry_path == path)
+                .or_else(|| sources.last())
+                .expect("the menu is only built with at least one entry");
+            match source {
+                MenuSource::Panel(message) => message.clone(),
+                MenuSource::Dock(action) => (on_event)(action.clone()),
+            }
         });
-        let labels = &state.labels;
+
+        // The menu is as wide as its entries measure: a dock menu's labels
+        // ("Copy Files path") are longer than the button that opens it, so a
+        // width tied to the button would wrap every one of them.
         let menu = menu::Menu::new(
             &mut state.menu,
-            labels,
-            &mut state.hovered,
-            move |selected: String| {
-                // The option is a label, so find which slot it came from: two
-                // entries may share a label, and what the entry does is what matters.
-                let index = labels.iter().position(|label| label == &selected).unwrap_or(0);
-                // An index the menu cannot have produced would mean the labels and
-                // the sources disagree; falling back to the last entry keeps a
-                // malformed menu from panicking inside an overlay.
-                let source = sources
-                    .get(index)
-                    .or_else(|| sources.last())
-                    .expect("the menu is only built with at least one entry");
-                (dispatch)(source)
-            },
-            None,
+            &state.items,
+            Some(on_select),
+            state.open.clone(),
             &state.class,
         )
-        .width(self.size.max(140.0))
-        .padding(4);
+        .metrics(state.metrics.get());
 
-        Some(menu.overlay(anchor, *viewport, 0.0, iced::Length::Shrink))
+        Some(menu.overlay(trigger, *viewport))
     }
 }
 

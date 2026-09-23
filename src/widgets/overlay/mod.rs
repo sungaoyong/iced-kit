@@ -28,6 +28,7 @@ pub mod dialog;
 pub mod drawer;
 pub mod dropdown;
 mod enter;
+pub mod menu;
 pub mod popover;
 pub mod toast;
 pub mod tooltip;
@@ -44,6 +45,7 @@ pub use dialog::{
 pub use drawer::{drawer_actions, drawer_header, Drawer, DrawerSide, DrawerSize};
 pub use dropdown::{Dropdown, DropdownAlign, MenuItem};
 pub use enter::EnterFrom;
+pub use menu::OpenFlag;
 pub use popover::{ContextMenu, Popover, PopoverPlacement};
 pub use toast::{Toast, ToastKind, ToastPlacement, Toasts};
 pub use tooltip::{tooltip, tooltip_at, tooltip_bubble, TooltipPosition};

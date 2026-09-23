@@ -511,8 +511,8 @@ impl iced_kit::dock::PanelPresentation<u32, Message, Theme> for Panels {
         vec![iced::widget::text("★").into()]
     }
 
-    fn menu(&self, _panel: u32) -> Vec<(String, Message)> {
-        vec![("Reload".to_owned(), 7u32)]
+    fn menu(&self, _panel: u32) -> Vec<iced_kit::widgets::dock::MenuEntry<Message>> {
+        vec![iced_kit::widgets::dock::MenuEntry::new("Reload", 7u32)]
     }
 
     fn zoom_control(&self, _panel: u32) -> Option<iced_kit::dock::PanelControl> {

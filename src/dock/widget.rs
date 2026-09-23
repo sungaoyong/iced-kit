@@ -17,5 +17,6 @@ mod title_drag;
 pub use crate::dock::style::PaneContent;
 pub use action::{DockAction, TabAction};
 pub use dock::{dock, Dock, DockBuilder, TabBarScrollbarAttachment};
+pub use controls::MenuEntry;
 pub use event::DockEvent;
 pub use state::{dispatch_action, finish_drag, DockWidgetState};

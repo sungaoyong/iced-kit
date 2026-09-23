@@ -316,8 +316,17 @@ fn overflow_menu_selects_hidden_tab() {
     let session = overflow_session();
     let mut ui = narrow_view(&session);
 
+    // The press that opens the panel menu lands where the bar crowds the
+    // tabs, and the click that follows is meant for the hidden tab: a menu
+    // that is open swallows the press that dismisses it, so the test closes
+    // it on a neutral spot of the pane first — a press eaten by the menu must
+    // not also press whatever sits under it.
     ui.point_at(Point::new(168.0, 15.0));
     let _ = ui.simulate(iced_test::simulator::click());
+
+    ui.point_at(Point::new(90.0, 120.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
     let _ = ui.click("File 5");
     let messages: Vec<_> = ui.into_messages().collect();
 
@@ -346,4 +355,68 @@ fn overflow_menu_selects_hidden_tab() {
         .iter()
         .find_map(|(id, &node)| (node == active).then(|| id.clone()));
     assert_eq!(active_id.as_deref(), Some("file5"));
+}
+
+#[test]
+fn panel_menu_flips_inward_selects_and_closes() {
+    let session = overflow_session();
+    let mut ui = narrow_view(&session);
+
+    // The panel menu button sits at the right end of the bar, inside the
+    // window's last 22 logical pixels: a menu anchored left of it would leave
+    // the glass, so it must open inward for its rows to be reachable at all.
+    ui.point_at(Point::new(168.0, 15.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    // The menu's first row is the zoom entry, flipped to start near the
+    // window's left edge.
+    ui.point_at(Point::new(99.0, 45.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    // A choice folds the menu, so pressing the button opens it again and the
+    // same row answers a second time.
+    ui.point_at(Point::new(168.0, 15.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+    ui.point_at(Point::new(99.0, 45.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    let messages: Vec<_> = ui.into_messages().collect();
+    let zooms = messages
+        .iter()
+        .filter(|msg| matches!(msg, Message::Dock(DockEvent::ZoomChanged { .. })))
+        .count();
+    assert_eq!(
+        zooms, 2,
+        "choosing the zoom row twice must zoom and restore, got: {messages:?}"
+    );
+}
+
+#[test]
+fn panel_menu_closes_on_a_press_outside() {
+    let session = overflow_session();
+    let mut ui = narrow_view(&session);
+
+    ui.point_at(Point::new(168.0, 15.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    // A press on the pane content is swallowed by the open menu — it dismisses
+    // without pressing what sat under the point.
+    ui.point_at(Point::new(90.0, 120.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    // The menu is gone, so the button opens it again and the zoom row answers.
+    ui.point_at(Point::new(168.0, 15.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+    ui.point_at(Point::new(99.0, 45.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+
+    let messages: Vec<_> = ui.into_messages().collect();
+    let zooms = messages
+        .iter()
+        .filter(|msg| matches!(msg, Message::Dock(DockEvent::ZoomChanged { .. })))
+        .count();
+    assert_eq!(
+        zooms, 1,
+        "exactly one zoom must follow the dismissal and re-open, got: {messages:?}"
+    );
 }

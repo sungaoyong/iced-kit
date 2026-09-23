@@ -13,6 +13,7 @@ use iced::mouse::{self, Cursor};
 use iced::time::Duration;
 use iced::touch;
 use iced::widget::overlay::menu;
+use crate::widgets::overlay::menu as kit_menu;
 use iced::widget::text::{LineHeight, Shaping};
 use iced::widget::{button, container, svg, text as iced_text};
 use iced::{Border, Element, Event, Length, Rectangle, Size, Vector};
@@ -156,6 +157,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -285,7 +287,7 @@ where
 impl<K, Message, Theme, Renderer> TabDock<'_, K, Message, Theme, Renderer>
 where
     K: 'static,
-    Theme: Catalog + Clone + menu::Catalog + 'static,
+    Theme: Catalog + Clone + menu::Catalog + kit_menu::Catalog + 'static,
     Renderer: advanced::Renderer + advanced::svg::Renderer,
 {
     fn resolved_theme(&self) -> Option<Theme> {
@@ -357,6 +359,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -1056,6 +1059,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone

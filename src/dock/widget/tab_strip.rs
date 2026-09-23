@@ -22,6 +22,7 @@ use iced::keyboard;
 use iced::mouse::{self, Cursor};
 use iced::time::{Duration, Instant};
 use iced::widget::overlay::menu;
+use crate::widgets::overlay::menu as kit_menu;
 use iced::widget::svg::Handle;
 use iced::widget::text::{layout as text_layout, Format, LineHeight, Shaping};
 use iced::widget::{button, container, mouse_area, row, svg, text, Space};
@@ -105,7 +106,7 @@ struct TabStripState<Theme: menu::Catalog> {
 
 impl<Theme> TabStripState<Theme>
 where
-    Theme: menu::Catalog,
+    Theme: menu::Catalog + kit_menu::Catalog,
 {
     fn new(
         theme: Option<Theme>,
@@ -380,6 +381,7 @@ where
     Theme: Catalog
         + button::Catalog
         + container::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + text::Catalog
@@ -1373,6 +1375,7 @@ where
     Theme: Catalog
         + button::Catalog
         + container::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + text::Catalog
@@ -1772,6 +1775,7 @@ where
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                     if over_overflow_button {
+                        eprintln!("DEBUG overflow button press, cursor={cursor_pos:?}, button={overflow_button_bounds:?}");
                         let mut overflow_ui = state.overflow_ui.borrow_mut();
                         overflow_ui.open = !overflow_ui.open;
                         overflow_ui.pressed = true;
@@ -2210,6 +2214,7 @@ where
     Theme: Catalog
         + button::Catalog
         + container::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + text::Catalog

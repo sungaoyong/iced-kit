@@ -156,8 +156,24 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
         ]
     }
 
-    fn menu(&self, _panel: Panel) -> Vec<(String, Message)> {
-        vec![("Reload".to_owned(), Message::TogglePanelVisible(Panel::Files))]
+    fn menu(&self, panel: Panel) -> Vec<iced_kit::widgets::dock::MenuEntry<Message>> {
+        // Deliberately longer than the button that opens them and carrying a
+        // hint, which is the case a fixed-width menu wrapped.
+        vec![
+            iced_kit::widgets::dock::MenuEntry::new(
+                format!("Copy {} path", panel.title()),
+                Message::TogglePanelVisible(Panel::Files),
+            )
+            .shortcut("Ctrl+C"),
+            iced_kit::widgets::dock::MenuEntry::new(
+                format!("Close {} path", panel.title()),
+                Message::TogglePanelVisible(Panel::Files),
+            ),
+            iced_kit::widgets::dock::MenuEntry::new(
+                "Reload",
+                Message::TogglePanelVisible(Panel::Files),
+            ),
+        ]
     }
 
     fn zoom_control(&self, _panel: Panel) -> Option<PanelControl> {
@@ -649,5 +665,116 @@ fn hiding_every_panel_of_a_group_clears_its_body() {
     assert!(
         ui.find("BODY EDITOR").is_ok(),
         "the centre is unaffected"
+    );
+}
+
+/// The row the pointer is over is the row that lights up, driven through the
+/// whole dock.
+///
+/// A screenshot showed this going wrong: the pointer had travelled a whole
+/// menu's height before the highlight caught up, because the hover path fed
+/// the menu a point that had already been made relative to it, and the row
+/// lookup subtracted the menu's top again.
+///
+/// The menu's own tests build a level directly, so they miss the layers a
+/// real click passes through — the dock's bar, then the control, then the
+/// overlay — which is where the coordinates are translated. This drives the
+/// real thing and reads the highlight back out of the pixels.
+#[test]
+fn the_row_under_the_pointer_is_the_row_that_lights_up() {
+    let session = DockSession::from_area(workspace()).expect("valid");
+    let mut ui = Simulator::with_size(iced::Settings::default(), WINDOW, view(&session, &[]));
+
+    let button = {
+        draw_once(&mut ui);
+        let pane = pane_of(&session, "problems").expect("a pane");
+        let id = format!("dock-panel-menu:{}", pane.as_u64());
+        ui.find(iced::advanced::widget::Id::from(id)).expect("the menu button").bounds()
+    };
+    let trigger = button.center();
+
+    ui.point_at(trigger);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
+        iced::mouse::Button::Left,
+    ))]);
+    draw_once(&mut ui);
+
+    // A point on the third row, well inside the menu: the row band is 28 tall
+    // and the menu body starts 4 below the button.
+    let target_row = 2usize;
+    let pointer = Point::new(
+        trigger.x - 60.0,
+        button.y + button.height + 4.0 + 28.0 * target_row as f32 + 14.0,
+    );
+    ui.point_at(pointer);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::CursorMoved {
+        position: pointer,
+    })]);
+    draw_once(&mut ui);
+
+    let label = "target/menu_hover_probe";
+    let path = format!("{label}-wgpu.png");
+    let _ = std::fs::remove_file(&path);
+    ui.snapshot(&Theme::light())
+        .expect("the dock should render")
+        .matches_image(label)
+        .expect("the frame should be written");
+
+    let bytes = std::fs::read(&path).expect("the frame");
+    let decoder = png::Decoder::new(bytes.as_slice());
+    let mut reader = decoder.read_info().expect("a PNG");
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut pixels).expect("decode");
+    pixels.truncate(info.buffer_size());
+    let _ = std::fs::remove_file(&path);
+
+    let width = info.width as usize;
+    let height = info.height as usize;
+    let scale = (width as f32 / WINDOW.width).round();
+
+    // The accent wash a selected row is painted with: a light grey, off both
+    // the white surface and the dark text.
+    let is_highlight = |x: usize, y: usize| {
+        let i = (y * width + x) * 4;
+        let [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+        (240..=250).contains(&r) && (240..=250).contains(&g) && (240..=250).contains(&b)
+    };
+
+    // Sample a column inside the menu's body, clear of its 1px border and its
+    // rounded corners, and of the icon column's glyphs.
+    let column = ((trigger.x - 70.0) * scale) as usize;
+    let mut bands: Vec<(usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    for y in 0..height {
+        if is_highlight(column, y) {
+            start = start.or(Some(y));
+        } else if let Some(from) = start.take() {
+            bands.push((from, y - 1));
+        }
+    }
+    if let Some(from) = start {
+        bands.push((from, height - 1));
+    }
+
+    // The tallest band is the selected row; the others are whatever chrome
+    // happens to share the wash's tone.
+    let (top, bottom) = bands
+        .iter()
+        .copied()
+        .max_by_key(|(from, to)| to - from)
+        .expect("a highlighted row should be drawn");
+
+    let (top, bottom) = (top as f32 / scale, bottom as f32 / scale);
+    let row_top = button.y + button.height + 4.0 + 28.0 * target_row as f32;
+
+    assert!(
+        (top - row_top).abs() <= 2.0 && (bottom - (row_top + 28.0)).abs() <= 2.0,
+        "the highlight should cover row {target_row} ({row_top:.1}..{:.1}): it drew {top:.1}..{bottom:.1}",
+        row_top + 28.0
+    );
+    assert!(
+        pointer.y >= top && pointer.y <= bottom,
+        "the pointer at y={:.1} should sit inside the highlighted band {top:.1}..{bottom:.1}",
+        pointer.y
     );
 }

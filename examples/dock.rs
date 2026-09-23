@@ -34,8 +34,8 @@ use iced::{Alignment, Element, Length};
 use iced_kit::icons::IconName;
 use iced_kit::theme::Theme;
 use iced_kit::widgets::dock::{
-    self, DockAreaState, DockEvent, DockPlacement, DockSession, LayoutArea, PanelControl,
-    PanelDef, PanelStyle, PanelPresentation,
+    self, DockAreaState, DockEvent, DockPlacement, DockSession, LayoutArea, MenuEntry,
+    PanelControl, PanelDef, PanelStyle, PanelPresentation,
 };
 use iced_kit::widgets::{icon_button, muted_text};
 
@@ -208,10 +208,16 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
         ]
     }
 
-    fn menu(&self, panel: Panel) -> Vec<(String, Message)> {
+    fn menu(&self, panel: Panel) -> Vec<MenuEntry<Message>> {
         vec![
-            (format!("Copy {} path", panel.short()), Message::Noop),
-            (format!("Close {}", panel.short()), Message::Noop),
+            MenuEntry::new(format!("Copy {} path", panel.short()), Message::Noop)
+                .icon(IconName::Copy)
+                .shortcut("Ctrl+C"),
+            MenuEntry::new(format!("Pin {} path", panel.short()), Message::Noop)
+                .icon(IconName::Pin)
+                .checked(panel == Panel::Files),
+            MenuEntry::new(format!("Close {}", panel.short()), Message::Noop)
+                .icon(IconName::X),
         ]
     }
 

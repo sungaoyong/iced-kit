@@ -14,6 +14,7 @@ use iced::advanced::{Clipboard, Shell};
 use iced::mouse::{self, Cursor};
 use iced::time::Duration;
 use iced::widget::overlay::menu;
+use crate::widgets::overlay::menu as kit_menu;
 use iced::widget::text::{LineHeight, Shaping};
 use iced::widget::{self, button, container, svg, text as iced_text};
 use iced::{Background, Element, Event, Length, Rectangle, Size, Vector};
@@ -145,6 +146,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -751,12 +753,7 @@ where
         }
 
         if control.is_some_and(crate::dock::panel::PanelControl::menu_visible) {
-            let entries: Vec<controls_mod::MenuEntry<Message>> = self
-                .presentation
-                .menu(key)
-                .into_iter()
-                .map(|(label, message)| controls_mod::MenuEntry::new(label, message))
-                .collect();
+            let entries: Vec<controls_mod::MenuEntry<Message>> = self.presentation.menu(key);
             let h = Rc::clone(holder);
             let on_ev = Rc::clone(&self.on_event);
             let on_close = self.on_close_requested.as_ref().map(Rc::clone);
@@ -1068,6 +1065,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -1575,6 +1573,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -1601,6 +1600,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone
@@ -1845,6 +1845,7 @@ where
         + button::Catalog
         + container::Catalog
         + iced_text::Catalog
+        + kit_menu::Catalog
         + menu::Catalog
         + svg::Catalog
         + Clone

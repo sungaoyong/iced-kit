@@ -81,6 +81,7 @@ pub use crate::dock::{
 // `iced_kit::dock::model::Dock`. They are re-exported here under their own names so
 // an application describing an area depends on this module alone.
 pub use crate::dock::model::{DockPlacement, DockRegion, DockRegions};
+pub use crate::dock::widget::MenuEntry;
 pub use crate::dock::persist::{DockAreaState, DockSlot};
 
 /// Bridges the dock's style catalog onto this crate's [`Theme`].

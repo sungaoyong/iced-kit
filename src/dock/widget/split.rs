@@ -10,6 +10,7 @@ use iced::advanced::widget::{Operation, Widget};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse::{self, Cursor};
 use iced::widget::overlay::menu;
+use crate::widgets::overlay::menu as kit_menu;
 use iced::{Border, Element, Event, Length, Rectangle, Size, Vector};
 
 use crate::dock::model::{Axis, NodeId};
@@ -196,7 +197,7 @@ impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
     for SplitContainer<'_, Message, Theme, Renderer>
 where
     Message: Clone + 'static,
-    Theme: Catalog + Clone + menu::Catalog + 'static,
+    Theme: Catalog + Clone + menu::Catalog + kit_menu::Catalog + 'static,
     Renderer: advanced::Renderer,
 {
     fn tag(&self) -> Tag {
@@ -599,7 +600,7 @@ impl<'a, Message, Theme, Renderer> From<SplitContainer<'a, Message, Theme, Rende
     for Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'static,
-    Theme: Catalog + Clone + menu::Catalog + 'static,
+    Theme: Catalog + Clone + menu::Catalog + kit_menu::Catalog + 'static,
     Renderer: advanced::Renderer + 'static,
 {
     fn from(widget: SplitContainer<'a, Message, Theme, Renderer>) -> Self {

@@ -79,7 +79,7 @@ where
     ///
     /// The dock adds the zoom and close entries after these, separated, so a
     /// panel never has to implement either.
-    fn menu(&self, _panel: K) -> Vec<(String, Message)> {
+    fn menu(&self, _panel: K) -> Vec<crate::dock::widget::MenuEntry<Message>> {
         Vec::new()
     }
 
