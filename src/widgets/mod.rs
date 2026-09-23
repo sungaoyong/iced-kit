@@ -57,9 +57,11 @@ pub use markdown::Markdown as MarkdownDocument;
 pub use navigation::{accordion, pagination, Section as AccordionSection};
 pub use number::{number_input, otp_input, NumberInput, OtpInput};
 pub use overlay::{
-    tooltip, tooltip_at, tooltip_bubble, ContextMenu, Dialog, DialogWidth, Drawer, DrawerSide,
-    DrawerSize, Dropdown, DropdownAlign, Layer, MenuItem, Modal, Popover, PopoverPlacement, Toast,
-    ToastKind, ToastPlacement, Toasts, TooltipPosition,
+    dialog_actions, dialog_close, dialog_description, dialog_title, header_with_icon, tooltip,
+    tooltip_at, tooltip_bubble, AlertDialog, AlertTone, ContextMenu, Dialog, DialogButtonProps,
+    DialogContent, DialogFooter, DialogHeader, DialogWidth, Drawer, DrawerSide, DrawerSize,
+    Dropdown, DropdownAlign, Layer, MenuItem, Modal, Popover, PopoverPlacement, Toast, ToastKind,
+    ToastPlacement, Toasts, TooltipPosition,
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
 pub use select::{select, select_fill};

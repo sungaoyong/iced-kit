@@ -19,9 +19,10 @@ use iced_kit::widgets::{
     accordion, addon, alert, avatar, avatar_with_name, carousel, code, empty_state, group_button,
     heading, icon_button, input_group, kbd, muted_text, number_input, otp_input, pagination,
     paragraph, ring_progress, shortcut, skeleton, skeleton_list_item, spinner_styled, text_area,
-    text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel, Button, ButtonGroup,
-    CarouselAxis, CarouselState, Dropdown, DropdownButton, Heading, MenuItem, Modal, SkeletonShape,
-    SpinnerStyle, Toggle, ToggleGroup, Tone,
+    text_input, tooltip, AccordionSection, AddonAlignment, AlertDialog, AlertTone, AvatarLabel,
+    Button, ButtonGroup, CarouselAxis, CarouselState, DialogContent, DialogFooter, DialogHeader,
+    Dropdown, DropdownButton, Heading, MenuItem, Modal, SkeletonShape, SpinnerStyle, Toggle,
+    ToggleGroup, Tone,
 };
 use iced_kit::widgets::{group_box, GroupBoxVariant};
 
@@ -96,6 +97,9 @@ struct App {
     saved: Option<&'static str>,
     /// Each overlay is tracked separately so the gallery can show one at a time.
     modal_open: bool,
+    /// The alert dialog and the hand-assembled one, likewise one at a time.
+    alert_open: bool,
+    assembled_open: bool,
     toasts: Vec<&'static str>,
     dropdown_open: bool,
     /// Which members of the demo button group are selected.
@@ -196,6 +200,10 @@ enum Message {
     OpenModal,
     CloseModal,
     ConfirmModal,
+    OpenAlert,
+    CloseAlert,
+    OpenAssembled,
+    CloseAssembled,
     ShowToast,
     DismissToast(usize),
     ToggleDropdown,
@@ -253,6 +261,8 @@ impl Default for App {
             tab: 0,
             saved: None,
             modal_open: false,
+            alert_open: false,
+            assembled_open: false,
             toasts: Vec::new(),
             dropdown_open: false,
             // The middle option starts active, so the group shows both states.
@@ -372,6 +382,10 @@ impl App {
                 self.modal_open = false;
                 self.toasts.push("Project deleted");
             }
+            Message::OpenAlert => self.alert_open = true,
+            Message::CloseAlert => self.alert_open = false,
+            Message::OpenAssembled => self.assembled_open = true,
+            Message::CloseAssembled => self.assembled_open = false,
             Message::ShowToast => {
                 // Capped so a long session of clicking cannot grow without bound.
                 if self.toasts.len() < 4 {
@@ -563,8 +577,47 @@ impl App {
                     label("This permanently removes the project and all of its data."),
                     Message::CloseModal,
                 )
+                .description("Every file in it goes with it.")
                 .cancel("Cancel", Message::CloseModal)
                 .destructive("Delete", Message::ConfirmModal),
+            );
+        }
+
+        // An alert: the same surface, with the tone's icon, centred buttons and
+        // no close button of its own.
+        if self.alert_open {
+            open = open.modal(
+                AlertDialog::new()
+                    .tone(AlertTone::Danger)
+                    .title("Delete project?")
+                    .description("Every file in it goes with it. This cannot be undone.")
+                    .confirm()
+                    .on_confirm(Message::CloseAlert)
+                    .on_cancel(Message::CloseAlert)
+                    .on_dismiss(Message::CloseAlert),
+            );
+        }
+
+        // A dialog body assembled from the composition parts: the caller lays
+        // out the header and the footer itself rather than handing the dialog a
+        // title and a blob of content. The modal is given an empty title and no
+        // actions, so it contributes only the surface and the backdrop.
+        if self.assembled_open {
+            let body: Element<'_, Message, Theme> = DialogContent::new()
+                .spacing(16.0)
+                .push(
+                    DialogHeader::new()
+                        .title("Merge branch")
+                        .description("The branch will be merged into main."),
+                )
+                .push(label("This cannot be undone."))
+                .push(Self::assembled_footer())
+                .into();
+
+            open = open.modal(
+                Modal::new("", body, Message::CloseAssembled)
+                    .width(DialogWidth::Lg)
+                    .close_button(false),
             );
         }
 
@@ -1025,12 +1078,27 @@ impl App {
         )
     }
 
+    /// The footer for the hand-assembled dialog, built from the composition
+    /// parts rather than from `Modal`'s own action list.
+    fn assembled_footer() -> Element<'static, Message, Theme> {
+        DialogFooter::new()
+            .push(button("Cancel").on_press(Message::CloseAssembled))
+            .push(button("Merge").primary().on_press(Message::CloseAssembled))
+            .into()
+    }
+
     fn overlay_section(&self) -> Element<'_, Message, Theme> {
         Self::section(
             "Overlays",
             column![
                 row![
                     button("Open modal").primary().on_press(Message::OpenModal),
+                    button("Alert dialog")
+                        .destructive()
+                        .on_press(Message::OpenAlert),
+                    button("Assembled dialog")
+                        .secondary()
+                        .on_press(Message::OpenAssembled),
                     button("Open drawer")
                         .secondary()
                         .on_press(Message::ToggleDrawer),

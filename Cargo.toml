@@ -69,6 +69,9 @@ float_cmp = "allow"
 [dev-dependencies]
 iced_test = "0.14"
 serde_json = "1.0"
+# Reads back the PNGs `iced_test` writes, so a test can measure where a
+# component actually landed in the frame rather than only that it rendered.
+png = "0.17"
 
 # Each dock test needs an explicit target: cargo does not auto-discover tests
 # in subdirectories, and all of them require the `dock` feature.

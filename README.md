@@ -88,8 +88,10 @@ tabs, nested splits, drop targets, collapsible edge docks and panel zoom
 through the bundled icon font. Components draw from it throughout, including a
 title bar's window controls (`─`/`□`/`✕` are `IconName::Minus`/`Square`/`X`)
 
-**Overlays** — `Modal`, `Dialog`, `Drawer`, `Toast`/`Toasts`,
-`Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`
+**Overlays** — `Modal`, `Dialog`, `AlertDialog`, `Drawer`, `Toast`/`Toasts`,
+`Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`. A dialog body can
+also be assembled by hand from `DialogHeader`, `dialog_title`,
+`dialog_description`, `DialogContent` and `DialogFooter`
 
 **Motion** — surfaces animate as they arrive: a drawer slides in from its edge, a
 dialog rises, a dropdown drops, a toast comes in from the corner it sits in. The
@@ -276,6 +278,32 @@ fn view(&self) -> Element<'_, Message, Theme> {
 The application owns the state of each overlay; `Layer` only decides how open
 ones are painted. A modal's backdrop dims the page and dismisses on click, and
 a `Modal` can be made non-dismissible for a dialog that must be answered.
+
+`Modal` carries the common case: a title, an optional line of description under
+it, and action buttons. `AlertDialog` is the same surface with the defaults an
+interrupting message wants — a tone that picks its icon, centred buttons, and
+no close button:
+
+```rust
+use iced_kit::widgets::{AlertDialog, AlertTone};
+
+AlertDialog::new()
+    .tone(AlertTone::Danger)
+    .title("Delete project")
+    .description("This permanently removes every file in it.")
+    .confirm()
+    .on_confirm(Message::Delete)
+    .on_cancel(Message::Close)
+```
+
+For a body the two of them cannot express, the dialog's parts are public:
+`DialogHeader` holds a title and description, `DialogContent` is the body, and
+`DialogFooter` the actions. Pass an empty title to `Modal::new` so it draws no
+header of its own, and lay the card out yourself.
+
+Note that Escape does not close a dialog: an iced widget sees no keystroke on
+its own, so the application listens for the key in its `subscription` and emits
+whatever message it gave `Modal::new` as `on_dismiss`.
 
 Every component is available both as a module and as a constructor function,
 matching how `iced::widget` exposes its own widgets:

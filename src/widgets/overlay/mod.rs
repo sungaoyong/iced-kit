@@ -36,7 +36,11 @@ use crate::theme::Theme;
 use iced::widget::{container, stack, Space, Stack};
 use iced::{Alignment, Color, Element, Length};
 
-pub use dialog::{Dialog, DialogWidth, Modal};
+pub use dialog::{
+    dialog_actions, dialog_close, dialog_description, dialog_title, header_with_icon, AlertDialog,
+    AlertTone, Dialog, DialogButtonProps, DialogContent, DialogFooter, DialogHeader, DialogWidth,
+    Modal,
+};
 pub use drawer::{drawer_actions, drawer_header, Drawer, DrawerSide, DrawerSize};
 pub use dropdown::{Dropdown, DropdownAlign, MenuItem};
 pub use enter::EnterFrom;
@@ -88,7 +92,10 @@ pub struct Layer<'a, Message> {
     /// Menus anchored to a point or a widget.
     dropdowns: Vec<Element<'a, Message, Theme>>,
     /// A modal dialog, which blocks the content behind it.
-    modal: Option<Modal<'a, Message>>,
+    ///
+    /// Held as an element rather than as a [`Modal`] so an [`AlertDialog`] or a
+    /// hand-assembled dialog can be layered too; each brings its own backdrop.
+    modal: Option<Element<'a, Message, Theme>>,
     /// A drawer, which slides in from an edge and leaves the page visible.
     drawer: Option<Drawer<'a, Message>>,
     /// Transient notifications, stacked in the corner.
@@ -119,8 +126,14 @@ impl<'a, Message: Clone + 'a> Layer<'a, Message> {
     }
 
     /// Sets the modal dialog.
-    pub fn modal(mut self, modal: Modal<'a, Message>) -> Self {
-        self.modal = Some(modal);
+    ///
+    /// Takes anything that becomes an element, so an [`AlertDialog`] — or a
+    /// dialog body a caller assembled from
+    /// [`DialogHeader`] and its siblings — is layered the same way a
+    /// [`Modal`] is. The element is expected to bring its own backdrop; the
+    /// assembled dialogs all do.
+    pub fn modal(mut self, modal: impl Into<Element<'a, Message, Theme>>) -> Self {
+        self.modal = Some(modal.into());
         self
     }
 
@@ -192,7 +205,7 @@ pub fn layer<'a, Message: Clone + 'a>(
     }
 
     if let Some(modal) = modal {
-        layers = layers.push(modal.into_element());
+        layers = layers.push(modal);
     }
 
     if !toasts.is_empty() {

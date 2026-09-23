@@ -428,11 +428,70 @@ fn a_modal_renders_over_content() {
             iced::widget::text("This permanently removes the project."),
             Message::Close,
         )
+        .description("Every file in it goes with it.")
         .cancel("Cancel", Message::Close)
         .destructive("Delete", Message::Noop),
     );
 
     assert_renders("modal", overlay::layer(content, open), false);
+}
+
+#[test]
+fn an_alert_dialog_renders_over_content() {
+    use iced_kit::widgets::{button, AlertDialog, AlertTone};
+
+    let content: Element<'static, Message, Theme> = container(column![
+        heading("Page content", Heading::H2),
+        paragraph("This text sits behind the alert's backdrop."),
+        button("Delete").destructive().on_press(Message::Noop),
+    ])
+    .padding(24)
+    .into();
+
+    let open = Layer::new().modal(
+        AlertDialog::new()
+            .tone(AlertTone::Danger)
+            .title("Delete project?")
+            .description("Every file in it goes with it.")
+            .confirm()
+            .on_confirm(Message::Noop)
+            .on_cancel(Message::Close)
+            .on_dismiss(Message::Close),
+    );
+
+    assert_renders("alert_dialog", overlay::layer(content, open), false);
+}
+
+#[test]
+fn a_dialog_body_laid_out_from_its_parts_renders() {
+    use iced_kit::widgets::{button, DialogContent, DialogHeader};
+
+    let content: Element<'static, Message, Theme> = container(column![
+        heading("Page content", Heading::H2),
+        button("Merge").primary().on_press(Message::Noop),
+    ])
+    .padding(24)
+    .into();
+
+    // The composition parts, assembled by hand: a caller that lays out its own
+    // body rather than handing the dialog a title and a blob of content. An
+    // empty title means the dialog draws no header of its own.
+    let body: Element<'static, Message, Theme> = DialogContent::new()
+        .push(
+            DialogHeader::new()
+                .title("Merge branch")
+                .description("The branch will be merged into main."),
+        )
+        .push(paragraph("This cannot be undone."))
+        .into();
+
+    let open = Layer::new().modal(
+        Modal::new("", body, Message::Close)
+            .cancel("Cancel", Message::Close)
+            .confirm("Merge", Message::Noop),
+    );
+
+    assert_renders("dialog_parts", overlay::layer(content, open), false);
 }
 
 #[test]
