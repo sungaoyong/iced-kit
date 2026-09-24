@@ -184,6 +184,17 @@ impl<'a, Message: 'a> Bubble<'a, Message> {
         self.max_width = Some(width.max(1.0));
         self
     }
+
+    /// Whether the bubble draws no surface at all.
+    ///
+    /// A bubble with no surface has no padding for a caller's header or footer
+    /// to line up with, which is what [`MessageContent`] keys off.
+    ///
+    /// [`MessageContent`]: super::message::MessageContent
+    #[must_use]
+    pub fn is_ghost(&self) -> bool {
+        self.variant == BubbleVariant::Ghost
+    }
 }
 
 impl<'a, Message: 'a> Default for Bubble<'a, Message> {

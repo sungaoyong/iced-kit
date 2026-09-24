@@ -2899,3 +2899,37 @@ fn chat_attachments_render() {
         false,
     );
 }
+
+/// The ghost-bubble inset rule, side by side.
+///
+/// A surfaced bubble pads its text by 12px, so the header and footer inset
+/// themselves to match. A ghost bubble has no padding, so the same lines must
+/// sit flush with the text. The two cases are rendered together because the
+/// difference is only legible by comparison.
+#[test]
+fn chat_ghost_bubble_inset_renders() {
+    use iced_kit::widgets::chat::{bubble, message, BubbleVariant, MessageHeader};
+
+    let surfaced: Element<'_, Message, Theme> = message(bubble("Surfaced bubble"))
+        .header("Ada")
+        .footer("12:30")
+        .into();
+
+    let ghost: Element<'_, Message, Theme> =
+        message(bubble("Ghost bubble").with_variant(BubbleVariant::Ghost))
+            .header("Ada")
+            .footer("12:30")
+            .into();
+
+    // A header that states its own inset keeps it even beside a ghost bubble.
+    let pinned: Element<'_, Message, Theme> =
+        message(bubble("Ghost, inset pinned").with_variant(BubbleVariant::Ghost))
+            .header_el(MessageHeader::new().text("Ada").content_inset(true))
+            .into();
+
+    assert_renders(
+        "chat_ghost_inset",
+        column![surfaced, ghost, pinned].spacing(16),
+        false,
+    );
+}
