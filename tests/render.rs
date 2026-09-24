@@ -2756,3 +2756,70 @@ fn loading_and_overlay_pieces_render() {
     // A sheet fills the frame, so it is rendered on its own.
     assert_renders("sheet", sheet_panel, false);
 }
+
+/// The chat family's bubbles and message rows, in both alignments.
+///
+/// The bubble variants are the piece where the surface treatment carries the
+/// meaning — filled for the sender, muted for the other party, destructive for
+/// a refused message — so the snapshot is what keeps them distinguishable.
+#[test]
+fn chat_bubbles_and_messages_render() {
+    use iced_kit::widgets::chat::{
+        bubble, message, message_group, BubbleReactions, BubbleVariant, MessageAlignment,
+    };
+
+    let variants: Vec<Element<'_, Message, Theme>> = [
+        BubbleVariant::Filled,
+        BubbleVariant::Secondary,
+        BubbleVariant::Muted,
+        BubbleVariant::Tinted,
+        BubbleVariant::Outline,
+        BubbleVariant::Destructive,
+        BubbleVariant::Ghost,
+    ]
+    .into_iter()
+    .map(|variant| {
+        bubble::<Message>("A bubble")
+            .with_variant(variant)
+            .max_width(240.0)
+            .into()
+    })
+    .collect();
+
+    let start: Element<'_, Message, Theme> = message(bubble("How are the docs coming along?"))
+        .alignment(MessageAlignment::Start)
+        .header("Ada")
+        .footer("12:30")
+        .into();
+
+    let end: Element<'_, Message, Theme> =
+        message(bubble("Nearly there — one section left.").with_variant(BubbleVariant::Secondary))
+            .alignment(MessageAlignment::End)
+            .header("Grace")
+            .footer("Sent")
+            .into();
+
+    // Reactions belong to the bubble, which is where the reference attaches
+    // them too: the cluster is positioned against the surface it annotates.
+    let thumbs: Element<'_, Message, Theme> = muted_text("👍 2").into();
+    let reacted: Element<'_, Message, Theme> = message(
+        bubble("Reacted")
+            .with_variant(BubbleVariant::Muted)
+            .reactions(BubbleReactions::new().action(thumbs)),
+    )
+    .alignment(MessageAlignment::Start)
+    .into();
+
+    assert_renders(
+        "chat_bubbles",
+        column![
+            column(variants).spacing(8),
+            message_group::<Message>()
+                .child(start)
+                .child(end)
+                .child(reacted),
+        ]
+        .spacing(24),
+        false,
+    );
+}

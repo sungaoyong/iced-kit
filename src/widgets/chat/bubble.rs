@@ -3,7 +3,7 @@
 
 use crate::theme::{Size, Theme};
 use iced::widget::{column, container, row, text};
-use iced::{Alignment, Background, Border, Element, Length, Padding};
+use iced::{Alignment, Background, Border, Color, Element, Length, Padding};
 
 /// Horizontal alignment for messages and message-owned chat surfaces.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -29,6 +29,8 @@ pub enum BubbleVariant {
     Tinted,
     /// A background surface with a visible border.
     Outline,
+    /// A destructive-tinted surface, for an error or a refused message.
+    Destructive,
     /// No surface, padding, or border.
     Ghost,
 }
@@ -51,7 +53,9 @@ pub struct BubbleContent<'a, Message> {
 
 impl<'a, Message: 'a> BubbleContent<'a, Message> {
     pub fn new() -> Self {
-        Self { children: Vec::new() }
+        Self {
+            children: Vec::new(),
+        }
     }
 
     /// Adds a text line to the bubble body.
@@ -243,9 +247,36 @@ impl<'a, Message: 'a> From<Bubble<'a, Message>> for Element<'a, Message, Theme> 
 /// Resolves a bubble variant to a container style against the theme.
 fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
     let c = theme.colors();
-    // The reference chat surface uses a large (2xl) corner; our radius scale
-    // tops out at `xl` (12px), so the bubble pins a generous 16px directly.
-    let radius = 16.0.into();
+    // The reference chat surface uses its 2xl corner, which is `radius * 2.5`
+    // (15px at the default scale) rather than a named step. Our scale tops out
+    // at 12px, and the reference's own comment calls this a "large" corner, so
+    // the derived value is composed here the same way the theme derives it.
+    let radius = (f32::from(theme.radius().md) * 2.5).into();
+
+    // A tinted variant is an opaque mix, not a translucent fill: iced's
+    // renderer does not guarantee alpha compositing, so a translucent surface
+    // would blend with whatever happens to be behind it instead of reading as
+    // one color. The reference mixes in a different ratio per mode.
+    let tinted = |color: Color, dark_ratio: f32, light_ratio: f32| {
+        let base = if theme.is_dark() {
+            c.background
+        } else {
+            c.surface
+        };
+        let ratio = if theme.is_dark() {
+            dark_ratio
+        } else {
+            light_ratio
+        };
+
+        Color {
+            r: color.r * ratio + base.r * (1.0 - ratio),
+            g: color.g * ratio + base.g * (1.0 - ratio),
+            b: color.b * ratio + base.b * (1.0 - ratio),
+            a: 1.0,
+        }
+    };
+
     match variant {
         BubbleVariant::Filled => container::Style {
             background: Some(Background::Color(c.primary)),
@@ -278,10 +309,7 @@ fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
             ..Default::default()
         },
         BubbleVariant::Tinted => container::Style {
-            background: Some(Background::Color(iced::Color {
-                a: 0.12,
-                ..c.primary
-            })),
+            background: Some(Background::Color(tinted(c.primary, 0.24, 0.12))),
             text_color: Some(c.foreground),
             border: Border {
                 radius,
@@ -290,12 +318,25 @@ fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
             ..Default::default()
         },
         BubbleVariant::Outline => container::Style {
-            background: Some(Background::Color(c.surface)),
+            // The page color, so the bubble reads as outlined rather than
+            // raised: the border is the whole surface treatment.
+            background: Some(Background::Color(c.background)),
             text_color: Some(c.foreground),
             border: Border {
                 color: c.border,
                 width: 1.0,
                 radius,
+            },
+            ..Default::default()
+        },
+        BubbleVariant::Destructive => container::Style {
+            background: Some(Background::Color(tinted(c.destructive, 0.2, 0.1))),
+            // The text takes the destructive accent, which is what carries the
+            // warning once the tint itself is as quiet as a surface.
+            text_color: Some(c.destructive),
+            border: Border {
+                radius,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -311,7 +352,9 @@ pub struct BubbleGroup<'a, Message> {
 
 impl<'a, Message: 'a> BubbleGroup<'a, Message> {
     pub fn new() -> Self {
-        Self { children: Vec::new() }
+        Self {
+            children: Vec::new(),
+        }
     }
 
     /// Adds a bubble (or any element) to the group.
@@ -351,12 +394,13 @@ mod tests {
     #[derive(Clone, Debug)]
     enum Msg {}
 
-    const ALL: [BubbleVariant; 6] = [
+    const ALL: [BubbleVariant; 7] = [
         BubbleVariant::Filled,
         BubbleVariant::Secondary,
         BubbleVariant::Muted,
         BubbleVariant::Tinted,
         BubbleVariant::Outline,
+        BubbleVariant::Destructive,
         BubbleVariant::Ghost,
     ];
 
@@ -401,5 +445,103 @@ mod tests {
             .child(bubble("two"))
             .into();
         drop(group);
+    }
+
+    /// Every tinted surface must be opaque. iced's renderer does not guarantee
+    /// alpha compositing, so a translucent fill would take its color from
+    /// whatever sits behind the bubble rather than from the theme.
+    #[test]
+    fn tinted_surfaces_are_opaque() {
+        for theme in [Theme::light(), Theme::dark()] {
+            for variant in [
+                BubbleVariant::Filled,
+                BubbleVariant::Secondary,
+                BubbleVariant::Muted,
+                BubbleVariant::Tinted,
+                BubbleVariant::Outline,
+                BubbleVariant::Destructive,
+            ] {
+                let style = super::bubble_style(&theme, variant);
+
+                let Some(Background::Color(color)) = style.background else {
+                    panic!("{variant:?} must draw a color surface");
+                };
+
+                assert_eq!(
+                    color.a, 1.0,
+                    "{variant:?} must not rely on alpha compositing"
+                );
+            }
+        }
+    }
+
+    /// The destructive bubble is its own signal: a red-tinted surface with red
+    /// text, distinct from every other variant in both palettes.
+    #[test]
+    fn the_destructive_variant_is_distinct() {
+        for theme in [Theme::light(), Theme::dark()] {
+            let destructive = super::bubble_style(&theme, BubbleVariant::Destructive);
+
+            assert_eq!(
+                destructive.text_color,
+                Some(theme.colors().destructive),
+                "its text must carry the warning"
+            );
+
+            for other in ALL {
+                if other == BubbleVariant::Destructive {
+                    continue;
+                }
+
+                let style = super::bubble_style(&theme, other);
+                assert_ne!(
+                    (style.background, style.text_color),
+                    (destructive.background, destructive.text_color),
+                    "{other:?} must not look like Destructive"
+                );
+            }
+        }
+    }
+
+    /// The tint is more saturated in the dark palette, where a faint wash would
+    /// disappear into the background.
+    #[test]
+    fn the_destructive_tint_strengthens_in_the_dark_palette() {
+        let light = super::bubble_style(&Theme::light(), BubbleVariant::Destructive)
+            .background
+            .expect("a surface");
+        let dark = super::bubble_style(&Theme::dark(), BubbleVariant::Destructive)
+            .background
+            .expect("a surface");
+
+        let (Background::Color(light), Background::Color(dark)) = (light, dark) else {
+            panic!("both tints must be colors");
+        };
+
+        let redness = |color: Color| color.r - color.g.midpoint(color.b);
+
+        assert!(
+            redness(dark) > redness(light),
+            "the dark tint must be the more saturated of the two"
+        );
+    }
+
+    /// Every variant keeps the same generous corner, so a row of bubbles reads
+    /// as one family. Ghost is the exception: it has no surface to round.
+    #[test]
+    fn variants_share_one_corner_radius() {
+        let theme = Theme::light();
+        let expected = f32::from(theme.radius().md) * 2.5;
+
+        for variant in ALL {
+            let style = super::bubble_style(&theme, variant);
+            let radius = style.border.radius.top_left;
+
+            if variant == BubbleVariant::Ghost {
+                assert_eq!(radius, 0.0, "Ghost has no surface to round");
+            } else {
+                assert_eq!(radius, expected, "{variant:?} must use the shared corner");
+            }
+        }
     }
 }
