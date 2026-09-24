@@ -6,8 +6,11 @@
 //! [`VirtualListState`](crate::widgets::virtual_list::VirtualListState) — so the
 //! scroller stays stateless and testable.
 
+use crate::theme::Theme;
+use crate::widgets::virtual_list::VirtualList;
 use crate::widgets::virtual_list::VirtualListState;
-use std::cmp::Ordering;
+use iced::widget::{column, container, stack, text, Space};
+use iced::{Alignment, Background, Color, Element, Length, Padding};
 
 /// Distance (px) from the bottom within which the scroller re-sticks to the tail.
 const FOLLOW_THRESHOLD: f32 = 80.0;
@@ -71,13 +74,10 @@ impl MessageScrollerState {
     /// Records the incoming item count. An append while following keeps the tail
     /// pinned; nothing here moves the offset on its own.
     pub fn record_len(&mut self, new_len: usize) {
-        match new_len.cmp(&self.seen_len) {
-            // Append: if already following, stay following. Never steal focus
-            // from a user who has scrolled up.
-            Ordering::Greater => {}
-            // Shrink: nothing special; the offset clamps during layout.
-            Ordering::Less | Ordering::Equal => {}
-        }
+        // Append: if already following, stay following — never steal focus from a
+        // user who has scrolled up. Shrink: nothing special, the offset clamps
+        // during layout. Neither case moves the offset, so only the seen count
+        // is synced here.
         self.seen_len = new_len;
     }
 
@@ -121,6 +121,255 @@ impl MessageScrollerState {
         self.list.update(max, viewport);
         self.follow_tail = true;
     }
+}
+
+/// A virtualized, tail-following transcript scroller widget.
+///
+/// Built on top of [`VirtualList`]: it pins the viewport to the newest row
+/// while [`MessageScrollerState::is_following_tail`], and can float a
+/// "jump to bottom" button and a bottom fade once the reader has scrolled up.
+#[must_use = "a MessageScroller does nothing unless it is turned into an Element"]
+pub struct MessageScroller<'a, T, Message> {
+    items: &'a [T],
+    state: &'a MessageScrollerState,
+    row: Box<dyn Fn(&'a T, usize) -> Element<'a, Message, Theme> + 'a>,
+    row_height: f32,
+    jump_button: bool,
+    jump_label: String,
+    bottom_fade: Option<Color>,
+    width: Length,
+    height: Length,
+    on_scroll: Option<Box<dyn Fn(MessageScrollerState) -> Message + 'a>>,
+    on_jump: Option<Message>,
+}
+
+impl<'a, T: 'a, Message: Clone + 'a> MessageScroller<'a, T, Message> {
+    /// Creates a scroller over `items`, rendering each row with `row`, driven by
+    /// the app-owned `state`.
+    pub fn new(
+        items: &'a [T],
+        state: &'a MessageScrollerState,
+        row: impl Fn(&'a T, usize) -> Element<'a, Message, Theme> + 'a,
+    ) -> Self {
+        Self {
+            items,
+            state,
+            row: Box::new(row),
+            row_height: 64.0,
+            jump_button: false,
+            jump_label: "\u{2193} New messages".to_string(),
+            bottom_fade: None,
+            width: Length::Fill,
+            height: Length::Fill,
+            on_scroll: None,
+            on_jump: None,
+        }
+    }
+
+    /// Sets the uniform height assumed for each row.
+    pub fn row_height(mut self, height: f32) -> Self {
+        self.row_height = height.max(1.0);
+        self
+    }
+
+    /// Alias for [`row_height`](Self::row_height): the estimate used before a row
+    /// has been measured.
+    pub fn estimate(mut self, height: f32) -> Self {
+        self.row_height = height.max(1.0);
+        self
+    }
+
+    /// Shows or hides the floating "jump to bottom" button (only visible once
+    /// the reader has scrolled away from the tail).
+    pub fn jump_button(mut self, on: bool) -> Self {
+        self.jump_button = on;
+        self
+    }
+
+    /// Sets the jump button's label.
+    pub fn with_jump_button_label(mut self, label: impl Into<String>) -> Self {
+        self.jump_label = label.into();
+        self
+    }
+
+    /// Enables a bottom fade rendered in `color` (only visible when scrolled up).
+    pub fn with_bottom_fade(mut self, color: Option<Color>) -> Self {
+        self.bottom_fade = color;
+        self
+    }
+
+    /// Sets the scroller's width.
+    pub fn width(mut self, width: impl Into<Length>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Sets the scroller's visible height.
+    pub fn height(mut self, height: impl Into<Length>) -> Self {
+        self.height = height.into();
+        self
+    }
+
+    /// Reports scroll changes as a fresh [`MessageScrollerState`].
+    pub fn on_scroll(mut self, f: impl Fn(MessageScrollerState) -> Message + 'a) -> Self {
+        self.on_scroll = Some(Box::new(f));
+        self
+    }
+
+    /// Emits `message` when the jump-to-bottom button is pressed.
+    pub fn on_jump_to_bottom(mut self, message: Message) -> Self {
+        self.on_jump = Some(message);
+        self
+    }
+
+    /// Converts the scroller into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        let Self {
+            items,
+            state,
+            row,
+            row_height,
+            jump_button,
+            jump_label,
+            bottom_fade,
+            width,
+            height,
+            on_scroll,
+            on_jump,
+        } = self;
+
+        let content_height = items.len() as f32 * row_height;
+
+        let mut list = VirtualList::new(items, state.inner(), row)
+            .fixed_row_height(row_height)
+            .width(width)
+            .height_length(height)
+            .anchor_bottom(state.is_following_tail());
+
+        if let Some(on_scroll) = on_scroll {
+            list = list.on_scroll(move |reported| {
+                let mut next = state.clone();
+                next.apply_scroll(
+                    content_height,
+                    reported.viewport_height(),
+                    reported.offset(),
+                );
+                on_scroll(next)
+            });
+        }
+
+        let content: Element<'a, Message, Theme> = list.into();
+        let scrolled_up = state.is_scrolled_up();
+        let mut layers: Vec<Element<'a, Message, Theme>> = vec![content];
+
+        // The fade and the button sit above the content, hug the bottom edge,
+        // and only appear once the reader has scrolled away from the tail.
+        if scrolled_up {
+            if let Some(color) = bottom_fade {
+                layers.push(fade_overlay(color, width, height));
+            }
+            if jump_button {
+                layers.push(jump_overlay(jump_label, on_jump, width, height));
+            }
+        }
+
+        stack(layers).width(width).height(height).into()
+    }
+}
+
+impl<'a, T: 'a, Message: Clone + 'a> From<MessageScroller<'a, T, Message>>
+    for Element<'a, Message, Theme>
+{
+    fn from(scroller: MessageScroller<'a, T, Message>) -> Self {
+        scroller.into_element()
+    }
+}
+
+/// Builds a translucent gradient (as stacked bands) hugging the bottom edge.
+fn fade_overlay<'a, Message: 'a>(
+    color: Color,
+    width: Length,
+    height: Length,
+) -> Element<'a, Message, Theme> {
+    const BANDS: usize = 4;
+    const FADE_HEIGHT: f32 = 48.0;
+
+    let mut bands = column![].spacing(0).width(Length::Fill);
+    for index in 0..BANDS {
+        // Ramp the alpha up toward the bottom so content dissolves into `color`.
+        let ratio = (index + 1) as f32 / BANDS as f32;
+        let band = Color {
+            a: color.a * ratio,
+            ..color
+        };
+        bands = bands.push(
+            container(
+                Space::new()
+                    .width(Length::Fill)
+                    .height(Length::Fixed(FADE_HEIGHT / BANDS as f32)),
+            )
+            .style(move |_: &Theme| iced::widget::container::Style {
+                background: Some(Background::Color(band)),
+                ..Default::default()
+            }),
+        );
+    }
+
+    container(bands)
+        .width(width)
+        .height(height)
+        .align_x(Alignment::Center)
+        .align_y(Alignment::End)
+        .into()
+}
+
+/// Builds the floating jump-to-bottom button, anchored to the bottom centre.
+fn jump_overlay<'a, Message: Clone + 'a>(
+    label: String,
+    on_jump: Option<Message>,
+    width: Length,
+    height: Length,
+) -> Element<'a, Message, Theme> {
+    let mut button = iced::widget::button(text(label).size(12.0)).class(
+        Box::new(|theme: &Theme, _status| {
+            let c = theme.colors();
+            iced::widget::button::Style {
+                background: Some(Background::Color(c.primary)),
+                text_color: c.primary_foreground,
+                border: iced::Border {
+                    radius: f32::from(theme.radius().full).into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }) as iced::widget::button::StyleFn<'a, Theme>,
+    );
+
+    if let Some(message) = on_jump {
+        button = button.on_press(message);
+    }
+
+    container(button)
+        .width(width)
+        .height(height)
+        .align_x(Alignment::Center)
+        .align_y(Alignment::End)
+        .padding(Padding {
+            top: 0.0,
+            right: 0.0,
+            bottom: 12.0,
+            left: 0.0,
+        })
+        .into()
+}
+
+/// Convenience constructor mirroring the `iced::widget` style.
+pub fn message_scroller<'a, T: 'a, Message: Clone + 'a>(
+    items: &'a [T],
+    state: &'a MessageScrollerState,
+    row: impl Fn(&'a T, usize) -> Element<'a, Message, Theme> + 'a,
+) -> MessageScroller<'a, T, Message> {
+    MessageScroller::new(items, state, row)
 }
 
 #[cfg(test)]
@@ -191,5 +440,66 @@ mod tests {
         s.apply_scroll(1000.0, 400.0, 0.0); // scrolled to top
         s.append(1); // a new message arrives while reading history
         assert!(s.is_scrolled_up(), "appending must not re-pin on its own");
+    }
+}
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::theme::Theme;
+    use iced::Element;
+
+    #[derive(Clone, Debug)]
+    enum Msg {
+        Scrolled(MessageScrollerState),
+        Jump,
+    }
+
+    #[test]
+    fn scroller_builds_across_options() {
+        let items: Vec<String> = (0..500).map(|i| format!("msg {i}")).collect();
+        for jump in [false, true] {
+            for fade in [false, true] {
+                let mut st = MessageScrollerState::new(items.len());
+                if fade || jump {
+                    // Scroll up so the button/fade layers actually render.
+                    st.apply_scroll(10_000.0, 400.0, 10.0);
+                }
+                let el: Element<'_, Msg, Theme> = MessageScroller::new(
+                    &items,
+                    &st,
+                    |item, _| iced::widget::text(item.clone()).size(14).into(),
+                )
+                .jump_button(jump)
+                .with_bottom_fade(fade.then_some(iced::Color::TRANSPARENT))
+                .on_scroll(Msg::Scrolled)
+                .on_jump_to_bottom(Msg::Jump)
+                .height(400.0)
+                .into();
+                drop(el);
+            }
+        }
+    }
+
+    #[test]
+    fn tail_following_scroller_builds_without_overlays() {
+        let items: Vec<String> = (0..50).map(|i| format!("m {i}")).collect();
+        let st = MessageScrollerState::new(items.len());
+        assert!(st.is_following_tail());
+        let el: Element<'_, Msg, Theme> =
+            message_scroller(&items, &st, |item, _| iced::widget::text(item.clone()).into())
+                .jump_button(true)
+                .with_bottom_fade(Some(iced::Color::BLACK))
+                .into();
+        drop(el);
+    }
+
+    #[test]
+    fn scroll_message_carries_the_updated_state() {
+        let mut st = MessageScrollerState::new(10);
+        st.apply_scroll(1000.0, 400.0, 0.0); // scrolled to the top, detached
+        if let Msg::Scrolled(carried) = Msg::Scrolled(st.clone()) {
+            assert!(carried.is_scrolled_up());
+        }
     }
 }

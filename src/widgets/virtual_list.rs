@@ -164,6 +164,7 @@ pub struct VirtualList<'a, T, Message> {
     overscan: usize,
     width: Option<Length>,
     height: Option<Length>,
+    anchor_bottom: bool,
     on_scroll: Option<Box<dyn Fn(VirtualListState) -> Message + 'a>>,
     spacing: f32,
 }
@@ -188,6 +189,7 @@ impl<'a, T: 'a, Message: Clone + 'a> VirtualList<'a, T, Message> {
             overscan: 2,
             width: None,
             height: None,
+            anchor_bottom: false,
             on_scroll: None,
             spacing: 0.0,
         }
@@ -246,6 +248,13 @@ impl<'a, T: 'a, Message: Clone + 'a> VirtualList<'a, T, Message> {
     /// Sets the visible height as a [`Length`].
     pub fn height_length(mut self, height: impl Into<Length>) -> Self {
         self.height = Some(height.into());
+        self
+    }
+
+    /// Pins the viewport to the bottom edge, so a growing transcript stays
+    /// scrolled to its tail across relayouts.
+    pub fn anchor_bottom(mut self, anchor: bool) -> Self {
+        self.anchor_bottom = anchor;
         self
     }
 
@@ -395,6 +404,10 @@ impl<'a, T: 'a, Message: Clone + 'a> VirtualList<'a, T, Message> {
 
         if let Some(height) = self.height {
             scroller = scroller.height(height);
+        }
+
+        if self.anchor_bottom {
+            scroller = scroller.anchor_bottom();
         }
 
         if let Some(on_scroll) = self.on_scroll {

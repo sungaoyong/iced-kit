@@ -27,4 +27,4 @@ pub use message::{
     message, message_group, Message, MessageAvatar, MessageContent, MessageFooter, MessageGroup,
     MessageHeader,
 };
-// pub use scroller::{ ... };
+pub use scroller::{message_scroller, MessageScroller, MessageScrollerState};
