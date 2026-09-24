@@ -41,17 +41,22 @@ pub mod toggle;
 pub mod typography;
 pub mod virtual_list;
 
-pub use avatar::{avatar, avatar_with_label, avatar_with_name, AvatarLabel, AvatarShape};
+pub use avatar::{
+    avatar, avatar_group, avatar_with_label, avatar_with_name, Avatar, AvatarGroup, AvatarLabel,
+    AvatarShape,
+};
 pub use button::{
     button, icon_button, Button, ButtonGroup, ButtonGroupLayout, DropdownButton, Icon, IconSource,
     LoadingIcon, Toggle, ToggleGroup, ToggleVariant,
 };
 pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
 pub use chart::{Chart, ChartKind, Series};
-pub use data_table::{
-    Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width,
+pub use data_table::{Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width};
+pub use display::{
+    alert, alert_builder, badge, badge_builder, card, divider, empty_state, horizontal_separator,
+    progress, vertical_divider, vertical_separator, Alert, Badge, BadgeVariant, Separator,
+    SeparatorStyle, Tone,
 };
-pub use display::{alert, badge, card, divider, empty_state, progress, vertical_divider, Tone};
 pub use form::{field, form, Field, FieldLabel, Form, FormLabelLayout};
 pub use group_box::{group_box, GroupBox, GroupBoxVariant};
 pub use input::{
@@ -82,7 +87,10 @@ pub use spinner::{ring_progress, spinner, spinner_styled, SpinnerStyle};
 pub use tabs::{tabs, Tab, TabStrip, TabVariant};
 pub use title_bar::{TitleBar, WindowControl};
 pub use toggle::{checkbox, radio, slider, switch};
-pub use typography::{code, heading, kbd, muted_text, paragraph, shortcut, Heading};
+pub use typography::{
+    code, heading, kbd, label_builder, muted_text, paragraph, shortcut, Heading, HighlightsMatch,
+    Label,
+};
 pub use virtual_list::{text_row, virtual_list, VirtualList, VirtualListState};
 
 pub use crate::theme::catalog::ButtonVariant;

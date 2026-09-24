@@ -2333,3 +2333,93 @@ fn option_detail_column<'a>() -> Column<'a, Record, Message> {
     })
     .width(Width::Fill)
 }
+
+/// The badge variants, both separator forms, the alert forms and an avatar
+/// group: the pieces batch two of the parity work added.
+#[test]
+fn display_variants_render() {
+    use iced_kit::widgets::{
+        alert_builder, avatar, avatar_group, badge_builder, horizontal_separator, label_builder,
+        AvatarGroup, HighlightsMatch, Label, Tone,
+    };
+
+    let badges: Vec<Element<'_, Message, Theme>> = vec![
+        badge_builder(Tone::Success).label("Active").into(),
+        badge_builder(Tone::Danger).dot().into(),
+        badge_builder(Tone::Primary).count(7).into(),
+        badge_builder(Tone::Warning).count(150).max(99).into(),
+        badge_builder(Tone::Neutral)
+            .icon(iced_kit::icons::IconName::Bell)
+            .into(),
+    ];
+
+    let separators: Vec<Element<'_, Message, Theme>> = vec![
+        horizontal_separator().into(),
+        horizontal_separator().label("or").into(),
+        horizontal_separator().dashed().into(),
+        horizontal_separator().label("or").dashed().into(),
+    ];
+
+    let alerts: Vec<Element<'_, Message, Theme>> = vec![
+        alert_builder("Your trial ends in 3 days.", Tone::Warning)
+            .title("Heads up")
+            .into(),
+        alert_builder("Saved to disk.", Tone::Success).into(),
+        alert_builder("This banner spans the page.", Tone::Neutral)
+            .banner()
+            .on_close(Message::Noop)
+            .into(),
+    ];
+
+    let labels: Vec<Element<'_, Message, Theme>> = vec![
+        {
+            let label: Label<'_, Message> = label_builder("hunter2").masked(true).secondary("Ada");
+            label.into()
+        },
+        {
+            let label: Label<'_, Message> =
+                label_builder("Ada Lovelace").highlights(HighlightsMatch::Full("ada".to_owned()));
+            label.into()
+        },
+        {
+            let label: Label<'_, Message> =
+                label_builder("Grace Hopper").highlights(HighlightsMatch::Full("ada".to_owned()));
+            label.into()
+        },
+    ];
+
+    let members = [
+        "Ada Lovelace",
+        "Grace Hopper",
+        "Alan Turing",
+        "Edsger Dijkstra",
+    ];
+    let group: AvatarGroup<'_, Message> = avatar_group()
+        .children(members.map(|name| avatar::<Message>(name, 32)))
+        .diameter(32)
+        .limit(3)
+        .ellipsis();
+
+    let mut badge_row = row![].spacing(8);
+    for badge in badges {
+        badge_row = badge_row.push(badge);
+    }
+
+    let mut label_column = column![].spacing(6);
+    for label in labels {
+        label_column = label_column.push(label);
+    }
+
+    assert_renders(
+        "display_variants",
+        column![
+            badge_row,
+            label_column,
+            column(separators).spacing(8),
+            group,
+            column(alerts).spacing(8),
+        ]
+        .spacing(16),
+        false,
+    );
+}

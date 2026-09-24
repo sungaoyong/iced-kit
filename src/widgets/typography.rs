@@ -2,7 +2,7 @@
 
 use crate::theme::{Size, Theme};
 use iced::widget::{container, text};
-use iced::{Color, Element, Length, Padding};
+use iced::{Alignment, Color, Element, Length, Padding};
 
 /// A heading level, following the HTML convention.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -112,6 +112,233 @@ pub fn code<'a, Message: 'a>(
     }) as container::StyleFn<'a, Theme>)
 }
 
+/// What a [`Label`] highlights.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HighlightsMatch {
+    /// Highlight only when the text starts with the query.
+    Prefix(String),
+    /// Highlight every occurrence of the query.
+    Full(String),
+}
+
+impl HighlightsMatch {
+    /// The text being looked for.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Prefix(text) | Self::Full(text) => text,
+        }
+    }
+
+    /// Whether the match is anchored at the start.
+    #[must_use]
+    pub fn is_prefix(&self) -> bool {
+        matches!(self, Self::Prefix(_))
+    }
+}
+
+impl From<&str> for HighlightsMatch {
+    fn from(value: &str) -> Self {
+        Self::Full(value.to_owned())
+    }
+}
+
+impl From<String> for HighlightsMatch {
+    fn from(value: String) -> Self {
+        Self::Full(value)
+    }
+}
+
+/// The character a masked label hides its text behind.
+const MASK: char = '\u{2022}';
+
+/// A text label with an optional secondary line, masking and search
+/// highlighting.
+///
+/// [`paragraph`] and [`muted_text`] cover plain text; this builder adds what
+/// the reference's `Label` carries. Masking is what a password field's value
+/// uses, and highlighting is what marks a search hit.
+///
+/// ```
+/// # use iced_kit::widgets::{label_builder, HighlightsMatch};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message {}
+/// # fn view() -> Element<'static, Message, Theme> {
+/// // A masked value, and a name with the search term marked.
+/// label_builder("hunter2").masked(true).into()
+/// # }
+/// ```
+#[must_use = "a Label does nothing unless it is turned into an Element"]
+pub struct Label<'a, Message> {
+    text: String,
+    secondary: Option<String>,
+    masked: bool,
+    highlights: Option<HighlightsMatch>,
+    color: Option<Color>,
+    size: Size,
+    _message: std::marker::PhantomData<&'a Message>,
+}
+
+impl<'a, Message: 'a> Label<'a, Message> {
+    /// Creates a label with the given text.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            secondary: None,
+            masked: false,
+            highlights: None,
+            color: None,
+            size: Size::Md,
+            _message: std::marker::PhantomData,
+        }
+    }
+
+    /// Adds a secondary, muted line after the primary text.
+    pub fn secondary(mut self, secondary: impl Into<String>) -> Self {
+        self.secondary = Some(secondary.into());
+        self
+    }
+
+    /// Hides the text behind bullets.
+    ///
+    /// The secondary line is not masked: it carries a label such as a user
+    /// name, which is there to say whose secret this is.
+    pub fn masked(mut self, masked: bool) -> Self {
+        self.masked = masked;
+        self
+    }
+
+    /// Marks a search term's occurrences.
+    ///
+    /// iced's text widget carries one style for a whole run, so the match is
+    /// not drawn as a highlighted span within the line. A hit is drawn on the
+    /// accent fill instead, which is what makes it stand out in a list — the
+    /// same treatment a selected row gets. A caller that needs the matched span
+    /// picked out draws the pieces as separate texts.
+    pub fn highlights(mut self, matched: impl Into<HighlightsMatch>) -> Self {
+        self.highlights = Some(matched.into());
+        self
+    }
+
+    /// Overrides the label's colour.
+    pub fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
+        self
+    }
+
+    /// Sets the size step.
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// The text the label draws, masked or not.
+    #[must_use]
+    pub fn display_text(&self) -> String {
+        if self.masked {
+            MASK.to_string().repeat(self.text.chars().count())
+        } else {
+            self.text.clone()
+        }
+    }
+
+    /// Whether the label's text occurs in `query`, by its match rule.
+    #[must_use]
+    pub fn matches(&self, query: &HighlightsMatch) -> bool {
+        let haystack = self.text.to_lowercase();
+        let needle = query.as_str().to_lowercase();
+
+        if needle.is_empty() {
+            return false;
+        }
+
+        if query.is_prefix() {
+            haystack.starts_with(&needle)
+        } else {
+            haystack.contains(&needle)
+        }
+    }
+
+    /// Whether this label is a search hit, if it was given a term.
+    #[must_use]
+    pub fn is_highlighted(&self) -> bool {
+        self.highlights
+            .as_ref()
+            .is_some_and(|query| self.matches(query))
+    }
+
+    /// Turns the label into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        let style = self.size.text();
+        let color = self.color;
+        let highlighted = self.is_highlighted();
+
+        let primary: Element<'a, Message, Theme> = text(self.display_text())
+            .size(style.size)
+            .line_height(style.line_height())
+            .class(Box::new(move |theme: &Theme| text::Style {
+                color: Some(color.unwrap_or(theme.colors().foreground)),
+            }) as text::StyleFn<'a, Theme>)
+            .into();
+
+        // A hit is drawn on the accent fill, the same treatment a selected row
+        // gets. Colouring the text alone cannot work: every palette's link and
+        // foreground tokens are the same shade, so a highlighted label would
+        // look exactly like an ordinary one.
+        let primary: Element<'a, Message, Theme> = if highlighted {
+            container(primary)
+                .padding(Padding {
+                    top: 0.0,
+                    right: 4.0,
+                    bottom: 0.0,
+                    left: 4.0,
+                })
+                .class(Box::new(|theme: &Theme| container::Style {
+                    background: Some(iced::Background::Color(theme.colors().accent)),
+                    border: iced::Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: f32::from(theme.radius().sm).into(),
+                    },
+                    text_color: Some(theme.colors().accent_foreground),
+                    ..container::Style::default()
+                }) as container::StyleFn<'a, Theme>)
+                .into()
+        } else {
+            primary
+        };
+
+        let Some(secondary) = self.secondary else {
+            return primary;
+        };
+
+        // A masked value is followed by its label, which says whose it is.
+        let secondary_text = text(secondary)
+            .size(Size::Sm.text().size)
+            .line_height(Size::Sm.text().line_height())
+            .class(Box::new(|theme: &Theme| text::Style {
+                color: Some(theme.colors().muted_foreground),
+            }) as text::StyleFn<'a, Theme>);
+
+        iced::widget::row![primary, secondary_text]
+            .spacing(6)
+            .align_y(Alignment::Center)
+            .into()
+    }
+}
+
+impl<'a, Message: 'a> From<Label<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(label: Label<'a, Message>) -> Self {
+        label.into_element()
+    }
+}
+
+/// Builds a label.
+pub fn label_builder<'a, Message: 'a>(text: impl Into<String>) -> Label<'a, Message> {
+    Label::new(text)
+}
+
 /// Builds a keyboard key hint, such as `Ctrl` or `K`.
 ///
 /// ```
@@ -187,8 +414,11 @@ pub fn section_label<'a, Message: 'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{code, heading, kbd, muted_text, paragraph, section_label, shortcut, Heading};
-    use crate::theme::Theme;
+    use super::{
+        code, heading, kbd, label_builder, muted_text, paragraph, section_label, shortcut, Heading,
+        HighlightsMatch, Label,
+    };
+    use crate::theme::{Size, Theme};
 
     /// The message type every render below is built against.
     type Message = ();
@@ -239,5 +469,76 @@ mod tests {
 
         let none: iced::Element<'_, Message, Theme> = shortcut::<Message>(&[]);
         drop(none);
+    }
+
+    #[test]
+    fn a_label_masks_its_text() {
+        let visible: Label<'_, Message> = label_builder("hunter2");
+        assert_eq!(visible.display_text(), "hunter2");
+
+        let masked: Label<'_, Message> = label_builder("hunter2").masked(true);
+        assert_eq!(masked.display_text(), "\u{2022}".repeat(7));
+
+        // A masked label keeps its secondary line, which names whose value it
+        // is rather than repeating it.
+        let with_name: Label<'_, Message> = label_builder("hunter2").masked(true).secondary("Ada");
+        assert_eq!(with_name.secondary.as_deref(), Some("Ada"));
+    }
+
+    #[test]
+    fn a_label_reports_its_search_hits() {
+        let label: Label<'_, Message> = label_builder("Ada Lovelace");
+
+        assert!(label.matches(&HighlightsMatch::Full("love".to_owned())));
+        assert!(!label.matches(&HighlightsMatch::Full("grace".to_owned())));
+        assert!(!label.matches(&HighlightsMatch::Full(String::new())));
+
+        // A prefix match is anchored; a full match is not.
+        assert!(label.matches(&HighlightsMatch::Prefix("ada".to_owned())));
+        assert!(!label.matches(&HighlightsMatch::Prefix("love".to_owned())));
+    }
+
+    #[test]
+    fn a_label_is_highlighted_only_when_it_was_given_a_term() {
+        let plain: Label<'_, Message> = label_builder("Ada Lovelace");
+        assert!(!plain.is_highlighted());
+
+        let hit: Label<'_, Message> =
+            label_builder("Ada Lovelace").highlights(HighlightsMatch::Full("ada".to_owned()));
+        assert!(hit.is_highlighted());
+
+        let miss: Label<'_, Message> =
+            label_builder("Ada Lovelace").highlights(HighlightsMatch::Full("grace".to_owned()));
+        assert!(!miss.is_highlighted());
+    }
+
+    #[test]
+    fn a_highlight_match_takes_a_bare_string_as_a_full_match() {
+        let from_str: HighlightsMatch = "ada".into();
+        assert_eq!(from_str, HighlightsMatch::Full("ada".to_owned()));
+        assert!(!from_str.is_prefix());
+
+        let from_string: HighlightsMatch = String::from("ada").into();
+        assert_eq!(from_string.as_str(), "ada");
+    }
+
+    #[test]
+    fn labels_render_in_every_form() {
+        let elements: Vec<iced::Element<'_, Message, Theme>> = vec![
+            label_builder("Plain").into(),
+            label_builder("Titled").secondary("detail").into(),
+            label_builder("hunter2").masked(true).into(),
+            label_builder("Ada")
+                .highlights(HighlightsMatch::Full("ada".to_owned()))
+                .into(),
+            label_builder("Ada")
+                .color(iced::Color::WHITE)
+                .size(Size::Lg)
+                .into(),
+        ];
+
+        for element in elements {
+            drop(element);
+        }
     }
 }
