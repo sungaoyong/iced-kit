@@ -434,6 +434,519 @@ fn header_style(
     }
 }
 
+/// One crumb of a [`breadcrumb`].
+#[derive(Debug, Clone)]
+#[must_use = "a Crumb does nothing unless it is given to `breadcrumb`"]
+pub struct Crumb<Message> {
+    label: String,
+    message: Option<Message>,
+    disabled: bool,
+}
+
+impl<Message> Crumb<Message> {
+    /// Creates a crumb that is plain text.
+    ///
+    /// The last crumb of a trail is usually plain: it names the page the reader
+    /// is already on, so it does not need to be a link.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            message: None,
+            disabled: false,
+        }
+    }
+
+    /// Creates a crumb that navigates when pressed.
+    pub fn link(label: impl Into<String>, message: Message) -> Self {
+        Self {
+            label: label.into(),
+            message: Some(message),
+            disabled: false,
+        }
+    }
+
+    /// Disables the crumb: it renders dimmed and emits nothing.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// The crumb's label.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Whether the crumb can be pressed.
+    #[must_use]
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+}
+
+/// A trail of ancestors: where the reader is, and how to get back.
+///
+/// The separator is drawn between crumbs rather than by them, so a trail of one
+/// crumb has no separator and a trail of five has four — which is what makes
+/// the count of separators impossible to get wrong.
+///
+/// ```
+/// # use iced_kit::widgets::{breadcrumb, Crumb};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Open(&'static str) }
+/// # fn view() -> Element<'static, Message, Theme> {
+/// breadcrumb(vec![
+///     Crumb::link("Home", Message::Open("home")),
+///     Crumb::link("Files", Message::Open("files")),
+///     Crumb::new("report.pdf"),
+/// ])
+/// # }
+/// ```
+pub fn breadcrumb<'a, Message: Clone + 'a>(
+    crumbs: Vec<Crumb<Message>>,
+) -> Element<'a, Message, Theme> {
+    let text_style = Size::Sm.text();
+    let count = crumbs.len();
+
+    let mut trail = row![].spacing(6).align_y(iced::Alignment::Center);
+
+    for (index, crumb) in crumbs.into_iter().enumerate() {
+        let is_last = index + 1 == count;
+        let label = crumb.label.clone();
+
+        // A crumb with a message is a link; one without is the current page,
+        // drawn as ordinary text so it does not invite a click that does
+        // nothing.
+        let content: Element<'a, Message, Theme> = if crumb.message.is_some() && !crumb.disabled {
+            let message = crumb.message.clone().expect("checked above");
+            let mut link = button(
+                text(label)
+                    .size(text_style.size)
+                    .line_height(text_style.line_height()),
+            )
+            .padding(Padding {
+                top: 0.0,
+                right: 2.0,
+                bottom: 0.0,
+                left: 2.0,
+            })
+            .class(
+                Box::new(|theme: &Theme, status| crumb_link_style(theme, status))
+                    as button::StyleFn<'a, Theme>,
+            );
+
+            link = link.on_press(message);
+            link.into()
+        } else {
+            // A crumb with no message is the page the reader is on, drawn as
+            // plain text so it does not invite a click that does nothing.
+            let disabled = crumb.disabled;
+
+            text(label)
+                .size(text_style.size)
+                .line_height(text_style.line_height())
+                .class(Box::new(move |theme: &Theme| text::Style {
+                    color: Some(if disabled {
+                        Color {
+                            a: theme.colors().muted_foreground.a * 0.6,
+                            ..theme.colors().muted_foreground
+                        }
+                    } else {
+                        theme.colors().foreground
+                    }),
+                }) as text::StyleFn<'a, Theme>)
+                .into()
+        };
+
+        trail = trail.push(content);
+
+        if !is_last {
+            let arrow: Element<'a, Message, Theme> =
+                crate::widgets::Icon::new(IconName::ChevronRight).into_element(Size::Sm);
+
+            trail = trail.push(
+                container(arrow).class(Box::new(|theme: &Theme| container::Style {
+                    text_color: Some(theme.colors().muted_foreground),
+                    ..container::Style::default()
+                }) as container::StyleFn<'a, Theme>),
+            );
+        }
+
+        let _ = (index, is_last);
+    }
+
+    trail.into()
+}
+
+/// The appearance of a breadcrumb link.
+fn crumb_link_style(theme: &Theme, status: button::Status) -> button::Style {
+    let colors = theme.colors();
+    let hovered = matches!(status, button::Status::Hovered);
+
+    button::Style {
+        background: None,
+        text_color: if hovered {
+            colors.foreground
+        } else {
+            colors.muted_foreground
+        },
+        border: iced::Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: f32::from(theme.radius().sm).into(),
+        },
+        shadow: iced::Shadow::default(),
+        snap: true,
+    }
+}
+
+/// One step of a [`stepper`].
+#[derive(Debug, Clone)]
+#[must_use = "a Step does nothing unless it is given to `stepper`"]
+pub struct Step {
+    label: String,
+    icon: Option<IconName>,
+    disabled: bool,
+}
+
+impl Step {
+    /// Creates a step with a label.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            icon: None,
+            disabled: false,
+        }
+    }
+
+    /// Draws an icon instead of the step's number.
+    pub fn icon(mut self, icon: IconName) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Disables the step: it renders dimmed and cannot be selected.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// The step's label.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Whether the step can be selected.
+    #[must_use]
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+}
+
+/// Which way a [`stepper`] runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StepLayout {
+    /// Steps run left to right, joined by a rule.
+    #[default]
+    Horizontal,
+    /// Steps run top to bottom, joined by a rule.
+    Vertical,
+}
+
+/// Which step of the sequence the reader is on, and what the steps are.
+///
+/// A step before the current one is marked as done, which is what a stepper is
+/// for: the trail of what has been finished is as informative as the current
+/// position.
+///
+/// ```
+/// # use iced_kit::widgets::{stepper, Step, StepLayout};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Went(usize) }
+/// # fn view(current: usize) -> Element<'static, Message, Theme> {
+/// stepper(
+///     vec![Step::new("Cart"), Step::new("Address"), Step::new("Payment")],
+///     current,
+/// )
+/// .layout(StepLayout::Horizontal)
+/// .on_select(Message::Went)
+/// # }
+/// ```
+#[must_use = "a Stepper does nothing unless it is turned into an Element"]
+pub struct Stepper<'a, Message> {
+    steps: Vec<Step>,
+    current: usize,
+    layout: StepLayout,
+    disabled: bool,
+    on_select: Option<Box<dyn Fn(usize) -> Message + 'a>>,
+}
+
+impl<'a, Message: Clone + 'a> Stepper<'a, Message> {
+    /// Creates a stepper at `current`.
+    pub fn new(steps: Vec<Step>, current: usize) -> Self {
+        Self {
+            steps,
+            current,
+            layout: StepLayout::default(),
+            disabled: false,
+            on_select: None,
+        }
+    }
+
+    /// Sets which way the steps run.
+    pub fn layout(mut self, layout: StepLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Disables every step.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Reports a pressed step.
+    pub fn on_select(mut self, on_select: impl Fn(usize) -> Message + 'a) -> Self {
+        self.on_select = Some(Box::new(on_select));
+        self
+    }
+
+    /// Whether step `index` is behind the current one.
+    #[must_use]
+    pub fn is_done(&self, index: usize) -> bool {
+        index < self.current
+    }
+
+    /// Whether step `index` is the current one.
+    #[must_use]
+    pub fn is_current(&self, index: usize) -> bool {
+        index == self.current
+    }
+
+    /// Turns the stepper into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        let Self {
+            steps,
+            current,
+            layout,
+            disabled,
+            on_select,
+        } = self;
+
+        let step_style = Size::Sm.text();
+        let label_style = Size::Xs.text();
+        let count = steps.len();
+
+        let mut items: Vec<Element<'a, Message, Theme>> = Vec::new();
+
+        for (index, step) in steps.into_iter().enumerate() {
+            let is_done = index < current;
+            let is_current = index == current;
+            let step_disabled = disabled || step.disabled;
+            // The style closures live for the element's whole lifetime, so the
+            // flag is copied into each rather than borrowed.
+            let head_disabled = step_disabled;
+
+            // The marker is a circle: its number before the step is reached, a
+            // check once it is behind.
+            let marker: Element<'a, Message, Theme> = if is_done {
+                crate::widgets::Icon::new(IconName::Check).into_element(Size::Sm)
+            } else if let Some(icon) = step.icon {
+                crate::widgets::Icon::new(icon).into_element(Size::Sm)
+            } else {
+                text(format!("{}", index + 1))
+                    .size(step_style.size)
+                    .line_height(step_style.line_height())
+                    .into()
+            };
+
+            let marker = container(marker)
+                .width(Length::Fixed(24.0))
+                .height(Length::Fixed(24.0))
+                .center_x(Length::Fixed(24.0))
+                .center_y(Length::Fixed(24.0))
+                .class(Box::new(move |theme: &Theme| {
+                    step_marker_style(theme, is_done, is_current, step_disabled)
+                }) as container::StyleFn<'a, Theme>);
+
+            let mut head = row![].spacing(8).align_y(iced::Alignment::Center);
+            head = head.push(marker);
+            head = head.push(
+                text(step.label.clone())
+                    .size(label_style.size)
+                    .line_height(label_style.line_height()),
+            );
+
+            let head = if let Some(on_select) = on_select.as_ref() {
+                let mut head_button = button(head)
+                    .padding(Padding {
+                        top: 2.0,
+                        right: 4.0,
+                        bottom: 2.0,
+                        left: 4.0,
+                    })
+                    .class(Box::new(move |theme: &Theme, status| {
+                        step_head_style(theme, status, head_disabled)
+                    }) as button::StyleFn<'a, Theme>);
+
+                if !step_disabled {
+                    head_button = head_button.on_press(on_select(index));
+                }
+
+                head_button.into()
+            } else {
+                head.into()
+            };
+
+            items.push(head);
+
+            // The rule joins this step to the next, so the last step has none.
+            if index + 1 < count {
+                let connector: Element<'a, Message, Theme> = match layout {
+                    StepLayout::Horizontal => {
+                        container(iced::widget::Space::new().height(Length::Fixed(1.0)))
+                            .width(Length::Fill)
+                            .height(Length::Fixed(1.0))
+                            .class(
+                                Box::new(move |theme: &Theme| connector_style(theme, is_done))
+                                    as container::StyleFn<'a, Theme>,
+                            )
+                            .into()
+                    }
+                    StepLayout::Vertical => {
+                        // The rule runs down the middle of the marker column,
+                        // so it lines up with the circles it joins: the marker
+                        // is 24 wide, and the line is 1, so the inset is half
+                        // of the difference.
+                        let line = container(iced::widget::Space::new().width(Length::Fixed(1.0)))
+                            .width(Length::Fixed(1.0))
+                            .height(Length::Fixed(16.0))
+                            .class(
+                                Box::new(move |theme: &Theme| connector_style(theme, is_done))
+                                    as container::StyleFn<'a, Theme>,
+                            );
+
+                        row![
+                            container(line).padding(Padding {
+                                top: 0.0,
+                                right: 0.0,
+                                bottom: 0.0,
+                                left: 11.5,
+                            }),
+                            iced::widget::Space::new().width(Length::Fill),
+                        ]
+                        .into()
+                    }
+                };
+
+                items.push(connector);
+            }
+        }
+
+        match layout {
+            StepLayout::Horizontal => row(items)
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .width(Length::Fill)
+                .into(),
+            StepLayout::Vertical => column(items).spacing(0).width(Length::Fill).into(),
+        }
+    }
+}
+
+impl<'a, Message: Clone + 'a> From<Stepper<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(stepper: Stepper<'a, Message>) -> Self {
+        stepper.into_element()
+    }
+}
+
+/// The appearance of a step's marker.
+fn step_marker_style(
+    theme: &Theme,
+    is_done: bool,
+    is_current: bool,
+    disabled: bool,
+) -> container::Style {
+    let colors = theme.colors();
+
+    let (background, text_color, border) = if disabled {
+        (
+            colors.muted,
+            Color {
+                a: colors.muted_foreground.a * 0.6,
+                ..colors.muted_foreground
+            },
+            colors.border,
+        )
+    } else if is_done {
+        // A finished step is filled, so the trail of progress reads at a
+        // glance without reading the numbers.
+        (colors.primary, colors.primary_foreground, colors.primary)
+    } else if is_current {
+        (colors.background, colors.foreground, colors.primary)
+    } else {
+        (colors.background, colors.muted_foreground, colors.border)
+    };
+
+    container::Style {
+        background: Some(iced::Background::Color(background)),
+        border: iced::Border {
+            color: border,
+            width: 1.0,
+            radius: f32::from(theme.radius().full.min(999)).into(),
+        },
+        text_color: Some(text_color),
+        ..container::Style::default()
+    }
+}
+
+/// The appearance of the rule joining two steps.
+fn connector_style(theme: &Theme, is_done: bool) -> container::Style {
+    let colors = theme.colors();
+
+    container::Style {
+        background: Some(iced::Background::Color(if is_done {
+            colors.primary
+        } else {
+            colors.border
+        })),
+        ..container::Style::default()
+    }
+}
+
+/// The appearance of a step's label when it can be pressed.
+fn step_head_style(theme: &Theme, status: button::Status, disabled: bool) -> button::Style {
+    let colors = theme.colors();
+    let hovered = matches!(status, button::Status::Hovered);
+
+    button::Style {
+        background: (hovered && !disabled).then_some(iced::Background::Color(colors.accent)),
+        text_color: if disabled {
+            Color {
+                a: colors.muted_foreground.a * 0.6,
+                ..colors.muted_foreground
+            }
+        } else {
+            colors.foreground
+        },
+        border: iced::Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: f32::from(theme.radius().sm).into(),
+        },
+        shadow: iced::Shadow::default(),
+        snap: true,
+    }
+}
+
+/// Builds a stepper.
+pub fn stepper<'a, Message: Clone + 'a>(steps: Vec<Step>, current: usize) -> Stepper<'a, Message> {
+    Stepper::new(steps, current)
+}
+
 /// One title in an [`app_menu_bar`].
 #[derive(Debug, Clone)]
 #[must_use = "a MenuTitle does nothing unless it is given to `app_menu_bar`"]
@@ -742,8 +1255,8 @@ fn page_window(page: usize, total: usize) -> Vec<Option<usize>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        accordion, accordion_builder, app_menu_bar, page_button, page_window, pagination,
-        Accordion, MenuTitle, Section,
+        accordion, accordion_builder, app_menu_bar, breadcrumb, page_button, page_window,
+        pagination, stepper, Accordion, Crumb, MenuTitle, Section, Step, StepLayout, Stepper,
     };
     use crate::icons::IconName;
     use crate::theme::{Size, Theme};
@@ -985,5 +1498,158 @@ mod tests {
         assert!(closed.background.is_none(), "a closed title must not be");
         assert_eq!(open.text_color, theme.colors().accent_foreground);
         assert_eq!(closed.text_color, theme.colors().foreground);
+    }
+
+    #[test]
+    fn a_crumb_records_its_label_and_link() {
+        let plain: Crumb<Message> = Crumb::new("report.pdf");
+        assert_eq!(plain.label(), "report.pdf");
+        assert!(plain.message.is_none());
+        assert!(!plain.is_disabled());
+
+        let link: Crumb<Message> = Crumb::link("Home", Message::Toggled(0));
+        assert!(link.message.is_some());
+
+        let locked: Crumb<Message> = Crumb::new("Locked").disabled(true);
+        assert!(locked.is_disabled());
+    }
+
+    #[test]
+    fn a_breadcrumb_renders_a_trail_of_any_length() {
+        for count in 0..4 {
+            let crumbs: Vec<Crumb<Message>> = (0..count)
+                .map(|index| {
+                    if index + 1 == count {
+                        Crumb::new(format!("Page {index}"))
+                    } else {
+                        Crumb::link(format!("Page {index}"), Message::Toggled(index))
+                    }
+                })
+                .collect();
+
+            let element: iced::Element<'_, Message, Theme> = breadcrumb(crumbs);
+            drop(element);
+        }
+
+        // A disabled crumb renders dimmed, whether or not it carried a message.
+        let element: iced::Element<'_, Message, Theme> =
+            breadcrumb(vec![Crumb::link("Gone", Message::Toggled(0)).disabled(true)]);
+        drop(element);
+    }
+
+    #[test]
+    fn a_step_records_its_options() {
+        let step = Step::new("Address").icon(IconName::File).disabled(true);
+
+        assert_eq!(step.label(), "Address");
+        assert!(step.is_disabled());
+
+        assert_eq!(Step::new("Cart").label(), "Cart");
+    }
+
+    #[test]
+    fn a_stepper_marks_what_is_behind_and_what_is_current() {
+        let stepper: Stepper<'_, Message> =
+            stepper(vec![Step::new("A"), Step::new("B"), Step::new("C")], 1);
+
+        assert!(stepper.is_done(0), "the first step is behind");
+        assert!(!stepper.is_done(1), "the current step is not behind");
+        assert!(!stepper.is_done(2));
+
+        assert!(stepper.is_current(1));
+        assert!(!stepper.is_current(0));
+        assert!(!stepper.is_current(2));
+    }
+
+    #[test]
+    fn a_stepper_out_of_range_marks_nothing_current() {
+        let stepper: Stepper<'_, Message> = stepper(vec![Step::new("Only")], 99);
+
+        assert!(!stepper.is_current(0));
+        assert!(
+            stepper.is_done(0),
+            "every step is behind a position past the end"
+        );
+    }
+
+    #[test]
+    fn a_stepper_records_its_options() {
+        let stepper: Stepper<'_, Message> = stepper(vec![Step::new("A")], 0)
+            .layout(StepLayout::Vertical)
+            .disabled(true)
+            .on_select(Message::Toggled);
+
+        assert_eq!(stepper.layout, StepLayout::Vertical);
+        assert!(stepper.disabled);
+        assert!(stepper.on_select.is_some());
+    }
+
+    #[test]
+    fn steppers_render_in_both_layouts() {
+        for layout in [StepLayout::Horizontal, StepLayout::Vertical] {
+            let elements: Vec<iced::Element<'_, Message, Theme>> = vec![
+                stepper(vec![Step::new("A"), Step::new("B")], 0)
+                    .layout(layout)
+                    .into(),
+                stepper(
+                    vec![
+                        Step::new("A"),
+                        Step::new("B").disabled(true),
+                        Step::new("C").icon(IconName::Check),
+                    ],
+                    2,
+                )
+                .layout(layout)
+                .disabled(true)
+                .on_select(Message::Toggled)
+                .into(),
+            ];
+
+            for element in elements {
+                drop(element);
+            }
+        }
+
+        // An empty stepper is valid, if pointless.
+        let empty: iced::Element<'_, Message, Theme> = stepper(vec![], 0).into();
+        drop(empty);
+    }
+
+    #[test]
+    fn a_done_step_is_filled_with_the_primary_color() {
+        let theme = Theme::light();
+
+        let done = super::step_marker_style(&theme, true, false, false);
+        let current = super::step_marker_style(&theme, false, true, false);
+        let waiting = super::step_marker_style(&theme, false, false, false);
+        let disabled = super::step_marker_style(&theme, false, true, true);
+
+        assert_eq!(
+            done.background,
+            Some(iced::Background::Color(theme.colors().primary))
+        );
+        assert_eq!(current.border.color, theme.colors().primary);
+        assert_eq!(waiting.border.color, theme.colors().border);
+        assert_ne!(
+            disabled.background, current.background,
+            "a disabled current step must not read as active"
+        );
+    }
+
+    #[test]
+    fn the_rule_behind_a_step_takes_the_primary_color() {
+        let theme = Theme::light();
+
+        let done = super::connector_style(&theme, true);
+        let waiting = super::connector_style(&theme, false);
+
+        assert_eq!(
+            done.background,
+            Some(iced::Background::Color(theme.colors().primary))
+        );
+        assert_eq!(
+            waiting.background,
+            Some(iced::Background::Color(theme.colors().border))
+        );
     }
 }

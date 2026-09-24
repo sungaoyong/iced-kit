@@ -2593,3 +2593,57 @@ fn tree_view_renders() {
         .into();
     drop(element);
 }
+
+/// A breadcrumb trail, and a stepper in both its layouts.
+#[test]
+fn breadcrumb_and_stepper_render() {
+    use iced_kit::widgets::{breadcrumb, stepper, Crumb, Step, StepLayout};
+
+    let trail: Element<'_, Message, Theme> = breadcrumb(vec![
+        Crumb::link("Home", Message::Noop),
+        Crumb::link("Projects", Message::Noop),
+        Crumb::new("iced-kit"),
+    ]);
+
+    let disabled_trail: Element<'_, Message, Theme> = breadcrumb(vec![
+        Crumb::link("Home", Message::Noop),
+        Crumb::link("Archived", Message::Noop).disabled(true),
+        Crumb::new("Old report"),
+    ]);
+
+    let horizontal: Element<'_, Message, Theme> = stepper(
+        vec![
+            Step::new("Cart"),
+            Step::new("Address"),
+            Step::new("Payment"),
+            Step::new("Review"),
+        ],
+        2,
+    )
+    .on_select(|_| Message::Noop)
+    .into();
+
+    let vertical: Element<'_, Message, Theme> = stepper(
+        vec![
+            Step::new("Cart"),
+            Step::new("Address").disabled(true),
+            Step::new("Payment"),
+        ],
+        1,
+    )
+    .layout(StepLayout::Vertical)
+    .on_select(|_| Message::Noop)
+    .into();
+
+    assert_renders(
+        "breadcrumb_stepper",
+        column![
+            trail,
+            disabled_trail,
+            horizontal,
+            row![vertical, iced::widget::Space::new().width(Length::Fill)].spacing(0),
+        ]
+        .spacing(20),
+        false,
+    );
+}
