@@ -42,7 +42,10 @@ pub use dialog::{
     AlertTone, Dialog, DialogButtonProps, DialogContent, DialogFooter, DialogHeader, DialogWidth,
     Modal,
 };
-pub use drawer::{drawer_actions, drawer_header, Drawer, DrawerSide, DrawerSize};
+pub use drawer::{
+    drawer_actions, drawer_header, sheet, Drawer, DrawerSide, DrawerSize, HoverCard,
+    HoverCardPlacement, SHEET_TOP_INSET,
+};
 pub use dropdown::{Dropdown, DropdownAlign, MenuItem};
 pub use enter::EnterFrom;
 pub use menu::OpenFlag;

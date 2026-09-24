@@ -27,6 +27,7 @@ pub mod form;
 pub mod group_box;
 pub mod input;
 pub mod list;
+pub mod loading;
 pub mod markdown;
 pub mod navigation;
 pub mod number;
@@ -83,6 +84,10 @@ pub use input::{
     AddonAlignment, InputGroup, InputGroupAddon, TextArea, TextInput,
 };
 pub use list::{list, tag, ListItem};
+pub use loading::{
+    collapsible, shimmer, shimmer_block, shimmer_text, Collapsible, Shimmer, ShimmerSpread,
+    ShimmerStyle,
+};
 pub use markdown::Markdown as MarkdownDocument;
 pub use navigation::{
     accordion, accordion_builder, app_menu_bar, breadcrumb, pagination, stepper, Accordion, Crumb,
@@ -90,12 +95,12 @@ pub use navigation::{
 };
 pub use number::{number_input, otp_input, NumberInput, OtpInput};
 pub use overlay::{
-    dialog_actions, dialog_close, dialog_description, dialog_title, header_with_icon, tooltip,
-    tooltip_at, tooltip_at_with_shortcut, tooltip_bubble, tooltip_bubble_with_shortcut,
+    dialog_actions, dialog_close, dialog_description, dialog_title, header_with_icon, sheet,
+    tooltip, tooltip_at, tooltip_at_with_shortcut, tooltip_bubble, tooltip_bubble_with_shortcut,
     tooltip_with_shortcut, AlertDialog, AlertTone, ContextMenu, Dialog, DialogButtonProps,
     DialogContent, DialogFooter, DialogHeader, DialogWidth, Drawer, DrawerSide, DrawerSize,
-    Dropdown, DropdownAlign, Layer, MenuItem, Modal, Popover, PopoverPlacement, Toast, ToastKind,
-    ToastPlacement, Toasts, TooltipPosition,
+    Dropdown, DropdownAlign, HoverCard, HoverCardPlacement, Layer, MenuItem, Modal, Popover,
+    PopoverPlacement, Toast, ToastKind, ToastPlacement, Toasts, TooltipPosition, SHEET_TOP_INSET,
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
 pub use select::{searchable_select, searchable_select_panel, select, select_fill};

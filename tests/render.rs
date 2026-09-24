@@ -2707,3 +2707,52 @@ fn details_components_render() {
         false,
     );
 }
+
+/// A collapsible panel open and closed, a shimmer over a placeholder, a sheet
+/// against an edge, and a hover card's trigger.
+#[test]
+fn loading_and_overlay_pieces_render() {
+    use iced_kit::widgets::overlay::{DrawerSide, HoverCard};
+    use iced_kit::widgets::{
+        collapsible, sheet, shimmer, shimmer_block, shimmer_text, Collapsible, ShimmerStyle,
+    };
+
+    let open: Element<'_, Message, Theme> = collapsible::<Message>(muted_text("Panel body"), true);
+    let closed: Element<'_, Message, Theme> =
+        collapsible::<Message>(muted_text("Panel body"), false);
+    let padded: Element<'_, Message, Theme> =
+        Collapsible::<Message>::new(muted_text("Padded body"), true)
+            .padding(8)
+            .into();
+
+    let shimmering: Element<'_, Message, Theme> = column![
+        shimmer_text::<Message>("Loading a value…"),
+        shimmer::<Message>(muted_text("Wrapped text")).into_element(),
+        shimmer_block::<Message>(Length::Fixed(180.0), 14.0),
+    ]
+    .spacing(8)
+    .into();
+
+    let styled: Element<'_, Message, Theme> = shimmer::<Message>(muted_text("Reverse sweep"))
+        .style(ShimmerStyle::new().reverse(true).spread(0.4))
+        .into_element();
+
+    let sheet_panel: Element<'_, Message, Theme> =
+        sheet::<Message>("Settings", muted_text("Panel body"))
+            .side(DrawerSide::Right)
+            .into();
+
+    let card: Element<'_, Message, Theme> = HoverCard::<Message>::new(muted_text("Hover me"))
+        .on_open(Message::Noop)
+        .on_close(Message::Noop)
+        .into();
+
+    assert_renders(
+        "loading_overlays",
+        column![open, closed, padded, shimmering, styled, card].spacing(12),
+        false,
+    );
+
+    // A sheet fills the frame, so it is rendered on its own.
+    assert_renders("sheet", sheet_panel, false);
+}
