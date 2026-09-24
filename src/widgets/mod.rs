@@ -19,6 +19,7 @@ pub mod color_picker;
 pub mod combobox;
 pub mod data_table;
 pub mod date;
+pub mod details;
 pub mod display;
 #[cfg(feature = "dock")]
 pub mod dock;
@@ -65,6 +66,10 @@ pub use combobox::{
 pub use data_table::{Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width};
 pub use date::{
     calendar, date_picker, month_grid, month_name, Calendar, Date, DatePicker, DatePreset, Weekday,
+};
+pub use details::{
+    clipboard_button, description_list, link, rating, status_bar, ClipboardButton, Description,
+    DescriptionLayout, DescriptionList, DescriptionText, Link, Rating, StatusBar,
 };
 pub use display::{
     alert, alert_builder, badge, badge_builder, card, divider, empty_state, horizontal_separator,

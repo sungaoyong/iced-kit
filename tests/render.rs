@@ -2647,3 +2647,63 @@ fn breadcrumb_and_stepper_render() {
         false,
     );
 }
+
+/// A description list in both layouts, a status bar, links, a copy button and
+/// a rating.
+#[test]
+fn details_components_render() {
+    use iced_kit::widgets::{
+        clipboard_button, description_list, link, muted_text, rating, status_bar, Description,
+        DescriptionLayout, Link, Rating,
+    };
+
+    let vertical: Element<'_, Message, Theme> = description_list(vec![
+        Description::new("Name").value("Ada Lovelace"),
+        Description::new("Role").value("Mathematician"),
+    ])
+    .bordered(true)
+    .into();
+
+    let horizontal: Element<'_, Message, Theme> = description_list(vec![
+        Description::new("Email").value("ada@example.com"),
+        Description::new("Notes")
+            .value("The first programmer.")
+            .span(2),
+    ])
+    .layout(DescriptionLayout::Horizontal)
+    .bordered(true)
+    .into();
+
+    let bar: Element<'_, Message, Theme> = status_bar()
+        .left(muted_text("main.rs"))
+        .center(muted_text("Ln 12, Col 4"))
+        .right(muted_text("UTF-8"))
+        .into();
+
+    let links: Element<'_, Message, Theme> = row![
+        Link::<Message>::new("Documentation")
+            .href("https://iced.rs")
+            .on_press(Message::Noop),
+        link::<Message>("Disabled").disabled(true),
+    ]
+    .spacing(12)
+    .into();
+
+    let copy: Element<'_, Message, Theme> = clipboard_button::<Message>("cargo test")
+        .label("Copy command")
+        .on_copy(|_| Message::Noop)
+        .into();
+
+    let ratings: Element<'_, Message, Theme> = row![
+        Rating::<Message>::new(3).on_select(|_| Message::Noop),
+        rating::<Message>(5),
+    ]
+    .spacing(16)
+    .into();
+
+    assert_renders(
+        "details",
+        column![vertical, horizontal, links, copy, ratings, bar].spacing(16),
+        false,
+    );
+}
