@@ -204,7 +204,7 @@ impl<'a, M: 'a> Default for MessageContent<'a, M> {
 
 impl<'a, M: 'a> From<MessageContent<'a, M>> for Element<'a, M, Theme> {
     fn from(content: MessageContent<'a, M>) -> Self {
-        let mut col = column![].spacing(4);
+        let mut col = column![].spacing(4).width(Length::Fill);
         if let Some(bubble) = content.bubble {
             col = col.push(bubble);
         }

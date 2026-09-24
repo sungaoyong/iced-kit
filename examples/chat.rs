@@ -124,7 +124,7 @@ impl App {
         };
 
         let scroller = MessageScroller::new(&self.messages, &self.scroller, line_row)
-            .row_height(132.0)
+            .row_height(116.0)
             .jump_button(true)
             .with_bottom_fade(Some(fade))
             .on_scroll(Message::Scrolled)
@@ -251,9 +251,13 @@ fn line_row(line: &Line, index: usize) -> Element<'_, Message, Theme> {
     if line.author == Author::Bot {
         message = message.avatar(avatar("AI", 30));
     }
-    // The scroller gives every row a fixed cell, so the message gets its own
-    // vertical breathing room instead of bubbles butting up against each other.
-    container(message).padding([12.0, 4.0]).into()
+    // The scroller gives every row a fixed cell; centring the message in it
+    // keeps the bubbles evenly spaced instead of hugging the top edge.
+    container(message)
+        .height(Length::Fill)
+        .align_y(Alignment::Center)
+        .padding([6.0, 6.0])
+        .into()
 }
 
 /// The initial transcript, sized to make virtualization meaningful.
@@ -263,11 +267,9 @@ fn seed(count: usize) -> Vec<Line> {
             author: if i % 2 == 0 { Author::Bot } else { Author::Me },
             text: format!("Message #{i} — the quick brown fox jumps over the lazy dog."),
             footer: format!("{:02}:{:02}", (i / 6) % 24, i % 60),
-            attachment: if i % 20 == 4 {
-                Some(AttachmentStatus::Uploading)
-            } else {
-                None
-            },
+            // Keep the scrolling transcript uniform in height; attachments are
+            // demonstrated in the showcase strip above instead.
+            attachment: None,
         })
         .collect()
 }

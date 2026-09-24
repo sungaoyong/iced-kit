@@ -191,7 +191,21 @@ impl<'a, Message: 'a> Default for Bubble<'a, Message> {
 impl<'a, Message: 'a> From<Bubble<'a, Message>> for Element<'a, Message, Theme> {
     fn from(bubble: Bubble<'a, Message>) -> Self {
         let variant = bubble.variant;
-        let body = column(bubble.children).spacing(4).width(Length::Fill);
+        let edge = match bubble.alignment {
+            MessageAlignment::Start => Alignment::Start,
+            MessageAlignment::End => Alignment::End,
+        };
+
+        // Without an explicit cap the surface hugs its text; with one, the body
+        // fills the cap so long messages wrap instead of overflowing. A `Fill`
+        // body inside a `Shrink` stack would collapse to nothing, so the two
+        // widths have to move together.
+        let (body_width, stack_width) = match bubble.max_width {
+            Some(width) => (Length::Fill, Length::Fixed(width)),
+            None => (Length::Shrink, Length::Shrink),
+        };
+
+        let body = column(bubble.children).spacing(4).width(body_width);
 
         // Ghost has no surface at all; the others wrap the body in a styled
         // container so its text color flows into descendants.
@@ -199,45 +213,30 @@ impl<'a, Message: 'a> From<Bubble<'a, Message>> for Element<'a, Message, Theme> 
             body.into()
         } else {
             container(body)
+                .width(body_width)
                 .padding(Padding::from([8.0, 12.0]))
                 .class(Box::new(move |theme: &Theme| bubble_style(theme, variant))
                     as iced::widget::container::StyleFn<'a, Theme>)
                 .into()
         };
 
-        let mut stack = column![surface].spacing(4).width(Length::Shrink);
+        let mut stack = column![surface].spacing(4).width(stack_width);
         if let Some(reactions) = bubble.reactions {
             if !reactions.children.is_empty() {
                 let cluster: Element<'a, Message, Theme> =
                     row(reactions.children).spacing(4).into();
-                let edge = match bubble.alignment {
-                    MessageAlignment::Start => Alignment::Start,
-                    MessageAlignment::End => Alignment::End,
-                };
                 stack = match reactions.side {
                     BubbleReactionSide::Top => column![cluster, stack].align_x(edge),
                     BubbleReactionSide::Bottom => column![stack, cluster].align_x(edge),
                 }
                 .spacing(4)
-                .width(Length::Shrink);
+                .width(stack_width);
             }
         }
 
-        // A capped width lets long messages wrap instead of filling the row;
-        // otherwise the stack shrinks to its content so the outer container can
-        // push it to the leading or trailing edge.
-        let sized = match bubble.max_width {
-            Some(width) => stack.width(Length::Fixed(width)),
-            None => stack,
-        };
-
-        container(sized)
-            .width(Length::Fill)
-            .align_x(match bubble.alignment {
-                MessageAlignment::Start => Alignment::Start,
-                MessageAlignment::End => Alignment::End,
-            })
-            .into()
+        // The outer container spans the row so it can push the shrunken stack
+        // to the leading or trailing edge.
+        container(stack).width(Length::Fill).align_x(edge).into()
     }
 }
 
