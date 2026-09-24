@@ -48,7 +48,10 @@ pub use enter::EnterFrom;
 pub use menu::OpenFlag;
 pub use popover::{ContextMenu, Popover, PopoverPlacement};
 pub use toast::{Toast, ToastKind, ToastPlacement, Toasts};
-pub use tooltip::{tooltip, tooltip_at, tooltip_bubble, TooltipPosition};
+pub use tooltip::{
+    tooltip, tooltip_at, tooltip_at_with_shortcut, tooltip_bubble, tooltip_bubble_with_shortcut,
+    tooltip_with_shortcut, TooltipPosition,
+};
 
 pub(crate) use enter::Enter;
 

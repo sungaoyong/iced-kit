@@ -72,7 +72,8 @@ pub use navigation::{
 pub use number::{number_input, otp_input, NumberInput, OtpInput};
 pub use overlay::{
     dialog_actions, dialog_close, dialog_description, dialog_title, header_with_icon, tooltip,
-    tooltip_at, tooltip_bubble, AlertDialog, AlertTone, ContextMenu, Dialog, DialogButtonProps,
+    tooltip_at, tooltip_at_with_shortcut, tooltip_bubble, tooltip_bubble_with_shortcut,
+    tooltip_with_shortcut, AlertDialog, AlertTone, ContextMenu, Dialog, DialogButtonProps,
     DialogContent, DialogFooter, DialogHeader, DialogWidth, Drawer, DrawerSide, DrawerSize,
     Dropdown, DropdownAlign, Layer, MenuItem, Modal, Popover, PopoverPlacement, Toast, ToastKind,
     ToastPlacement, Toasts, TooltipPosition,
