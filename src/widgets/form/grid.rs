@@ -9,12 +9,13 @@
 //! first, the rest flowing in order and never going back to fill a hole — can
 //! be tested without rendering.
 
-#![allow(dead_code)] // 移除于 Task 2（place_cells 被 Grid 消费后）
-
 use std::collections::BTreeSet;
 
 use crate::theme::Theme;
-use iced::Element;
+use iced::advanced::layout::{self, Limits, Node};
+use iced::advanced::widget::{tree, Operation};
+use iced::advanced::{mouse, Clipboard, Shell, Widget};
+use iced::{Element, Length, Point, Rectangle, Size, Vector};
 
 /// One slot in the grid: an element plus where it wants to sit.
 pub(crate) struct GridCell<'a, Message> {
@@ -141,6 +142,255 @@ fn resolve_span(spec: CellSpec, columns: u16) -> u16 {
     }
 }
 
+/// The form's grid: equal columns, rows sized by their tallest cell.
+pub(crate) struct Grid<'a, Message> {
+    columns: usize,
+    row_spacing: f32,
+    column_spacing: f32,
+    pub(super) cells: Vec<GridCell<'a, Message>>,
+}
+
+impl<'a, Message> Grid<'a, Message> {
+    pub(crate) fn new(columns: usize, row_spacing: f32, column_spacing: f32) -> Self {
+        Self {
+            columns: columns.max(1),
+            row_spacing,
+            column_spacing,
+            cells: Vec::new(),
+        }
+    }
+
+    pub(crate) fn push(mut self, cell: GridCell<'a, Message>) -> Self {
+        self.cells.push(cell);
+        self
+    }
+}
+
+impl<'a, Message: 'a> From<Grid<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(grid: Grid<'a, Message>) -> Self {
+        Element::new(grid)
+    }
+}
+
+impl<Message> Widget<Message, Theme, iced::Renderer> for Grid<'_, Message> {
+    fn size(&self) -> Size<Length> {
+        // A form fills the width it is given, like the reference's `w_full`.
+        Size::new(Length::Fill, Length::Shrink)
+    }
+
+    fn children(&self) -> Vec<tree::Tree> {
+        self.cells
+            .iter()
+            .map(|cell| tree::Tree::new(&cell.content))
+            .collect()
+    }
+
+    fn diff(&self, tree: &mut tree::Tree) {
+        let contents: Vec<&Element<'_, Message, Theme>> =
+            self.cells.iter().map(|cell| &cell.content).collect();
+        tree.diff_children(&contents);
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut tree::Tree,
+        renderer: &iced::Renderer,
+        limits: &Limits,
+    ) -> Node {
+        let width = limits.max().width;
+        let columns = self.columns as u16;
+
+        let specs: Vec<CellSpec> = self
+            .cells
+            .iter()
+            .map(|cell| CellSpec {
+                span: cell.span,
+                start: cell.start,
+                end: cell.end,
+            })
+            .collect();
+        let placements = place_cells(&specs, columns);
+
+        let usable = (width - self.column_spacing * (columns - 1) as f32).max(0.0);
+        let column_width = usable / columns as f32;
+        // A spanned cell covers its columns *and* the gaps between them.
+        let spanned_width =
+            |span: u16| column_width * span as f32 + self.column_spacing * (span - 1) as f32;
+
+        // Lay every cell out at its spanned width, recording row heights.
+        let mut heights: Vec<f32> = Vec::new();
+        let mut laid_out = Vec::with_capacity(self.cells.len());
+        for (index, cell) in self.cells.iter_mut().enumerate() {
+            let placement = placements[index];
+            let cell_width = spanned_width(placement.span);
+            let cell_limits = Limits::new(
+                Size::new(cell_width, 0.0),
+                Size::new(cell_width, f32::INFINITY),
+            );
+            let node = cell.content.as_widget_mut().layout(
+                &mut tree.children[index],
+                renderer,
+                &cell_limits,
+            );
+            while heights.len() <= placement.row {
+                heights.push(0.0);
+            }
+            heights[placement.row] = heights[placement.row].max(node.size().height);
+            laid_out.push((placement, node));
+        }
+
+        // Rows top to bottom, cells left to right within their row.
+        let mut row_tops = Vec::with_capacity(heights.len());
+        let mut y = 0.0;
+        for height in &heights {
+            row_tops.push(y);
+            y += height + self.row_spacing;
+        }
+        let total_height = (y - self.row_spacing).max(0.0);
+
+        let children = laid_out
+            .into_iter()
+            .map(|(placement, node)| {
+                let x = placement.column as f32 * (column_width + self.column_spacing);
+                node.move_to(Point::new(x, row_tops[placement.row]))
+            })
+            .collect();
+
+        Node::with_children(Size::new(width, total_height), children)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut tree::Tree,
+        layout: layout::Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+        for (index, cell) in self.cells.iter_mut().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+            cell.content.as_widget_mut().operate(
+                &mut tree.children[index],
+                child_layout,
+                renderer,
+                operation,
+            );
+        }
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut tree::Tree,
+        event: &iced::Event,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+        for (index, cell) in self.cells.iter_mut().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+            cell.content.as_widget_mut().update(
+                &mut tree.children[index],
+                event,
+                child_layout,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        }
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &iced::advanced::renderer::Style,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+        for (index, cell) in self.cells.iter().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+            cell.content.as_widget().draw(
+                &tree.children[index],
+                renderer,
+                theme,
+                style,
+                child_layout,
+                cursor,
+                viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &tree::Tree,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+        for (index, cell) in self.cells.iter().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+            let interaction = cell.content.as_widget().mouse_interaction(
+                &tree.children[index],
+                child_layout,
+                cursor,
+                viewport,
+                renderer,
+            );
+            if interaction != mouse::Interaction::None {
+                return interaction;
+            }
+        }
+        mouse::Interaction::None
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut tree::Tree,
+        layout: layout::Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, Message, Theme, iced::Renderer>> {
+        // Mirrors `overlay::from_children`, which the cells cannot be handed
+        // to directly: each cell wraps its element in a grid placement, and
+        // the helper wants a bare `&mut [Element]`.
+        let overlays = self
+            .cells
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+            .filter_map(|((cell, tree), layout)| {
+                cell.content
+                    .as_widget_mut()
+                    .overlay(tree, layout, renderer, viewport, translation)
+            })
+            .collect::<Vec<_>>();
+
+        (!overlays.is_empty())
+            .then(|| iced::advanced::overlay::Group::with_children(overlays).overlay())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CellSpec, Placement, place_cells, resolve_span};
@@ -232,5 +482,21 @@ mod tests {
     fn zero_columns_is_treated_as_one() {
         let placed = placed(&place_cells(&plain(2), 0));
         assert_eq!(placed, vec![(0, 0, 1), (1, 0, 1)]);
+    }
+
+    #[test]
+    fn a_grid_constructs_into_an_element() {
+        use super::{Grid, GridCell};
+        use crate::theme::Theme;
+        use iced::widget::text;
+
+        let grid: Grid<'_, ()> = Grid::new(2, 8.0, 24.0).push(GridCell {
+            span: 1,
+            start: None,
+            end: None,
+            content: text("a").into(),
+        });
+        let element: iced::Element<'_, (), Theme, iced::Renderer> = grid.into();
+        drop(element);
     }
 }
