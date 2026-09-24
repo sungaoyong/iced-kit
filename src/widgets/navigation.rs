@@ -434,6 +434,140 @@ fn header_style(
     }
 }
 
+/// One title in an [`app_menu_bar`].
+#[derive(Debug, Clone)]
+#[must_use = "a MenuTitle does nothing unless it is given to `app_menu_bar`"]
+pub struct MenuTitle {
+    label: String,
+    enabled: bool,
+}
+
+impl MenuTitle {
+    /// Creates an enabled menu title.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            enabled: true,
+        }
+    }
+
+    /// Enables or disables the title.
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    /// The title's label.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Whether the title can be opened.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
+/// A horizontal application menu bar: File, Edit, View, and so on.
+///
+/// # Opening a menu
+///
+/// The bar reports which title was pressed rather than holding a menu of its
+/// own. iced has no window-level z-order, so a dropdown is positioned by the
+/// application and drawn through the
+/// [`Layer`](crate::widgets::overlay::Layer) — the same division of labour as
+/// [`DropdownButton`](crate::widgets::button::DropdownButton). `open` names the
+/// title whose menu is showing, so the bar can mark it while it is open.
+///
+/// ```
+/// # use iced_kit::widgets::{app_menu_bar, MenuTitle};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Open(usize), Closed }
+/// # fn view(open: Option<usize>) -> Element<'static, Message, Theme> {
+/// app_menu_bar(
+///     vec![MenuTitle::new("File"), MenuTitle::new("Edit")],
+///     open,
+///     Message::Open,
+/// )
+/// # }
+/// ```
+pub fn app_menu_bar<'a, Message: Clone + 'a>(
+    titles: Vec<MenuTitle>,
+    open: Option<usize>,
+    on_open: impl Fn(usize) -> Message + 'a,
+) -> Element<'a, Message, Theme> {
+    let text_style = Size::Sm.text();
+    let height = Size::Sm.height();
+    let count = titles.len();
+
+    let mut strip = row![].spacing(0).align_y(iced::Alignment::Center);
+
+    for (index, title) in titles.into_iter().enumerate() {
+        let is_open = open == Some(index);
+        let label = title.label.clone();
+
+        let mut widget = button(
+            text(label)
+                .size(text_style.size)
+                .line_height(iced::Pixels(height.max(text_style.line_height))),
+        )
+        .padding(Padding {
+            top: 0.0,
+            right: 10.0,
+            bottom: 0.0,
+            left: 10.0,
+        })
+        .height(Length::Fixed(height))
+        .class(Box::new(move |theme: &Theme, status| {
+            menu_title_style(theme, status, is_open)
+        }) as button::StyleFn<'a, Theme>);
+
+        if title.enabled {
+            widget = widget.on_press(on_open(index));
+        }
+
+        strip = strip.push(widget);
+    }
+
+    // A stale index marks nothing rather than panicking on a missing title.
+    let _ = (count, open);
+
+    strip.into()
+}
+
+/// The appearance of a menu bar title.
+fn menu_title_style(theme: &Theme, status: button::Status, is_open: bool) -> button::Style {
+    let colors = theme.colors();
+    let hovered = matches!(status, button::Status::Hovered);
+    let disabled = matches!(status, button::Status::Disabled);
+
+    button::Style {
+        // An open title stays highlighted, so the bar shows which menu the
+        // dropdown below it belongs to.
+        background: (hovered || is_open).then_some(iced::Background::Color(colors.accent)),
+        text_color: if disabled {
+            Color {
+                a: colors.muted_foreground.a * 0.6,
+                ..colors.muted_foreground
+            }
+        } else if is_open {
+            colors.accent_foreground
+        } else {
+            colors.foreground
+        },
+        border: iced::Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: f32::from(theme.radius().sm).into(),
+        },
+        shadow: iced::Shadow::default(),
+        snap: true,
+    }
+}
+
 /// Builds a pagination control.
 ///
 /// `page` is zero-based. Emits the requested page index when a control is
@@ -608,7 +742,8 @@ fn page_window(page: usize, total: usize) -> Vec<Option<usize>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        accordion, accordion_builder, page_button, page_window, pagination, Accordion, Section,
+        accordion, accordion_builder, app_menu_bar, page_button, page_window, pagination,
+        Accordion, MenuTitle, Section,
     };
     use crate::icons::IconName;
     use crate::theme::{Size, Theme};
@@ -806,5 +941,49 @@ mod tests {
         );
 
         drop(element);
+    }
+
+    #[test]
+    fn a_menu_title_keeps_its_label_and_flag() {
+        let title = MenuTitle::new("File");
+        assert_eq!(title.label(), "File");
+        assert!(title.is_enabled());
+
+        assert!(!MenuTitle::new("Edit").enabled(false).is_enabled());
+    }
+
+    #[test]
+    fn a_menu_bar_renders_with_and_without_an_open_title() {
+        #[derive(Debug, Clone, PartialEq)]
+        enum Event {
+            Open(usize),
+        }
+
+        for open in [None, Some(0), Some(1), Some(99)] {
+            let element: iced::Element<'_, Event, Theme> = app_menu_bar(
+                vec![MenuTitle::new("File"), MenuTitle::new("Edit")],
+                open,
+                Event::Open,
+            );
+            drop(element);
+        }
+
+        // An empty bar is valid, if pointless.
+        let empty: iced::Element<'_, Event, Theme> = app_menu_bar(vec![], None, Event::Open);
+        drop(empty);
+    }
+
+    #[test]
+    fn an_open_menu_title_is_highlighted() {
+        use iced::widget::button::Status;
+
+        let theme = Theme::light();
+        let open = super::menu_title_style(&theme, Status::Active, true);
+        let closed = super::menu_title_style(&theme, Status::Active, false);
+
+        assert!(open.background.is_some(), "an open title must be marked");
+        assert!(closed.background.is_none(), "a closed title must not be");
+        assert_eq!(open.text_color, theme.colors().accent_foreground);
+        assert_eq!(closed.text_color, theme.colors().foreground);
     }
 }

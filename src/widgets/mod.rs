@@ -66,7 +66,8 @@ pub use input::{
 pub use list::{list, tag, ListItem};
 pub use markdown::Markdown as MarkdownDocument;
 pub use navigation::{
-    accordion, accordion_builder, pagination, Accordion, Section as AccordionSection,
+    accordion, accordion_builder, app_menu_bar, pagination, Accordion, MenuTitle,
+    Section as AccordionSection,
 };
 pub use number::{number_input, otp_input, NumberInput, OtpInput};
 pub use overlay::{

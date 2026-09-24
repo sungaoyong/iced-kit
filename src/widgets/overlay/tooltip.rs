@@ -6,7 +6,7 @@
 
 use crate::theme::{Size, Theme};
 use crate::widgets::overlay::floating_shadow;
-use iced::widget::{container, text, tooltip as iced_tooltip};
+use iced::widget::{container, row, text, tooltip as iced_tooltip};
 use iced::{Color, Element, Length, Padding};
 
 /// Where a tooltip appears relative to its target.
@@ -68,6 +68,95 @@ pub fn tooltip_at<'a, Message: 'a>(
         .into()
 }
 
+/// Wraps `content` in a tooltip that also names a keyboard shortcut.
+///
+/// The keys are drawn after the label in a key-cap face, which is what tells a
+/// reader that the action has a binding rather than merely being available.
+///
+/// ```
+/// # use iced_kit::widgets::{button, tooltip_with_shortcut};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Save }
+/// # fn view() -> Element<'static, Message, Theme> {
+/// tooltip_with_shortcut(
+///     button("Save").primary().on_press(Message::Save),
+///     "Save the document",
+///     &["Ctrl", "S"],
+/// )
+/// # }
+/// ```
+pub fn tooltip_with_shortcut<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message, Theme>>,
+    label: &str,
+    keys: &[&'a str],
+) -> Element<'a, Message, Theme> {
+    tooltip_at_with_shortcut(content, label, keys, TooltipPosition::default())
+}
+
+/// Wraps `content` in a shortcut-bearing tooltip at an explicit position.
+pub fn tooltip_at_with_shortcut<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message, Theme>>,
+    label: &str,
+    keys: &[&'a str],
+    position: TooltipPosition,
+) -> Element<'a, Message, Theme> {
+    iced_tooltip(
+        content,
+        tooltip_bubble_with_shortcut(label, keys),
+        position.into(),
+    )
+    .gap(6)
+    .delay(std::time::Duration::from_millis(400))
+    .snap_within_viewport(true)
+    .into()
+}
+
+/// Builds a tooltip bubble carrying a label and a keyboard shortcut.
+#[must_use]
+pub fn tooltip_bubble_with_shortcut<'a, Message: 'a>(
+    label: &str,
+    keys: &[&'a str],
+) -> Element<'a, Message, Theme> {
+    let style = Size::Sm.text();
+    let mut content = row![].spacing(8).align_y(iced::Alignment::Center).push(
+        text(label.to_owned())
+            .size(style.size)
+            .line_height(style.line_height()),
+    );
+
+    if !keys.is_empty() {
+        let keys: Element<'a, Message, Theme> = crate::widgets::shortcut::<Message>(keys);
+        content = content.push(keys);
+    }
+
+    container(content)
+        .padding(Padding {
+            top: 6.0,
+            right: 10.0,
+            bottom: 6.0,
+            left: 10.0,
+        })
+        .max_width(360.0)
+        .class(Box::new(|theme: &Theme| {
+            let colors = theme.colors();
+
+            container::Style {
+                background: Some(iced::Background::Color(colors.foreground)),
+                border: iced::Border {
+                    color: Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: f32::from(theme.radius().sm).into(),
+                },
+                shadow: floating_shadow(theme),
+                text_color: Some(colors.background),
+                ..container::Style::default()
+            }
+        }) as container::StyleFn<'a, Theme>)
+        .width(Length::Shrink)
+        .into()
+}
+
 /// Builds the tooltip bubble itself, so callers can compose it directly.
 #[must_use]
 pub fn tooltip_bubble<'a, Message: 'a>(label: String) -> Element<'a, Message, Theme> {
@@ -108,7 +197,10 @@ pub fn tooltip_bubble<'a, Message: 'a>(label: String) -> Element<'a, Message, Th
 
 #[cfg(test)]
 mod tests {
-    use super::{tooltip, tooltip_at, tooltip_bubble, TooltipPosition};
+    use super::{
+        tooltip, tooltip_at, tooltip_bubble, tooltip_bubble_with_shortcut, tooltip_with_shortcut,
+        TooltipPosition,
+    };
     use crate::theme::Theme;
     use crate::widgets::button;
 
@@ -156,5 +248,25 @@ mod tests {
         assert_eq!(Position::from(TooltipPosition::Bottom), Position::Bottom);
         assert_eq!(Position::from(TooltipPosition::Left), Position::Left);
         assert_eq!(Position::from(TooltipPosition::Right), Position::Right);
+    }
+
+    #[test]
+    fn a_shortcut_tooltip_renders_with_and_without_keys() {
+        let target: iced::Element<'_, Message, Theme> = button("Save").into();
+
+        let with_keys: iced::Element<'_, Message, Theme> =
+            tooltip_with_shortcut(target, "Save the document", &["Ctrl", "S"]);
+        drop(with_keys);
+
+        let without_keys: iced::Element<'_, Message, Theme> =
+            tooltip_with_shortcut(button("Undo"), "Undo", &[]);
+        drop(without_keys);
+    }
+
+    #[test]
+    fn a_shortcut_bubble_renders_directly() {
+        let element: iced::Element<'_, Message, Theme> =
+            tooltip_bubble_with_shortcut("Save", &["Ctrl", "S"]);
+        drop(element);
     }
 }
