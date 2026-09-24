@@ -213,8 +213,8 @@ impl<'a, Message: Clone + 'a> Accordion<'a, Message> {
         build_accordion_with(
             sections,
             &open,
-            on_toggle,
-            body,
+            on_toggle.as_ref(),
+            body.as_ref(),
             AccordionStyle {
                 bordered,
                 disabled,
@@ -248,8 +248,8 @@ fn build_accordion<'a, Message: Clone + 'a>(
     build_accordion_with(
         sections,
         open,
-        Box::new(on_toggle),
-        Box::new(body),
+        &on_toggle,
+        &body,
         AccordionStyle {
             bordered: true,
             disabled: false,
@@ -262,8 +262,8 @@ fn build_accordion<'a, Message: Clone + 'a>(
 fn build_accordion_with<'a, Message: Clone + 'a>(
     sections: Vec<Section>,
     open: &[usize],
-    on_toggle: Box<dyn Fn(usize) -> Message + 'a>,
-    body: Box<dyn Fn(usize) -> Element<'a, Message, Theme> + 'a>,
+    on_toggle: &(dyn Fn(usize) -> Message + 'a),
+    body: &(dyn Fn(usize) -> Element<'a, Message, Theme> + 'a),
     style: AccordionStyle,
 ) -> Element<'a, Message, Theme> {
     let AccordionStyle {

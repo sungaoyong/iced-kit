@@ -161,6 +161,7 @@ pub struct Column<'a, T, Message> {
     width: Width,
     align: Alignment,
     resizable: bool,
+    fixed: bool,
 }
 
 impl<'a, T, Message: Clone + 'a> Column<'a, T, Message> {
@@ -178,7 +179,25 @@ impl<'a, T, Message: Clone + 'a> Column<'a, T, Message> {
             // Allowing every column to be dragged would make the common case
             // (one flexible column that absorbs slack) fiddly to set up.
             resizable: false,
+            fixed: false,
         }
+    }
+
+    /// Pins the column to the table's leading edge.
+    ///
+    /// A fixed column does not scroll with the rest: the data area is split in
+    /// two, the fixed columns on the left and the scrolling remainder beside
+    /// them. Column order is what decides which fixed columns come first, so a
+    /// fixed column should be declared before the scrolling ones.
+    pub fn fixed(mut self, fixed: bool) -> Self {
+        self.fixed = fixed;
+        self
+    }
+
+    /// Whether the column is pinned.
+    #[must_use]
+    pub fn is_fixed(&self) -> bool {
+        self.fixed
     }
 
     /// Sets the column's width.
@@ -221,6 +240,40 @@ impl<'a, T, Message: Clone + 'a> Column<'a, T, Message> {
     #[must_use]
     pub fn is_resizable(&self) -> bool {
         self.resizable
+    }
+}
+
+/// A heading that spans several adjacent columns.
+///
+/// Groups are declared in order and consume the next `span` columns, so the
+/// groups must account for every column or the header rows lose alignment:
+/// a table with five columns is grouped by spans that add up to five.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "a ColumnGroup does nothing unless it is given to a DataTable"]
+pub struct ColumnGroup {
+    label: String,
+    span: usize,
+}
+
+impl ColumnGroup {
+    /// Creates a group spanning `span` columns.
+    pub fn new(label: impl Into<String>, span: usize) -> Self {
+        Self {
+            label: label.into(),
+            span: span.max(1),
+        }
+    }
+
+    /// The group's heading text.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// How many columns the group covers.
+    #[must_use]
+    pub fn span(&self) -> usize {
+        self.span
     }
 }
 
@@ -341,6 +394,10 @@ pub struct DataTable<'a, T, Message> {
     on_row_click: Option<Box<dyn Fn(usize) -> Message + 'a>>,
     /// The application's own list state, for virtualization.
     list_state: &'a crate::widgets::VirtualListState,
+    /// Optional heading groups drawn in a row above the column headings.
+    column_groups: Vec<ColumnGroup>,
+    /// When set, the body is replaced by this many skeleton rows.
+    loading: Option<usize>,
 }
 
 impl<'a, T: 'a, Message: Clone + 'a> DataTable<'a, T, Message> {
@@ -360,7 +417,43 @@ impl<'a, T: 'a, Message: Clone + 'a> DataTable<'a, T, Message> {
             on_sort: None,
             on_row_click: None,
             list_state: &EMPTY_LIST_STATE,
+            column_groups: Vec::new(),
+            loading: None,
         }
+    }
+
+    /// Groups the column headings under spanning labels.
+    ///
+    /// The groups are drawn as an extra header row and are expected to cover
+    /// every column in order; see [`ColumnGroup`].
+    pub fn column_groups(mut self, groups: impl IntoIterator<Item = ColumnGroup>) -> Self {
+        self.column_groups = groups.into_iter().collect();
+        self
+    }
+
+    /// Replaces the body with skeleton rows while the data is being fetched.
+    ///
+    /// The columns still decide the header, so the table keeps its shape rather
+    /// than collapsing to a spinner. Passing `0` shows the header alone.
+    pub fn loading(mut self, rows: usize) -> Self {
+        self.loading = Some(rows);
+        self
+    }
+
+    /// Whether the table is showing skeleton rows.
+    #[must_use]
+    pub fn is_loading(&self) -> bool {
+        self.loading.is_some()
+    }
+
+    /// The columns pinned to the leading edge, in declaration order.
+    fn fixed_columns(&self) -> Vec<&Column<'a, T, Message>> {
+        self.columns.iter().filter(|column| column.fixed).collect()
+    }
+
+    /// The columns that scroll with the data area.
+    fn scrolling_columns(&self) -> Vec<&Column<'a, T, Message>> {
+        self.columns.iter().filter(|column| !column.fixed).collect()
     }
 
     /// Sets the height of each row.
@@ -408,61 +501,172 @@ impl<'a, T: 'a, Message: Clone + 'a> DataTable<'a, T, Message> {
         self.state.order(self.rows, &self.columns)
     }
 
-    /// Builds the header row.
-    fn header(&self) -> Element<'a, Message, Theme> {
-        let heading_style = Size::Sm.text();
+    /// Builds the group heading row, when groups are declared.
+    ///
+    /// Spans are taken in order, each group consuming the next `span` columns.
+    /// A group that runs past the last column is clamped, so a short group list
+    /// cannot push the row out of alignment.
+    fn group_row(&self) -> Option<Element<'a, Message, Theme>> {
+        if self.column_groups.is_empty() {
+            return None;
+        }
+
+        let heading_style = Size::Xs.text();
         let mut cells = row![].spacing(0).width(Length::Fill);
+        let mut next = 0;
 
-        for column in &self.columns {
-            let width = self
-                .state
-                .width_of(&column.heading)
-                .map_or(column.width, Width::Fixed);
-
-            let sorted = self
-                .state
-                .sort()
-                .filter(|(heading, _)| *heading == column.heading);
-
-            let mut label = row![text(column.heading.clone())
-                .size(heading_style.size)
-                .line_height(heading_style.line_height())
-                .width(Length::Fill)]
-            .spacing(4)
-            .align_y(Alignment::Center);
-
-            if let Some((_, direction)) = sorted {
-                label = label.push(text(direction.arrow()).size(heading_style.size - 3.0));
+        for group in &self.column_groups {
+            if next >= self.columns.len() {
+                break;
             }
 
-            let heading_text = column.heading.clone();
-            let is_sorted = sorted.is_some();
-            let can_sort = column.is_sortable();
+            let span = group.span.min(self.columns.len() - next);
 
-            let mut widget = button(
-                container(label)
-                    .width(Length::Fill)
-                    .align_y(Alignment::Center),
-            )
-            .width(width.as_length())
-            .height(Length::Fixed(self.row_height))
-            .padding(Padding {
-                top: 0.0,
-                right: 8.0,
-                bottom: 0.0,
-                left: 8.0,
-            })
-            .class(Box::new(move |theme: &Theme, status| {
-                header_cell_style(theme, status, is_sorted, can_sort)
-            }) as button::StyleFn<'a, Theme>);
+            // A group's width is what its columns take, so the two header rows
+            // line up. A group spanning the whole row is the full width rather
+            // than the sum of its columns' fill, which would leave the last
+            // column's slack unaccounted for.
+            let covers_all = span == self.columns.len();
 
-            if can_sort {
-                if let Some(on_sort) = self.on_sort.as_ref() {
-                    widget = widget.on_press(on_sort(heading_text));
+            let mut width = 0.0;
+            let mut fill_portion = 0;
+            let mut all_fixed = true;
+
+            for column in &self.columns[next..next + span] {
+                match self
+                    .state
+                    .width_of(&column.heading)
+                    .map_or(column.width, Width::Fixed)
+                {
+                    Width::Fixed(pixels) => width += pixels,
+                    Width::Fill => {
+                        all_fixed = false;
+                        fill_portion += 1;
+                    }
+                    Width::FillPortion(portion) => {
+                        all_fixed = false;
+                        fill_portion += portion;
+                    }
                 }
             }
 
-            cells = cells.push(widget);
+            let length = if covers_all {
+                Length::Fill
+            } else if all_fixed {
+                Length::Fixed(width)
+            } else {
+                Length::FillPortion(fill_portion.max(1))
+            };
+
+            cells = cells.push(
+                container(
+                    text(group.label.clone())
+                        .size(heading_style.size)
+                        .line_height(heading_style.line_height()),
+                )
+                .width(length)
+                .height(Length::Fixed(self.row_height))
+                .align_y(Alignment::Center)
+                .padding(Padding {
+                    top: 0.0,
+                    right: 8.0,
+                    bottom: 0.0,
+                    left: 8.0,
+                })
+                .class(Box::new(|theme: &Theme| container::Style {
+                    background: Some(iced::Background::Color(theme.colors().muted)),
+                    border: iced::Border {
+                        color: theme.colors().border,
+                        width: 0.0,
+                        radius: 0.0.into(),
+                    },
+                    text_color: Some(theme.colors().muted_foreground),
+                    ..container::Style::default()
+                }) as container::StyleFn<'a, Theme>),
+            );
+
+            next += span;
+        }
+
+        Some(
+            container(cells)
+                .width(Length::Fill)
+                .class(Box::new(|theme: &Theme| container::Style {
+                    background: Some(iced::Background::Color(theme.colors().muted)),
+                    border: iced::Border {
+                        color: theme.colors().border,
+                        width: 0.0,
+                        radius: 0.0.into(),
+                    },
+                    ..container::Style::default()
+                }) as container::StyleFn<'a, Theme>)
+                .into(),
+        )
+    }
+
+    /// Builds one header cell for `column`.
+    fn header_cell(&self, column: &Column<'a, T, Message>) -> Element<'a, Message, Theme> {
+        let heading_style = Size::Sm.text();
+
+        let width = self
+            .state
+            .width_of(&column.heading)
+            .map_or(column.width, Width::Fixed);
+
+        let sorted = self
+            .state
+            .sort()
+            .filter(|(heading, _)| *heading == column.heading);
+
+        // The label fills the cell so an end-aligned column's heading sits
+        // over its values rather than at the cell's leading edge.
+        let mut label = row![text(column.heading.clone())
+            .size(heading_style.size)
+            .line_height(heading_style.line_height())
+            .width(Length::Fill)]
+        .spacing(4)
+        .align_y(Alignment::Center);
+
+        if let Some((_, direction)) = sorted {
+            label = label.push(text(direction.arrow()).size(heading_style.size - 3.0));
+        }
+
+        let heading_text = column.heading.clone();
+        let is_sorted = sorted.is_some();
+        let can_sort = column.is_sortable();
+
+        let mut widget = button(
+            container(label)
+                .width(Length::Fill)
+                .align_y(Alignment::Center),
+        )
+        .width(width.as_length())
+        .height(Length::Fixed(self.row_height))
+        .padding(Padding {
+            top: 0.0,
+            right: 8.0,
+            bottom: 0.0,
+            left: 8.0,
+        })
+        .class(Box::new(move |theme: &Theme, status| {
+            header_cell_style(theme, status, is_sorted, can_sort)
+        }) as button::StyleFn<'a, Theme>);
+
+        if can_sort {
+            if let Some(on_sort) = self.on_sort.as_ref() {
+                widget = widget.on_press(on_sort(heading_text));
+            }
+        }
+
+        widget.into()
+    }
+
+    /// Builds a header row over `columns`.
+    fn header_row(&self, columns: &[&Column<'a, T, Message>]) -> Element<'a, Message, Theme> {
+        let mut cells = row![].spacing(0).width(Length::Fill);
+
+        for column in columns {
+            cells = cells.push(self.header_cell(column));
         }
 
         container(cells)
@@ -479,13 +683,26 @@ impl<'a, T: 'a, Message: Clone + 'a> DataTable<'a, T, Message> {
             .into()
     }
 
+    /// Builds the header row.
+    fn header(&self) -> Element<'a, Message, Theme> {
+        self.header_row(&self.columns.iter().collect::<Vec<_>>())
+    }
+
     /// Builds one body row for the data row at `row_index`.
-    fn body_row(&self, row_index: usize, stripe: bool) -> Element<'a, Message, Theme> {
+    ///
+    /// `columns` is the slice the row draws: the whole set, or the fixed half
+    /// or scrolling half of a table that pins columns.
+    fn body_row(
+        &self,
+        row_index: usize,
+        stripe: bool,
+        columns: &[&Column<'a, T, Message>],
+    ) -> Element<'a, Message, Theme> {
         let cell_style = Size::Sm.text();
         let selected = self.state.selection() == Some(row_index);
         let mut cells = row![].spacing(0).width(Length::Fill);
 
-        for column in &self.columns {
+        for column in columns {
             let width = self
                 .state
                 .width_of(&column.heading)
@@ -525,28 +742,148 @@ impl<'a, T: 'a, Message: Clone + 'a> DataTable<'a, T, Message> {
         widget.into()
     }
 
-    /// Converts the table into an [`Element`].
-    pub fn into_element(self) -> Element<'a, Message, Theme> {
-        let order = self.visible_order();
+    /// Builds the fixed half of the body: one row per visible data row, over
+    /// the pinned columns only.
+    fn fixed_body(&self, stripe: bool) -> Element<'a, Message, Theme> {
+        self.body_rows_over(&self.fixed_columns(), stripe)
+    }
 
+    /// Builds the scrolling half of the body.
+    fn scrolling_body(&self, stripe: bool) -> Element<'a, Message, Theme> {
+        self.body_rows_over(&self.scrolling_columns(), stripe)
+    }
+
+    /// Builds a body over `columns`.
+    fn body_rows_over(
+        &self,
+        columns: &[&Column<'a, T, Message>],
+        stripe: bool,
+    ) -> Element<'a, Message, Theme> {
+        let order = self.visible_order();
         let mut body = column![].spacing(0).width(Length::Fill);
 
         for (position, row_index) in order.iter().enumerate() {
-            body = body.push(self.body_row(*row_index, self.stripe && position % 2 == 1));
+            body = body.push(self.body_row(*row_index, stripe && position % 2 == 1, columns));
         }
 
-        let mut scroller = scrollable(body).width(Length::Fill);
+        body.into()
+    }
 
-        if let Some(height) = self.max_height {
-            scroller = scroller.height(Length::Fixed(height));
+    /// Builds the placeholder body shown while loading.
+    ///
+    /// Each row is one skeleton bar per column, so the table keeps the shape of
+    /// the data it is waiting for.
+    fn loading_body(&self, rows: usize) -> Element<'a, Message, Theme> {
+        let mut body = column![].spacing(0).width(Length::Fill);
+
+        for index in 0..rows {
+            let mut cells = row![].spacing(0).width(Length::Fill);
+
+            for column in &self.columns {
+                let width = self
+                    .state
+                    .width_of(&column.heading)
+                    .map_or(column.width, Width::Fixed);
+
+                // A short bar inside a full-width cell, so the placeholder
+                // reads as content rather than as a second set of borders.
+                let bar: Element<'a, Message, Theme> =
+                    crate::widgets::skeleton(crate::widgets::SkeletonShape::Block, 1);
+
+                cells = cells.push(
+                    container(bar)
+                        .width(width.as_length())
+                        .height(Length::Fixed(self.row_height))
+                        .align_y(Alignment::Center)
+                        .padding(Padding {
+                            top: 8.0,
+                            right: 8.0,
+                            bottom: 8.0,
+                            left: 8.0,
+                        }),
+                );
+            }
+
+            body = body.push(
+                container(cells.width(Length::Fill))
+                    .width(Length::Fill)
+                    .height(Length::Fixed(self.row_height))
+                    .class(Box::new(move |theme: &Theme| container::Style {
+                        border: iced::Border {
+                            color: theme.colors().border,
+                            width: 0.0,
+                            radius: 0.0.into(),
+                        },
+                        background: (stripe_row(index))
+                            .then_some(iced::Background::Color(theme.colors().surface)),
+                        ..container::Style::default()
+                    }) as container::StyleFn<'a, Theme>),
+            );
         }
 
+        body.into()
+    }
+
+    /// Converts the table into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
         let _ = self.list_state;
 
-        column![self.header(), scroller]
-            .spacing(0)
-            .width(Length::Fill)
-            .into()
+        let groups = self.group_row();
+        let has_fixed = self.columns.iter().any(|column| column.fixed);
+
+        // The body comes from the loading placeholder when one is set, and from
+        // the data otherwise. Both are built per column set so a pinned table
+        // gets two of each.
+        let body = |fixed: bool| -> Element<'a, Message, Theme> {
+            match self.loading {
+                Some(rows) => self.loading_body(rows),
+                None if fixed => self.fixed_body(self.stripe),
+                None => self.scrolling_body(self.stripe),
+            }
+        };
+
+        // Scrolling is installed even when nothing overflows: a table that can
+        // be scrolled is what the caller asked for, and iced reports a viewport
+        // of zero overflow as no scrollbar.
+        let scroller = |body: Element<'a, Message, Theme>| {
+            let mut scroller = scrollable(body).width(Length::Fill);
+            if let Some(height) = self.max_height {
+                scroller = scroller.height(Length::Fixed(height));
+            }
+            scroller
+        };
+
+        let mut root = column![].spacing(0).width(Length::Fill);
+
+        if let Some(groups) = groups {
+            root = root.push(groups);
+        }
+
+        if !has_fixed {
+            root = root.push(self.header());
+            root = root.push(scroller(body(false)));
+            return root.into();
+        }
+
+        // A table with pinned columns draws four quadrants: the fixed heading
+        // and cells stay put while the scrolling half moves beside them.
+        let fixed_header = self.header_row(&self.fixed_columns());
+        let scrolling_header = self.header_row(&self.scrolling_columns());
+
+        let mut fixed_root = column![].spacing(0);
+        fixed_root = fixed_root.push(fixed_header);
+        fixed_root = fixed_root.push(body(true));
+
+        let mut scrolling_root = column![].spacing(0).width(Length::Fill);
+        scrolling_root = scrolling_root.push(scrolling_header);
+        scrolling_root = scrolling_root.push(scroller(body(false)));
+
+        root.push(
+            row![fixed_root, scrolling_root]
+                .spacing(0)
+                .width(Length::Fill),
+        )
+        .into()
     }
 }
 
@@ -561,6 +898,11 @@ impl<'a, T: 'a, Message: Clone + 'a> From<DataTable<'a, T, Message>>
 /// A shared empty list state, so a table built without one still compiles.
 static EMPTY_LIST_STATE: crate::widgets::VirtualListState =
     crate::widgets::VirtualListState::const_empty();
+
+/// Whether a placeholder row at `index` is shaded, matching the data rows.
+fn stripe_row(index: usize) -> bool {
+    index % 2 == 1
+}
 
 /// The appearance of a header cell.
 fn header_cell_style(
@@ -680,8 +1022,8 @@ pub fn filler<'a, Message: 'a>() -> Element<'a, Message, Theme> {
 #[cfg(test)]
 mod tests {
     use super::{
-        empty_body, filler, number_cell, text_cell, Column, DataTable, SortDirection, SortKey,
-        TableState, Width,
+        empty_body, filler, number_cell, stripe_row, text_cell, Column, ColumnGroup, DataTable,
+        SortDirection, SortKey, TableState, Width,
     };
     use crate::theme::Theme;
 
@@ -1038,5 +1380,143 @@ mod tests {
                 .scroll_state(&list_state)
                 .into();
         drop(element);
+    }
+
+    #[test]
+    fn a_column_records_its_fixed_flag() {
+        let column: Column<'_, Person, Message> =
+            Column::new("Name", |person: &Person, _| text_cell(person.name.clone()));
+
+        assert!(!column.is_fixed());
+        assert!(column.fixed(true).is_fixed());
+    }
+
+    #[test]
+    fn a_column_group_reports_its_label_and_span() {
+        let group = ColumnGroup::new("Identity", 2);
+
+        assert_eq!(group.label(), "Identity");
+        assert_eq!(group.span(), 2);
+        // A zero span would place no columns at all, so it is floored at one.
+        assert_eq!(ColumnGroup::new("Empty", 0).span(), 1);
+    }
+
+    #[test]
+    fn a_table_records_its_groups_and_loading_state() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let table: DataTable<'_, Person, Message> = DataTable::new(&data, &table_state, columns())
+            .column_groups([
+                ColumnGroup::new("Identity", 1),
+                ColumnGroup::new("Details", 1),
+            ])
+            .loading(4);
+
+        assert!(table.is_loading());
+        assert_eq!(table.column_groups.len(), 2);
+        assert_eq!(table.loading, Some(4));
+    }
+
+    /// A table that is not loading must not draw placeholder rows.
+    #[test]
+    fn loading_is_off_unless_asked_for() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let table: DataTable<'_, Person, Message> = DataTable::new(&data, &table_state, columns());
+        assert!(!table.is_loading());
+        assert!(table.column_groups.is_empty());
+    }
+
+    #[test]
+    fn the_column_halves_partition_the_columns() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let table: DataTable<'_, Person, Message> = DataTable::new(
+            &data,
+            &table_state,
+            vec![
+                Column::new("Name", |person: &Person, _| text_cell(person.name.clone()))
+                    .fixed(true),
+                Column::new("Age", |person: &Person, _| number_cell(person.age)),
+            ],
+        );
+
+        assert_eq!(table.fixed_columns().len(), 1);
+        assert_eq!(table.fixed_columns()[0].heading(), "Name");
+        assert_eq!(table.scrolling_columns().len(), 1);
+        assert_eq!(table.scrolling_columns()[0].heading(), "Age");
+    }
+
+    #[test]
+    fn a_pinned_column_renders_in_the_split_table() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let element: iced::Element<'_, Message, Theme> = DataTable::new(
+            &data,
+            &table_state,
+            vec![
+                Column::new("Name", |person: &Person, _| text_cell(person.name.clone()))
+                    .fixed(true),
+                Column::new("Age", |person: &Person, _| number_cell(person.age)),
+            ],
+        )
+        .into();
+        drop(element);
+    }
+
+    #[test]
+    fn a_loading_table_renders_placeholders() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let element: iced::Element<'_, Message, Theme> =
+            DataTable::new(&data, &table_state, columns())
+                .loading(3)
+                .into();
+        drop(element);
+
+        // The zero case keeps the header alone rather than panicking.
+        let header_only: iced::Element<'_, Message, Theme> =
+            DataTable::new(&data, &table_state, columns())
+                .loading(0)
+                .into();
+        drop(header_only);
+    }
+
+    #[test]
+    fn a_grouped_table_renders_its_group_row() {
+        let data = people();
+        let table_state = TableState::new();
+
+        let element: iced::Element<'_, Message, Theme> =
+            DataTable::new(&data, &table_state, columns())
+                .column_groups([
+                    ColumnGroup::new("Identity", 1),
+                    ColumnGroup::new("Details", 1),
+                ])
+                .into();
+        drop(element);
+
+        // A group list shorter than the columns must not push the row out of
+        // alignment; a longer one is clamped.
+        let over: iced::Element<'_, Message, Theme> =
+            DataTable::new(&data, &table_state, columns())
+                .column_groups([
+                    ColumnGroup::new("Everything", 99),
+                    ColumnGroup::new("Past the end", 2),
+                ])
+                .into();
+        drop(over);
+    }
+
+    #[test]
+    fn placeholder_rows_stripe_like_data_rows() {
+        assert!(!stripe_row(0));
+        assert!(stripe_row(1));
+        assert!(!stripe_row(2));
     }
 }

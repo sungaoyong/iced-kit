@@ -337,19 +337,13 @@ fn build_strip<'a, Message: Clone + 'a>(
                     parts.into()
                 };
 
-                let horizontal_padding = match variant {
-                    TabVariant::Underline => match size {
-                        Size::Xs => 8.0,
-                        Size::Sm => 10.0,
-                        Size::Lg => 16.0,
-                        _ => 12.0,
-                    },
-                    _ => match size {
-                        Size::Xs => 8.0,
-                        Size::Sm => 10.0,
-                        Size::Lg => 16.0,
-                        _ => 12.0,
-                    },
+                // Every variant pads its tab by the size step; the underline's
+                // rule sits outside the label either way.
+                let horizontal_padding = match size {
+                    Size::Xs => 8.0,
+                    Size::Sm => 10.0,
+                    Size::Lg => 16.0,
+                    _ => 12.0,
                 };
 
                 let mut widget = button(content)
@@ -405,15 +399,21 @@ fn build_strip<'a, Message: Clone + 'a>(
 /// Ported from the reference's `TabVariant::height`, whose underline tabs are
 /// shorter because the rule takes the difference.
 fn tab_height(variant: TabVariant, size: Size) -> f32 {
-    match (variant, size) {
-        (TabVariant::Underline, Size::Xs) => 26.0,
-        (TabVariant::Underline, Size::Sm) => 30.0,
-        (TabVariant::Underline, Size::Lg) => 44.0,
-        (TabVariant::Underline, _) => 36.0,
-        (_, Size::Xs) => 20.0,
-        (_, Size::Sm) => 24.0,
-        (_, Size::Lg) => 36.0,
-        (_, _) => 32.0,
+    match variant {
+        // The underline's rule sits below the tab, so its box is taller by
+        // that much at every step.
+        TabVariant::Underline => match size {
+            Size::Xs => 26.0,
+            Size::Sm => 30.0,
+            Size::Lg => 44.0,
+            _ => 36.0,
+        },
+        _ => match size {
+            Size::Xs => 20.0,
+            Size::Sm => 24.0,
+            Size::Lg => 36.0,
+            _ => 32.0,
+        },
     }
 }
 
@@ -790,10 +790,10 @@ fn tab_style(
                     // joined to the page below it.
                     width: 1.0,
                     radius: iced::border::Radius {
-                        top_left: f32::from(theme.radius().md).into(),
-                        top_right: f32::from(theme.radius().md).into(),
-                        bottom_left: 0.0_f32.into(),
-                        bottom_right: 0.0_f32.into(),
+                        top_left: f32::from(theme.radius().md),
+                        top_right: f32::from(theme.radius().md),
+                        bottom_left: 0.0,
+                        bottom_right: 0.0,
                     },
                 };
             } else if hovered {
@@ -848,10 +848,10 @@ fn tab_style(
     // tabs, whose inner radius is one step tighter than the track's.
     if variant == TabVariant::Segmented && matches!(size, Size::Xs | Size::Sm) {
         style.border.radius = iced::border::Radius {
-            top_left: f32::from(theme.radius().sm).into(),
-            top_right: f32::from(theme.radius().sm).into(),
-            bottom_left: f32::from(theme.radius().sm).into(),
-            bottom_right: f32::from(theme.radius().sm).into(),
+            top_left: f32::from(theme.radius().sm),
+            top_right: f32::from(theme.radius().sm),
+            bottom_left: f32::from(theme.radius().sm),
+            bottom_right: f32::from(theme.radius().sm),
         };
     }
 

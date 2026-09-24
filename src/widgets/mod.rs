@@ -48,7 +48,9 @@ pub use button::{
 };
 pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
 pub use chart::{Chart, ChartKind, Series};
-pub use data_table::{Column, DataTable, SortDirection, SortKey, TableState, Width};
+pub use data_table::{
+    Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width,
+};
 pub use display::{alert, badge, card, divider, empty_state, progress, vertical_divider, Tone};
 pub use form::{field, form, Field, FieldLabel, Form, FormLabelLayout};
 pub use group_box::{group_box, GroupBox, GroupBoxVariant};

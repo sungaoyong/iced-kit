@@ -2239,3 +2239,97 @@ fn form_layouts_render() {
     assert_renders("form_horizontal", column![horizontal].spacing(16), false);
     assert_renders("form_columns", column![columns].spacing(16), false);
 }
+
+/// A grouped table, a table with a pinned column, and one that is loading.
+///
+/// These are the three options the reference's `DataTable` carries that the
+/// first port left out, so this snapshot is what keeps them rendering.
+#[test]
+fn table_groups_pins_and_placeholders_render() {
+    use iced_kit::widgets::data_table::{ColumnGroup, TableState};
+
+    let rows: Vec<Record> = [
+        ("report.pdf", 2_400_000_u64),
+        ("archive.zip", 18_000_000),
+        ("notes.md", 4_200),
+    ]
+    .into_iter()
+    .map(|(name, size)| Record {
+        name: name.to_owned(),
+        size,
+    })
+    .collect();
+
+    let mut sorted = TableState::new();
+    sorted.toggle_sort("Size");
+    let plain_state = TableState::new();
+
+    let grouped = DataTable::new(
+        &rows,
+        &sorted,
+        vec![option_columns(false), option_size_column()],
+    )
+    .row_height(34.0)
+    .column_groups([ColumnGroup::new("File", 1), ColumnGroup::new("Details", 1)]);
+
+    let pinned = DataTable::new(
+        &rows,
+        &plain_state,
+        vec![
+            option_columns(true),
+            option_size_column(),
+            option_detail_column(),
+        ],
+    )
+    .row_height(34.0);
+
+    let loading = DataTable::new(
+        &rows,
+        &plain_state,
+        vec![option_columns(false), option_size_column()],
+    )
+    .row_height(34.0)
+    .loading(3);
+
+    // The whole set is built and rendered inside this scope: every table
+    // borrows `rows` and its state, so none of them may outlive them.
+    assert_renders(
+        "data_table_options",
+        column![
+            container(grouped).padding(0),
+            container(pinned).padding(0),
+            container(loading).padding(0)
+        ]
+        .spacing(24),
+        false,
+    );
+}
+
+/// The columns the `data_table_options` snapshot is built from.
+///
+/// They are functions rather than closures so each table owns its own columns:
+/// a `Column` holds a boxed renderer and is not `Clone`.
+fn option_columns<'a>(fixed: bool) -> Column<'a, Record, Message> {
+    Column::<Record, Message>::new("Name", |record: &Record, _index| {
+        iced_kit::widgets::data_table::text_cell(record.name.clone())
+    })
+    .width(Width::FillPortion(3))
+    .fixed(fixed)
+}
+
+fn option_size_column<'a>() -> Column<'a, Record, Message> {
+    Column::<Record, Message>::new("Size", |record: &Record, _index| {
+        iced_kit::widgets::data_table::number_cell(format_bytes(record.size))
+    })
+    .width(Width::Fixed(120.0))
+    .align_x(iced::Alignment::End)
+}
+
+fn option_detail_column<'a>() -> Column<'a, Record, Message> {
+    Column::<Record, Message>::new("Type", |record: &Record, _index| {
+        iced_kit::widgets::data_table::text_cell(
+            record.name.rsplit_once('.').map_or("file", |(_, ext)| ext),
+        )
+    })
+    .width(Width::Fill)
+}
