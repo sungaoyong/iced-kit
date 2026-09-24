@@ -2823,3 +2823,79 @@ fn chat_bubbles_and_messages_render() {
         false,
     );
 }
+
+/// Attachment cards across their statuses, sizes and axes.
+///
+/// Three things here are only checkable in pixels: the pending card's dashed
+/// outline, the failed card's destructive tint (on the border, the media box and
+/// the description), and the size steps scaling the whole card rather than just
+/// its text.
+#[test]
+fn chat_attachments_render() {
+    use iced_kit::widgets::chat::{
+        attachment, AttachmentActions, AttachmentAxis, AttachmentContent, AttachmentDescription,
+        AttachmentMedia, AttachmentStatus, AttachmentTitle,
+    };
+
+    let card = |label: &'static str, status: AttachmentStatus, size: iced_kit::Size| {
+        attachment::<Message>(label)
+            .with_size(size)
+            .status(status)
+            .content(
+                AttachmentContent::new()
+                    .title(AttachmentTitle::new(label))
+                    .description(AttachmentDescription::new(match status {
+                        AttachmentStatus::Failed => "Upload failed — retry",
+                        AttachmentStatus::Pending => "Waiting",
+                        // Every other status shows the file's size, which is
+                        // the line an in-flight or finished card carries.
+                        _ => "1.2 MB",
+                    })),
+            )
+    };
+
+    let retry: Element<'_, Message, Theme> = muted_text("Retry").into();
+    let remove: Element<'_, Message, Theme> = muted_text("Remove").into();
+
+    assert_renders(
+        "chat_attachments",
+        column![
+            column![
+                muted_text("Statuses"),
+                card("report.pdf", AttachmentStatus::Pending, iced_kit::Size::Md),
+                card(
+                    "report.pdf",
+                    AttachmentStatus::Uploading,
+                    iced_kit::Size::Md
+                ),
+                card("report.pdf", AttachmentStatus::Failed, iced_kit::Size::Md),
+                card("report.pdf", AttachmentStatus::Complete, iced_kit::Size::Md),
+            ]
+            .spacing(8),
+            column![
+                muted_text("Sizes"),
+                card("xs.pdf", AttachmentStatus::Complete, iced_kit::Size::Xs),
+                card("sm.pdf", AttachmentStatus::Complete, iced_kit::Size::Sm),
+                card("lg.pdf", AttachmentStatus::Complete, iced_kit::Size::Lg),
+            ]
+            .spacing(8),
+            column![
+                muted_text("Axis and actions"),
+                attachment::<Message>("vertical.png")
+                    .axis(AttachmentAxis::Vertical)
+                    .media(AttachmentMedia::new())
+                    .status(AttachmentStatus::Failed)
+                    .content(
+                        AttachmentContent::new()
+                            .title(AttachmentTitle::new("vertical.png"))
+                            .description(AttachmentDescription::new("2.4 MB"))
+                    ),
+                attachment::<Message>("actions.pdf")
+                    .actions(AttachmentActions::new().child(retry).child(remove),),
+            ]
+            .spacing(8),
+        ]
+        .spacing(24),
+        false,
+    );
+}
