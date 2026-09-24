@@ -300,9 +300,9 @@ impl<'a, T: 'a, Message: Clone + 'a> MessageScroller<'a, T, Message> {
         let scrolled_up = state.is_scrolled_up();
         let mut layers: Vec<Element<'a, Message, Theme>> = vec![content];
 
-        // The fade and the button sit above the content and hug its bottom edge.
-        // Both stay in the tree and ease in and out, so leaving the tail fades
-        // them away instead of blinking them off.
+        // The fade and the button sit above the content and hug its bottom
+        // edge. Both stay in the tree while they are shown or still leaving, so
+        // scrolled-up and scrolled-back do not blink them off and on.
         if let Some(color) = bottom_fade {
             let fade = fade_overlay(color, width, height);
             layers.push(Transition::new(fade, scrolled_up).into());
@@ -319,8 +319,12 @@ impl<'a, T: 'a, Message: Clone + 'a> MessageScroller<'a, T, Message> {
 
 /// Eases its child in from below and out again, with a spring.
 ///
-/// iced cannot fade a subtree, so a child that needs a fade applies this to its
-/// own colors; the offset is applied here, which is what gives the rise.
+/// The effect is a rise, not a fade: iced's renderer has no alpha for a subtree,
+/// so an overlay cannot be dissolved in place. What this owns is the offset and
+/// the visibility — a hidden overlay is drawn until it has risen away, and then
+/// skipped entirely rather than left as a transparent layer over the
+/// transcript. The bottom fade's own gradient is drawn at its full strength
+/// throughout, since its bands are built before a frame is drawn.
 struct Transition<'a, Message> {
     content: Element<'a, Message, Theme>,
     showing: bool,
