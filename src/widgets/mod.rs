@@ -41,6 +41,7 @@ pub mod spinner;
 pub mod tabs;
 pub mod title_bar;
 pub mod toggle;
+pub mod tree;
 pub mod typography;
 pub mod virtual_list;
 
@@ -102,6 +103,7 @@ pub use spinner::{ring_progress, spinner, spinner_styled, SpinnerStyle};
 pub use tabs::{tabs, Tab, TabStrip, TabVariant};
 pub use title_bar::{TitleBar, WindowControl};
 pub use toggle::{checkbox, radio, slider, switch};
+pub use tree::{tree, Tree, TreeEvent, TreeItem, TreeRow, TreeView};
 pub use typography::{
     code, heading, kbd, label_builder, muted_text, paragraph, shortcut, Heading, HighlightsMatch,
     Label,

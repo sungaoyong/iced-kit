@@ -2538,3 +2538,58 @@ fn color_picker_renders() {
         false,
     );
 }
+
+/// A file tree, collapsed, open, and with a single node selected.
+#[test]
+fn tree_view_renders() {
+    use iced_kit::widgets::{tree, Tree, TreeItem};
+
+    let items = vec![
+        TreeItem::new("src", "src").children([
+            TreeItem::new("main", "main.rs"),
+            TreeItem::new("widgets", "widgets").children([
+                TreeItem::new("button", "button.rs"),
+                TreeItem::new("input", "input.rs"),
+            ]),
+            TreeItem::new("theme", "theme.rs"),
+        ]),
+        TreeItem::new("readme", "README.md"),
+        TreeItem::new("locked", "Protected").disabled(true),
+    ];
+
+    let collapsed = Tree::new().items(items.clone());
+
+    let mut open = Tree::new().items(items.clone());
+    open.expand_all();
+
+    let mut selected = Tree::new().items(items.clone());
+    selected.expand_all();
+    selected.select(Some("input"));
+
+    assert_renders(
+        "tree",
+        column![
+            column![
+                muted_text("Collapsed"),
+                tree::<Message>(&items, &collapsed).on_event(|_| Message::Noop),
+            ]
+            .spacing(8),
+            column![
+                muted_text("Expanded, with a selection"),
+                tree::<Message>(&items, &open)
+                    .on_event(|_| Message::Noop)
+                    .max_height(240.0),
+            ]
+            .spacing(8),
+        ]
+        .spacing(20),
+        false,
+    );
+
+    // The selected variant renders too; the snapshot above is the open one, so
+    // this keeps the selection path covered.
+    let element: Element<'_, Message, Theme> = tree::<Message>(&items, &selected)
+        .on_event(|_| Message::Noop)
+        .into();
+    drop(element);
+}
