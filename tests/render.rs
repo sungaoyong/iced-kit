@@ -26,10 +26,12 @@ use iced_kit::widgets::plot::{
 use iced_kit::widgets::{
     accordion, addon, alert, avatar, avatar_with_name, badge, carousel, code, divider, empty_state,
     group_button, heading, input_group, kbd, list, muted_text, number_input, otp_input, pagination,
-    paragraph, password, progress, ring_progress, shortcut, skeleton, skeleton_list_item,
+    paragraph, password, progress, ring_progress, shortcut, sidebar, skeleton, skeleton_list_item,
     spinner_styled, tag, text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel,
     CarouselAxis, CarouselState, Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem, Modal,
-    SkeletonShape, SpinnerStyle, TitleBar, Tone, VirtualList, VirtualListState, WindowControl,
+    Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
+    SidebarMenuItem, SidebarToggleButton, SkeletonShape, SpinnerStyle, TitleBar, Tone, VirtualList,
+    VirtualListState, WindowControl,
 };
 use iced_kit::{Size, Theme};
 
@@ -407,6 +409,117 @@ fn navigation_components_render() {
         ]
         .spacing(16),
         false,
+    );
+}
+
+/// The sidebar the snapshot cases share: a header, a grouped menu with an
+/// active item and an open submenu, and a footer, docked beside a page.
+fn demo_sidebar<'a>(collapsible: SidebarCollapsible, collapsed: bool) -> Sidebar<'a, Message> {
+    let icon_collapsed = collapsed && collapsible == SidebarCollapsible::Icon;
+
+    let menu = SidebarMenu::new().children([
+        SidebarMenuItem::new("Dashboard")
+            .icon(iced_kit::icons::IconName::LayoutDashboard)
+            .active(true)
+            .on_select(Message::Noop),
+        SidebarMenuItem::new("Inbox")
+            .icon(iced_kit::icons::IconName::Inbox)
+            .on_select(Message::Noop),
+        SidebarMenuItem::new("Calendar").icon(iced_kit::icons::IconName::Calendar),
+        SidebarMenuItem::new("Projects")
+            .icon(iced_kit::icons::IconName::Folder)
+            .open(true)
+            .on_toggle(Message::Noop)
+            .on_context(Message::Noop)
+            .children([
+                SidebarMenuItem::new("Design"),
+                SidebarMenuItem::new("Engineering").disabled(true),
+            ]),
+        SidebarMenuItem::new("Settings").icon(iced_kit::icons::IconName::Settings),
+    ]);
+
+    // The header and footer are the caller's slots, so they adapt to the rail
+    // the same way the reference example's do: a bare glyph when the names
+    // would no longer fit.
+    let header: Element<'a, Message, Theme> = if icon_collapsed {
+        iced_kit::widgets::Icon::new(iced_kit::icons::IconName::GalleryVerticalEnd)
+            .into_element(iced_kit::Size::Md)
+    } else {
+        iced::widget::text("Acme Inc").into()
+    };
+
+    let footer: Element<'a, Message, Theme> = if icon_collapsed {
+        iced_kit::widgets::Icon::new(iced_kit::icons::IconName::CircleUser)
+            .into_element(iced_kit::Size::Md)
+    } else {
+        iced::widget::text("Jason Lee").into()
+    };
+
+    sidebar()
+        .collapsible(collapsible)
+        .collapsed(collapsed)
+        .width(220.0)
+        .header(
+            SidebarHeader::new()
+                .child(header)
+                .on_dropdown(Message::Noop),
+        )
+        .child(SidebarGroup::new("Application").child(menu))
+        .footer(
+            SidebarFooter::new()
+                .child(footer)
+                .on_dropdown(Message::Noop),
+        )
+}
+
+/// The page beside the sidebar, so the snapshot shows the docked pair.
+fn sidebar_page<'a>(
+    collapsible: SidebarCollapsible,
+    collapsed: bool,
+) -> impl Into<Element<'a, Message, Theme>> {
+    row![
+        demo_sidebar(collapsible, collapsed),
+        column![
+            SidebarToggleButton::new()
+                .collapsed(collapsed)
+                .on_press(Message::Noop),
+            iced::widget::text("Page content")
+        ]
+        .spacing(8)
+        .padding(8)
+        .width(Length::Fill)
+        .height(Length::Fill)
+    ]
+    .width(Length::Fill)
+    .height(Length::Fill)
+}
+
+#[test]
+fn a_sidebar_renders() {
+    assert_renders(
+        "sidebar",
+        sidebar_page(SidebarCollapsible::Icon, false),
+        false,
+    );
+}
+
+#[test]
+fn a_sidebar_renders_icon_collapsed() {
+    // Under reduced motion the collapse adopts its target width on the first
+    // frame, so the snapshot shows the settled icon rail.
+    assert_renders(
+        "sidebar_icon_collapsed",
+        sidebar_page(SidebarCollapsible::Icon, true),
+        false,
+    );
+}
+
+#[test]
+fn a_sidebar_renders_in_dark_mode() {
+    assert_renders(
+        "sidebar_dark",
+        sidebar_page(SidebarCollapsible::Icon, false),
+        true,
     );
 }
 

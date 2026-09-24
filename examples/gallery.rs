@@ -18,11 +18,12 @@ use iced_kit::widgets::plot::{
 use iced_kit::widgets::{
     accordion, addon, alert, avatar, avatar_with_name, carousel, code, empty_state, group_button,
     heading, icon_button, input_group, kbd, muted_text, number_input, otp_input, pagination,
-    paragraph, ring_progress, shortcut, skeleton, skeleton_list_item, spinner_styled, text_area,
-    text_input, tooltip, AccordionSection, AddonAlignment, AlertDialog, AlertTone, AvatarLabel,
-    Button, ButtonGroup, CarouselAxis, CarouselState, DialogContent, DialogFooter, DialogHeader,
-    Dropdown, DropdownButton, Heading, MenuItem, Modal, SkeletonShape, SpinnerStyle, Toggle,
-    ToggleGroup, Tone,
+    paragraph, ring_progress, shortcut, sidebar, skeleton, skeleton_list_item, spinner_styled,
+    text_area, text_input, tooltip, AccordionSection, AddonAlignment, AlertDialog, AlertTone,
+    AvatarLabel, Button, ButtonGroup, CarouselAxis, CarouselState, DialogContent, DialogFooter,
+    DialogHeader, Dropdown, DropdownButton, Heading, Icon, MenuItem, Modal, SidebarCollapsible,
+    SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarToggleButton,
+    SkeletonShape, SpinnerStyle, Toggle, ToggleGroup, Tone,
 };
 use iced_kit::widgets::{group_box, GroupBoxVariant};
 
@@ -133,6 +134,15 @@ struct App {
     document: MarkdownDocument,
     /// Messages from the title bar's window controls, for the demo.
     last_window_action: Option<&'static str>,
+    /// The sidebar demo's state, all of it owned by the caller.
+    sidebar_collapsed: bool,
+    sidebar_collapsible: SidebarCollapsible,
+    sidebar_active: &'static str,
+    sidebar_projects_open: bool,
+    sidebar_menu_at: Option<(f32, f32)>,
+    /// The draggable widths of the sidebar and settings demos.
+    sidebar_width: f32,
+    settings_sidebar_width: f32,
     /// Split state for the resizable demo.
     #[cfg(feature = "dock")]
     splits: iced::widget::pane_grid::State<usize>,
@@ -240,6 +250,16 @@ enum Message {
     Minimize,
     Maximize,
     CloseWindow,
+    /// The sidebar demo: collapse toggle, mode switcher, item selection, the
+    /// submenu caret and the item's right-click intent.
+    SidebarToggled,
+    SidebarModePicked(SidebarCollapsible),
+    SidebarPicked(&'static str),
+    SidebarSubmenuToggled,
+    SidebarContextOpened,
+    /// The sidebar and the settings panel report a new width while dragged.
+    SidebarResized(f32),
+    SettingsSidebarResized(f32),
 }
 
 impl Default for App {
@@ -289,6 +309,13 @@ impl Default for App {
             rows: Vec::new(),
             document: MarkdownDocument::new(),
             last_window_action: None,
+            sidebar_collapsed: false,
+            sidebar_collapsible: SidebarCollapsible::Icon,
+            sidebar_active: "Dashboard",
+            sidebar_projects_open: true,
+            sidebar_menu_at: None,
+            sidebar_width: 240.0,
+            settings_sidebar_width: 220.0,
             #[cfg(feature = "dock")]
             splits: Resizable::<Message>::split_state(3, SplitAxis::Horizontal, 0.25).0,
             settings: SettingsState::new(),
@@ -469,7 +496,10 @@ impl App {
                     .show(self.drawer_open, std::time::Instant::now());
             }
             Message::OpenContextMenu => self.menu_at = Some((120.0, 320.0)),
-            Message::CloseContextMenu => self.menu_at = None,
+            Message::CloseContextMenu => {
+                self.menu_at = None;
+                self.sidebar_menu_at = None;
+            }
             Message::TogglePopover => self.popover_open = !self.popover_open,
             Message::Scrolled(state) => {
                 self.list_state = state;
@@ -478,6 +508,18 @@ impl App {
             Message::Minimize => self.last_window_action = Some("Minimize"),
             Message::Maximize => self.last_window_action = Some("Maximize"),
             Message::CloseWindow => self.last_window_action = Some("Close"),
+            Message::SidebarToggled => self.sidebar_collapsed = !self.sidebar_collapsed,
+            Message::SidebarModePicked(mode) => self.sidebar_collapsible = mode,
+            Message::SidebarPicked(label) => {
+                self.sidebar_active = label;
+                self.last_window_action = Some(label);
+            }
+            Message::SidebarSubmenuToggled => {
+                self.sidebar_projects_open = !self.sidebar_projects_open;
+            }
+            Message::SidebarContextOpened => self.sidebar_menu_at = Some((260.0, 300.0)),
+            Message::SidebarResized(width) => self.sidebar_width = width,
+            Message::SettingsSidebarResized(width) => self.settings_sidebar_width = width,
         }
 
         Task::none()
@@ -499,6 +541,7 @@ impl App {
             self.data_section(),
             self.settings_section(),
             Self::group_box_section(),
+            self.sidebar_section(),
             self.shell_section(),
         ]
         .spacing(24)
@@ -531,6 +574,19 @@ impl App {
                     MenuItem::new("Cut", Message::CloseContextMenu).shortcut("Ctrl+X"),
                     MenuItem::new("Copy", Message::CloseContextMenu).shortcut("Ctrl+C"),
                     MenuItem::new("Archive", Message::CloseContextMenu).enabled(false),
+                    MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
+                ],
+                at,
+            ));
+        }
+
+        // The sidebar item's right-click intent lands here: the menu's items
+        // and its placement are the application's, not the sidebar's.
+        if let Some(at) = self.sidebar_menu_at {
+            open = open.dropdown(ContextMenu::new(
+                vec![
+                    MenuItem::new("Open", Message::CloseContextMenu),
+                    MenuItem::new("Rename", Message::CloseContextMenu).shortcut("F2"),
                     MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
                 ],
                 at,
@@ -1136,6 +1192,8 @@ impl App {
         let panel = Settings::<Message>::new(&self.settings)
             .on_event(Message::Settings)
             .on_reset(Message::SettingsReset)
+            .sidebar_width(self.settings_sidebar_width)
+            .on_sidebar_resize(Message::SettingsSidebarResized)
             .page(
                 SettingPage::new("Appearance")
                     .icon(IconName::Palette)
@@ -1302,6 +1360,157 @@ impl App {
                 label(format!("Last window action: {action}")).size(13),
                 divider(),
                 column![label("Resizable panes").size(13), panes].spacing(8),
+            ]
+            .spacing(12),
+        )
+    }
+
+    fn sidebar_section(&self) -> Element<'_, Message, Theme> {
+        let icon_collapsed =
+            self.sidebar_collapsed && self.sidebar_collapsible == SidebarCollapsible::Icon;
+
+        let mode_button = |label: &'static str, mode: SidebarCollapsible| -> Button<Message> {
+            Button::new(label)
+                .size(iced_kit::Size::Sm)
+                .selected(self.sidebar_collapsible == mode)
+                .on_press(Message::SidebarModePicked(mode))
+        };
+
+        // The app tile collapses with the rail, trading its fill for a bare
+        // glyph — the same adaptation the reference example makes.
+        let logo_side = if icon_collapsed { 24.0 } else { 32.0 };
+        let logo =
+            container(Icon::new(IconName::GalleryVerticalEnd).into_element(iced_kit::Size::Md))
+                .width(Length::Fixed(logo_side))
+                .height(Length::Fixed(logo_side))
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .class(
+                    Box::new(move |theme: &Theme| iced::widget::container::Style {
+                        background: (!icon_collapsed)
+                            .then(|| iced::Background::Color(theme.colors().sidebar_primary)),
+                        text_color: Some(theme.colors().sidebar_primary_foreground),
+                        border: iced::Border {
+                            radius: f32::from(theme.radius().md).into(),
+                            ..iced::Border::default()
+                        },
+                        ..iced::widget::container::Style::default()
+                    }) as iced::widget::container::StyleFn<'_, Theme>,
+                );
+
+        let mut header_row = row![logo].spacing(8).align_y(Alignment::Center);
+
+        if !icon_collapsed {
+            header_row = header_row.push(
+                column![text("Acme Inc").size(14), muted_text("Enterprise")]
+                    .spacing(2)
+                    .width(Length::Fill),
+            );
+        }
+
+        let mut footer_row = row![Icon::new(IconName::CircleUser).into_element(iced_kit::Size::Md)]
+            .spacing(8)
+            .align_y(Alignment::Center);
+
+        if !icon_collapsed {
+            footer_row = footer_row.push(text("Jason Lee").size(14));
+        }
+
+        let picked = |label: &'static str| self.sidebar_active == label;
+
+        let menu = SidebarMenu::new().children([
+            SidebarMenuItem::new("Dashboard")
+                .icon(IconName::LayoutDashboard)
+                .active(picked("Dashboard"))
+                .on_select(Message::SidebarPicked("Dashboard")),
+            SidebarMenuItem::new("Inbox")
+                .icon(IconName::Inbox)
+                .active(picked("Inbox"))
+                .on_select(Message::SidebarPicked("Inbox")),
+            SidebarMenuItem::new("Calendar")
+                .icon(IconName::Calendar)
+                .active(picked("Calendar"))
+                .on_select(Message::SidebarPicked("Calendar")),
+            SidebarMenuItem::new("Projects")
+                .icon(IconName::Folder)
+                .open(self.sidebar_projects_open)
+                .on_toggle(Message::SidebarSubmenuToggled)
+                .on_context(Message::SidebarContextOpened)
+                .suffix(badge("3", Tone::Neutral))
+                .children([
+                    SidebarMenuItem::new("Design")
+                        .active(picked("Design"))
+                        .on_select(Message::SidebarPicked("Design")),
+                    SidebarMenuItem::new("Engineering")
+                        .active(picked("Engineering"))
+                        .on_select(Message::SidebarPicked("Engineering")),
+                    SidebarMenuItem::new("Marketing")
+                        .active(picked("Marketing"))
+                        .on_select(Message::SidebarPicked("Marketing")),
+                ]),
+            SidebarMenuItem::new("Settings")
+                .icon(IconName::Settings)
+                .active(picked("Settings"))
+                .on_select(Message::SidebarPicked("Settings")),
+        ]);
+
+        let description = match self.sidebar_collapsible {
+            SidebarCollapsible::Icon => {
+                "Icon mode narrows the sidebar to a 48px rail; hovering an icon shows its name."
+            }
+            SidebarCollapsible::Offcanvas => {
+                "Offcanvas mode slides the sidebar out and releases the width it occupied."
+            }
+            SidebarCollapsible::None => {
+                "None mode keeps the sidebar expanded and ignores the collapsed flag."
+            }
+        };
+
+        Self::section(
+            "Sidebar",
+            column![
+                row![
+                    SidebarToggleButton::new()
+                        .collapsed(icon_collapsed)
+                        .on_press(Message::SidebarToggled),
+                    text("Collapsible modes").size(14),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                row![
+                    text("Mode:").size(13),
+                    mode_button("Icon", SidebarCollapsible::Icon),
+                    mode_button("Offcanvas", SidebarCollapsible::Offcanvas),
+                    mode_button("None", SidebarCollapsible::None),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                divider(),
+                row![
+                    sidebar()
+                        .collapsible(self.sidebar_collapsible)
+                        .collapsed(self.sidebar_collapsed)
+                        .width(self.sidebar_width)
+                        .min_width(200.0)
+                        .on_resize(Message::SidebarResized)
+                        .header(
+                            SidebarHeader::new()
+                                .child(header_row)
+                                .on_dropdown(Message::SidebarContextOpened)
+                        )
+                        .child(SidebarGroup::new("Application").child(menu))
+                        .footer(
+                            SidebarFooter::new()
+                                .child(footer_row)
+                                .on_dropdown(Message::SidebarContextOpened)
+                        ),
+                    container(text(description).size(13))
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .padding(16),
+                ]
+                .width(Length::Fill)
+                .height(Length::Fixed(380.0)),
             ]
             .spacing(12),
         )

@@ -75,14 +75,16 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 
 **Navigation** — `tabs`, `accordion`, `pagination`, `carousel` (horizontal or
 vertical, with previous/next controls, a dot indicator, looping, arrow keys and
-drag-to-snap)
+drag-to-snap), `Sidebar` (a collapsible panel with a header, grouped menus and
+a footer; `Icon`, `Offcanvas` and `None` collapsing modes, an animated width
+transition, a draggable width, submenus, badges and collapsed-state tooltips)
 
 **Shell** — `TitleBar` (with window controls), `Resizable` (draggable split
 panes), and — behind the `dock` feature — a full docking layout with draggable
 tabs, nested splits, drop targets, collapsible edge docks and panel zoom
 
-**Settings** — `Settings` (a panel with a searchable sidebar), `SettingPage`,
-`SettingGroup`, `SettingItem` and `SettingField`
+**Settings** — `Settings` (a panel with a searchable sidebar, user-draggable to
+resize), `SettingPage`, `SettingGroup`, `SettingItem` and `SettingField`
 
 **Icons** — the whole [Lucide](https://lucide.dev) set as `IconName`, drawn
 through the bundled icon font. Components draw from it throughout, including a

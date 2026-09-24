@@ -90,6 +90,20 @@ pub struct Colors {
     pub link_hover: Color,
     /// The color of borders between elements.
     pub border: Color,
+    /// The background of the sidebar panel.
+    pub sidebar: Color,
+    /// The default text color on [`Colors::sidebar`].
+    pub sidebar_foreground: Color,
+    /// The border between the sidebar and the page.
+    pub sidebar_border: Color,
+    /// The background of a hovered, selected or active sidebar entry.
+    pub sidebar_accent: Color,
+    /// The text color on [`Colors::sidebar_accent`].
+    pub sidebar_accent_foreground: Color,
+    /// A filled element inside the sidebar, such as an app logo tile.
+    pub sidebar_primary: Color,
+    /// The text color on [`Colors::sidebar_primary`].
+    pub sidebar_primary_foreground: Color,
     /// The border color of form controls.
     pub input: Color,
     /// The focus ring color.
@@ -135,6 +149,13 @@ impl Colors {
             link: rgb(0x0a, 0x0a, 0x0a),
             link_hover: rgb(0x40, 0x40, 0x40),
             border: rgb(0xe5, 0xe5, 0xe5),
+            sidebar: rgb(0xfa, 0xfa, 0xfa),
+            sidebar_foreground: rgb(0x17, 0x17, 0x17),
+            sidebar_border: rgb(0xe5, 0xe5, 0xe5),
+            sidebar_accent: rgb(0xe5, 0xe5, 0xe5),
+            sidebar_accent_foreground: rgb(0x17, 0x17, 0x17),
+            sidebar_primary: rgb(0x17, 0x17, 0x17),
+            sidebar_primary_foreground: rgb(0xfa, 0xfa, 0xfa),
             input: rgb(0xe5, 0xe5, 0xe5),
             ring: rgb(0xa3, 0xa3, 0xa3),
             selection: Color::from_rgba(
@@ -173,6 +194,13 @@ impl Colors {
             link: rgb(0xfa, 0xfa, 0xfa),
             link_hover: rgb(0xff, 0xff, 0xff),
             border: rgb(0x26, 0x26, 0x26),
+            sidebar: rgb(0x0a, 0x0a, 0x0a),
+            sidebar_foreground: rgb(0xf5, 0xf5, 0xf5),
+            sidebar_border: rgb(0x26, 0x26, 0x26),
+            sidebar_accent: rgb(0x26, 0x26, 0x26),
+            sidebar_accent_foreground: rgb(0xf5, 0xf5, 0xf5),
+            sidebar_primary: rgb(0xf5, 0xf5, 0xf5),
+            sidebar_primary_foreground: rgb(0x0a, 0x0a, 0x0a),
             input: rgb(0x2e, 0x2e, 0x2e),
             ring: rgb(0x73, 0x73, 0x73),
             selection: Color::from_rgba(

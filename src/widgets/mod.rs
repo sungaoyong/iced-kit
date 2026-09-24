@@ -28,8 +28,10 @@ pub mod number;
 pub mod overlay;
 pub mod plot;
 pub mod resizable;
+pub(crate) mod resize_edge;
 pub(crate) mod reveal;
 pub mod select;
+pub mod sidebar;
 pub mod skeleton;
 pub mod spinner;
 pub mod tabs;
@@ -65,6 +67,10 @@ pub use overlay::{
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
 pub use select::{select, select_fill};
+pub use sidebar::{
+    sidebar, Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
+    SidebarMenuItem, SidebarSide, SidebarToggleButton,
+};
 pub use skeleton::{skeleton, skeleton_list_item, skeleton_table, SkeletonShape};
 pub use spinner::{ring_progress, spinner, spinner_styled, SpinnerStyle};
 pub use tabs::{tabs, Tab};

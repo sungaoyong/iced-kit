@@ -17,7 +17,7 @@ cannot silently change another.
 
 | Group | Fields |
 | --- | --- |
-| `colors` | `background`, `foreground`, `surface`, `surface_foreground`, `primary`, `primary_foreground`, `secondary`, `secondary_foreground`, `muted`, `muted_foreground`, `accent`, `accent_foreground`, `destructive`, `destructive_foreground`, `warning`, `success`, `info` with their `*_foreground` pairs, `link`, `link_hover`, `border`, `input`, `ring`, `selection` |
+| `colors` | `background`, `foreground`, `surface`, `surface_foreground`, `primary`, `primary_foreground`, `secondary`, `secondary_foreground`, `muted`, `muted_foreground`, `accent`, `accent_foreground`, `destructive`, `destructive_foreground`, `warning`, `success`, `info` with their `*_foreground` pairs, `link`, `link_hover`, `border`, `sidebar`, `sidebar_foreground`, `sidebar_border`, `sidebar_accent`, `sidebar_accent_foreground`, `sidebar_primary`, `sidebar_primary_foreground`, `input`, `ring`, `selection` |
 | `radius` | `none`, `sm`, `md`, `lg`, `xl`, `full` |
 | `spacing` | `xxs`, `xs`, `sm`, `md`, `lg`, `xl`, `xxl` |
 | `typography` | `sans`, `mono`, and the `xs`/`sm`/`md`/`lg`/`xl` scale, each a `TextStyle { size, line_height }` |

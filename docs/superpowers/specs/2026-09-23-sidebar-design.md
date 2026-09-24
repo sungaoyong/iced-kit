@@ -1,7 +1,19 @@
 # Sidebar 组件设计（对齐 gpui-kit）
 
 日期：2026-09-23
-状态：待实现
+状态：已实现（`src/widgets/sidebar.rs`）
+
+实现备注（与本文的偏差，均为 iced 0.14 架构约束）：
+
+- 动画策略从"wrapper 裁剪、内容不重排"改为"wrapper 动画宽度直接约束内容
+  布局宽度"。iced 的 layer 裁剪是逐层绝对剪裁、不与祖先相交，侧栏体内的
+  scrollable 会以自身宽度自建一层剪裁、绕过外层裁剪，"滑出式"无法合成；
+  压缩式在静止时几何与目标宽度完全一致。
+- `SidebarLayout::align_child_to_end` 照搬并保留单测（对齐参考），但
+  widget 侧不再消费：没有溢出可对齐。
+- 右键菜单不保存菜单内容构造器：组件无法挂载浮层，也没有能把菜单内容
+  带回应用的通道，故只报告意图（`on_context`），内容与位置由应用在
+  `overlay::Layer` 侧重建（与 `DropdownButton` 同一分工）。
 
 ## 目标
 

@@ -192,12 +192,16 @@ pub struct Settings<'a, Message> {
     pages: Vec<SettingPage<'a, Message>>,
     size: Size,
     sidebar_width: f32,
+    on_sidebar_resize: Option<std::rc::Rc<dyn Fn(f32) -> Message + 'a>>,
     variant: GroupBoxVariant,
     disabled: bool,
     stacked: bool,
     on_event: Option<std::rc::Rc<dyn Fn(SettingsEvent) -> Message + 'a>>,
     on_reset: Option<std::rc::Rc<dyn Fn(usize) -> Message + 'a>>,
 }
+
+/// The narrowest the sidebar can be sized or dragged to, in logical pixels.
+pub const SIDEBAR_MIN_WIDTH: f32 = 120.0;
 
 impl<'a, Message: Clone + 'a> Settings<'a, Message> {
     /// Creates a panel showing the pages of `state`.
@@ -207,6 +211,7 @@ impl<'a, Message: Clone + 'a> Settings<'a, Message> {
             pages: Vec::new(),
             size: Size::Md,
             sidebar_width: 220.0,
+            on_sidebar_resize: None,
             variant: GroupBoxVariant::default(),
             disabled: false,
             stacked: false,
@@ -238,10 +243,28 @@ impl<'a, Message: Clone + 'a> Settings<'a, Message> {
 
     /// Sets the sidebar's width.
     ///
-    /// iced's split panes resize proportionally rather than within a pixel
-    /// range, so this width is fixed rather than user-draggable.
+    /// The width stays the caller's: store it in the application state and
+    /// feed what [`Settings::on_sidebar_resize`] reports back into this
+    /// builder. A width below [`SIDEBAR_MIN_WIDTH`] is raised to it.
     pub fn sidebar_width(mut self, width: f32) -> Self {
-        self.sidebar_width = width.max(120.0);
+        self.sidebar_width = width.max(SIDEBAR_MIN_WIDTH);
+        self
+    }
+
+    /// Lets the user drag the sidebar's edge to change its width.
+    ///
+    /// The handle uses the same interaction as the
+    /// [`Resizable`](crate::widgets::Resizable) split panes: a 6-pixel grab
+    /// strip that lights up on hover and while dragging. Every drag movement
+    /// reports the new width, which the application stores and passes back
+    /// through [`Settings::sidebar_width`]. A drag never squeezes the page
+    /// below [`crate::widgets::resize_edge::MIN_CONTENT_AREA`] pixels, and
+    /// never goes under [`SIDEBAR_MIN_WIDTH`].
+    ///
+    /// Stacked layouts have no sidebar column to resize, so the handle only
+    /// appears beside the page.
+    pub fn on_sidebar_resize(mut self, on_resize: impl Fn(f32) -> Message + 'a) -> Self {
+        self.on_sidebar_resize = Some(std::rc::Rc::new(on_resize));
         self
     }
 
@@ -354,9 +377,7 @@ impl<'a, Message: Clone + 'a> Settings<'a, Message> {
                     label = label.push(icon);
                 }
 
-                label = label.push(
-                    text(page.title_text().to_owned()).size(self.size.text().size),
-                );
+                label = label.push(text(page.title_text().to_owned()).size(self.size.text().size));
 
                 container(label).padding(Padding::from(8)).into()
             };
@@ -549,13 +570,23 @@ impl<'a, Message: Clone + 'a> Settings<'a, Message> {
             .into();
         }
 
-        row![
-            container(sidebar).width(Length::Fixed(self.sidebar_width)),
-            rule::vertical(1),
-            content,
-        ]
-        .height(Length::Fill)
-        .into()
+        // The sidebar column carries a drag handle when the application asked
+        // for one; idle it is invisible and the rule is the only divider.
+        let sidebar_column = container(sidebar).width(Length::Fixed(self.sidebar_width));
+        let sidebar_column: Element<'a, Message, Theme> = match self.on_sidebar_resize.clone() {
+            Some(on_sidebar_resize) => crate::widgets::resize_edge::ResizeEdge::new(
+                sidebar_column,
+                true,
+                SIDEBAR_MIN_WIDTH,
+                move |width| on_sidebar_resize(width),
+            )
+            .into(),
+            None => sidebar_column.into(),
+        };
+
+        row![sidebar_column, rule::vertical(1), content]
+            .height(Length::Fill)
+            .into()
     }
 
     /// A task that scrolls the content column to a group.
@@ -604,7 +635,32 @@ pub fn settings<'a, Message: Clone + 'a>(state: &'a SettingsState) -> Settings<'
 
 #[cfg(test)]
 mod tests {
-    use super::{SettingsEvent, SettingsState};
+    use super::{Settings, SettingsEvent, SettingsState};
+    use crate::theme::Theme;
+
+    #[derive(Debug, Clone)]
+    #[allow(dead_code, reason = "the variants document the panel's messages")]
+    enum Message {
+        Event(SettingsEvent),
+        Resized(f32),
+    }
+
+    #[test]
+    fn a_panel_with_a_resizable_sidebar_renders() {
+        let state = SettingsState::new();
+
+        let side_by_side: iced::Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+            .on_sidebar_resize(Message::Resized)
+            .into();
+        drop(side_by_side);
+
+        // Stacked has no sidebar column, so the handle simply never appears.
+        let stacked: iced::Element<'_, Message, Theme> = Settings::<Message>::new(&state)
+            .on_sidebar_resize(Message::Resized)
+            .stacked(true)
+            .into();
+        drop(stacked);
+    }
 
     #[test]
     fn a_new_state_shows_the_first_page_with_no_search() {

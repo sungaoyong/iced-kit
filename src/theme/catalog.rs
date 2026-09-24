@@ -1799,6 +1799,21 @@ mod tests {
                     colors.accent,
                     AA_TEXT,
                 ),
+                // The sidebar pairs the accent on its own background and the
+                // body text on the panel, so both must stay legible wherever
+                // the sidebar docks.
+                (
+                    "sidebar_foreground/sidebar",
+                    colors.sidebar_foreground,
+                    colors.sidebar,
+                    AA_TEXT,
+                ),
+                (
+                    "sidebar_accent_foreground/sidebar_accent",
+                    colors.sidebar_accent_foreground,
+                    colors.sidebar_accent,
+                    AA_TEXT,
+                ),
                 // `muted_foreground` is a deliberately de-emphasized role:
                 // upstream shadcn/ui and gpui-kit both pair it at roughly
                 // 4.35:1 in light mode, so it is held to the large-text bar
