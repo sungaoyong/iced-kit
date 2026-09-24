@@ -118,12 +118,12 @@ impl Hsv {
 /// become black.
 ///
 /// ```
-/// # use iced_kit::widgets::color_picker::Hsv;
-/// assert_eq!(Hsv::parse_hex("#ff8800").unwrap().to_hex(), "#ff8800");
-/// assert_eq!(Hsv::parse_hex("#f80").unwrap().to_hex(), "#ff8800");
-/// assert_eq!(Hsv::parse_hex("ff8800").unwrap().to_hex(), "#ff8800");
-/// assert!(Hsv::parse_hex("#ff88").is_none());
-/// assert!(Hsv::parse_hex("not a color").is_none());
+/// # use iced_kit::widgets::parse_hex;
+/// assert_eq!(parse_hex("#ff8800").unwrap().to_hex(), "#ff8800");
+/// assert_eq!(parse_hex("#f80").unwrap().to_hex(), "#ff8800");
+/// assert_eq!(parse_hex("ff8800").unwrap().to_hex(), "#ff8800");
+/// assert!(parse_hex("#ff88").is_none());
+/// assert!(parse_hex("not a color").is_none());
 /// ```
 #[must_use]
 pub fn parse_hex(text: &str) -> Option<Hsv> {
