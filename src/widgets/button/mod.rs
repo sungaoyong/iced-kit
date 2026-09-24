@@ -595,9 +595,9 @@ impl<'a, Message: Clone + 'a> From<Button<'a, Message>> for Element<'a, Message,
 #[cfg(test)]
 mod tests {
     use super::{icon_button, Button};
-    use crate::widgets::button::icon::Icon;
     use crate::theme::catalog::{ButtonRounded, ButtonVariant, Corners};
     use crate::theme::{Size, Theme};
+    use crate::widgets::button::icon::Icon;
     use iced::{Element, Length};
 
     #[derive(Debug, Clone, PartialEq)]

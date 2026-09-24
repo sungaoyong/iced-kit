@@ -253,7 +253,7 @@ pub fn group_box<'a, Message: 'a>() -> GroupBox<'a, Message> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GroupBox, GroupBoxVariant, group_box};
+    use super::{group_box, GroupBox, GroupBoxVariant};
 
     #[test]
     fn variants_round_trip_through_their_names() {
@@ -278,7 +278,10 @@ mod tests {
     #[test]
     fn variant_names_are_case_insensitive() {
         assert_eq!(GroupBoxVariant::from_name("FILL"), GroupBoxVariant::Fill);
-        assert_eq!(GroupBoxVariant::from_name("Outline"), GroupBoxVariant::Outline);
+        assert_eq!(
+            GroupBoxVariant::from_name("Outline"),
+            GroupBoxVariant::Outline
+        );
     }
 
     #[test]

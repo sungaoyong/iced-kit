@@ -278,9 +278,7 @@ impl<Message> Item<Message> {
     /// icon would sit.
     fn has_leading_slot(&self) -> bool {
         match self {
-            Self::Command(command) => {
-                command.icon.is_some() || command.checked.is_some()
-            }
+            Self::Command(command) => command.icon.is_some() || command.checked.is_some(),
             Self::Submenu(submenu) => submenu.icon.is_some(),
             _ => false,
         }
@@ -306,10 +304,7 @@ fn text_width<Renderer>(
 where
     Renderer: adv_text::Renderer<Font = iced::Font>,
 {
-    let limits = layout::Limits::new(
-        Size::ZERO,
-        Size::new(f32::INFINITY, f32::INFINITY),
-    );
+    let limits = layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY));
     let format = Format {
         width: iced::Length::Shrink,
         height: iced::Length::Shrink,
@@ -424,9 +419,7 @@ where
 
     let widest = effective_rows(items)
         .iter()
-        .map(|ix| {
-            row_width(renderer, &mut paragraph, &items[*ix], metrics, has_leading)
-        })
+        .map(|ix| row_width(renderer, &mut paragraph, &items[*ix], metrics, has_leading))
         .fold(0.0_f32, f32::max);
 
     (widest + MENU_PADDING * 2.0).clamp(MIN_WIDTH, MAX_WIDTH)
@@ -699,9 +692,7 @@ impl Catalog for iced::Theme {
             let palette = theme.extended_palette();
 
             Style {
-                background: iced::Background::Color(
-                    palette.background.weak.color,
-                ),
+                background: iced::Background::Color(palette.background.weak.color),
                 border: iced::Border {
                     color: palette.background.strong.color,
                     width: 1.0,
@@ -918,8 +909,7 @@ where
 
     /// The window-space rectangle of row `ix` this frame.
     fn row_bounds(&self, ix: usize, menu_bounds: Rectangle) -> Rectangle {
-        let y = menu_bounds.y + MENU_PADDING + row_offset(self.items, ix)
-            - self.state.scroll;
+        let y = menu_bounds.y + MENU_PADDING + row_offset(self.items, ix) - self.state.scroll;
         Rectangle {
             x: menu_bounds.x,
             y,
@@ -969,16 +959,14 @@ where
         let position = self
             .state
             .selected
-            .and_then(|selected| {
-                selectable.iter().position(|ix| *ix == selected)
-            });
+            .and_then(|selected| selectable.iter().position(|ix| *ix == selected));
 
         let next = match position {
             Some(position) => {
                 let count = isize::try_from(selectable.len())
                     .expect("a menu cannot have more rows than isize holds");
-                let current = isize::try_from(position)
-                    .expect("the index of a row is within the list");
+                let current =
+                    isize::try_from(position).expect("the index of a row is within the list");
                 let next = usize::try_from((current + step).rem_euclid(count))
                     .expect("a wrapped index is not negative");
                 selectable[next]
@@ -1029,8 +1017,7 @@ where
 
         match selected.and_then(|ix| self.items.get(ix)) {
             Some(Item::Submenu(_)) => {
-                self.state.submenu =
-                    selected.map(|ix| (ix, Box::new(State::new())));
+                self.state.submenu = selected.map(|ix| (ix, Box::new(State::new())));
             }
             _ => self.state.submenu = None,
         }
@@ -1039,16 +1026,12 @@ where
     /// Chooses a row: publishes its message or resolves it through
     /// `on_select`, then folds the whole menu.
     fn confirm(&mut self, ix: usize, shell: &mut Shell<'_, Message>) {
-        let path: Vec<usize> =
-            self.prefix.iter().copied().chain([ix]).collect();
+        let path: Vec<usize> = self.prefix.iter().copied().chain([ix]).collect();
         let message = match &self.items[ix] {
-            Item::Command(command) => {
-                command.message.clone().or_else(|| {
-                    self.on_select
-                        .as_ref()
-                        .map(|on_select| on_select(&path))
-                })
-            }
+            Item::Command(command) => command
+                .message
+                .clone()
+                .or_else(|| self.on_select.as_ref().map(|on_select| on_select(&path))),
             _ => None,
         };
 
@@ -1093,15 +1076,9 @@ where
     /// The vertical origin and the height the menu may take: below the
     /// trigger when the menu fits there, above it when it fits there, and on
     /// the roomier side — capped to it — when it fits nowhere.
-    fn vertical_placement(
-        &self,
-        height: f32,
-        window_height: f32,
-    ) -> (f32, f32) {
+    fn vertical_placement(&self, height: f32, window_height: f32) -> (f32, f32) {
         if self.root {
-            let space_below = window_height
-                - EDGE_MARGIN
-                - (self.trigger.y + self.trigger.height);
+            let space_below = window_height - EDGE_MARGIN - (self.trigger.y + self.trigger.height);
             let space_above = self.trigger.y - EDGE_MARGIN;
 
             if height <= space_below {
@@ -1138,11 +1115,7 @@ where
     Theme: Catalog,
     Renderer: adv_text::Renderer<Font = iced::Font>,
 {
-    fn layout(
-        &mut self,
-        renderer: &Renderer,
-        bounds: Size,
-    ) -> layout::Node {
+    fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         // The width comes from what the rows measure, so every label is drawn
         // on one line rather than wrapped to fit a guessed box. The host's
         // floor and the window's room both cap it.
@@ -1184,19 +1157,21 @@ where
                     // on — a choice, or a submenu folding open — and is
                     // swallowed either way, so nothing under the menu
                     // answers to it.
-                    if let Some(ix) = self.row_at(Point::new(point.x - menu_bounds.x, point.y - menu_bounds.y)) {
+                    if let Some(ix) =
+                        self.row_at(Point::new(point.x - menu_bounds.x, point.y - menu_bounds.y))
+                    {
                         match &self.items[ix] {
                             Item::Submenu(_) if self.items[ix].is_selectable() => {
-                                let already =
-                                    self.state.submenu.as_ref().is_some_and(
-                                        |(open, _)| *open == ix,
-                                    );
+                                let already = self
+                                    .state
+                                    .submenu
+                                    .as_ref()
+                                    .is_some_and(|(open, _)| *open == ix);
                                 if already {
                                     self.state.submenu = None;
                                 } else {
                                     self.state.selected = Some(ix);
-                                    self.state.submenu =
-                                        Some((ix, Box::new(State::new())));
+                                    self.state.submenu = Some((ix, Box::new(State::new())));
                                 }
                             }
                             item if item.is_selectable() => {
@@ -1230,13 +1205,10 @@ where
                     // The wheel belongs to the menu while the pointer is over
                     // it, scrollable or not: the page scrolling under an open
                     // menu reads as the menu tearing loose.
-                    let content =
-                        content_height(self.items) - MENU_PADDING * 2.0;
-                    let view =
-                        menu_bounds.height - MENU_PADDING * 2.0;
+                    let content = content_height(self.items) - MENU_PADDING * 2.0;
+                    let view = menu_bounds.height - MENU_PADDING * 2.0;
                     let max_scroll = (content - view).max(0.0);
-                    self.state.scroll =
-                        (self.state.scroll + lines).clamp(0.0, max_scroll);
+                    self.state.scroll = (self.state.scroll + lines).clamp(0.0, max_scroll);
                     shell.capture_event();
                     shell.request_redraw();
                 }
@@ -1253,19 +1225,14 @@ where
                 };
 
                 if let Some(ix) = self.row_at(point) {
-                    if self.items[ix].is_selectable()
-                        && self.state.selected != Some(ix)
-                    {
+                    if self.items[ix].is_selectable() && self.state.selected != Some(ix) {
                         self.state.selected = Some(ix);
                         self.reconcile_submenu();
                         shell.request_redraw();
                     }
                 }
             }
-            Event::Keyboard(iced::keyboard::Event::KeyPressed {
-                key,
-                ..
-            }) => {
+            Event::Keyboard(iced::keyboard::Event::KeyPressed { key, .. }) => {
                 // A level with an open submenu yields the arrow keys to it —
                 // the deepest menu walks first. It keeps only `Escape` and
                 // `Left`, which fold its own submenu.
@@ -1293,11 +1260,7 @@ where
                         shell.request_redraw();
                     }
                     Named::ArrowUp | Named::ArrowDown if !child_open => {
-                        let step = if named == Named::ArrowUp {
-                            -1isize
-                        } else {
-                            1
-                        };
+                        let step = if named == Named::ArrowUp { -1isize } else { 1 };
                         self.move_selection(step, menu_bounds);
                         self.reconcile_submenu();
                         shell.capture_event();
@@ -1312,9 +1275,7 @@ where
                         let opens = self
                             .state
                             .selected
-                            .is_some_and(|ix| {
-                                matches!(self.items.get(ix), Some(Item::Submenu(_)))
-                            });
+                            .is_some_and(|ix| matches!(self.items.get(ix), Some(Item::Submenu(_))));
                         if opens {
                             self.reconcile_submenu();
                             shell.capture_event();
@@ -1324,11 +1285,8 @@ where
                     Named::Enter if !child_open => {
                         if let Some(ix) = self.state.selected {
                             match self.items.get(ix) {
-                                Some(Item::Submenu(_))
-                                    if self.items[ix].is_selectable() =>
-                                {
-                                    self.state.submenu =
-                                        Some((ix, Box::new(State::new())));
+                                Some(Item::Submenu(_)) if self.items[ix].is_selectable() => {
+                                    self.state.submenu = Some((ix, Box::new(State::new())));
                                     shell.capture_event();
                                     shell.request_redraw();
                                 }
@@ -1389,9 +1347,7 @@ where
             let row = self.row_bounds(ix, bounds);
             let row_top = row.y - bounds.y;
 
-            if row_bottom_of(row_top, row.height) < 0.0
-                || row_top > bounds.height
-            {
+            if row_bottom_of(row_top, row.height) < 0.0 || row_top > bounds.height {
                 continue;
             }
 
@@ -1412,13 +1368,10 @@ where
                     );
                 }
                 Item::Label(label) => {
-                    draw_label(
-                        renderer, &style, row, label, style.muted_color,
-                    );
+                    draw_label(renderer, &style, row, label, style.muted_color);
                 }
                 Item::Command(command) => {
-                    let selected = self.state.selected == Some(ix)
-                        && command.enabled;
+                    let selected = self.state.selected == Some(ix) && command.enabled;
                     draw_selectable_row(
                         renderer,
                         &mut paragraph,
@@ -1461,8 +1414,7 @@ where
             let track = bounds.height - MENU_PADDING * 2.0;
             let thumb_height = (view * view / content).max(16.0);
             let progress = self.state.scroll / (content - view);
-            let thumb_y = bounds.y + MENU_PADDING
-                + progress * (track - thumb_height);
+            let thumb_y = bounds.y + MENU_PADDING + progress * (track - thumb_height);
             renderer.fill_quad(
                 renderer::Quad {
                     bounds: Rectangle {
@@ -1637,11 +1589,12 @@ fn draw_selectable_row<Renderer>(
     );
 
     if let Some(shortcut) = shortcut {
-        let hint_width = reserved - if trailing {
-            style.icon_size + CONTENT_GAP
-        } else {
-            0.0
-        };
+        let hint_width = reserved
+            - if trailing {
+                style.icon_size + CONTENT_GAP
+            } else {
+                0.0
+            };
         renderer.fill_text(
             adv_text::Text {
                 content: shortcut,
@@ -1655,8 +1608,13 @@ fn draw_selectable_row<Renderer>(
                 wrapping: adv_text::Wrapping::None,
             },
             Point::new(
-                row.x + row.width - ROW_PADDING
-                    - if trailing { style.icon_size + CONTENT_GAP } else { 0.0 },
+                row.x + row.width
+                    - ROW_PADDING
+                    - if trailing {
+                        style.icon_size + CONTENT_GAP
+                    } else {
+                        0.0
+                    },
                 center,
             ),
             style.muted_color,
@@ -1847,8 +1805,7 @@ mod tests {
         let items = sample_items();
         let rows = effective_rows(&items);
         let expected: f32 =
-            rows.iter().map(|ix| row_height(&items[*ix])).sum::<f32>()
-                + MENU_PADDING * 2.0;
+            rows.iter().map(|ix| row_height(&items[*ix])).sum::<f32>() + MENU_PADDING * 2.0;
 
         assert!((content_height(&items) - expected).abs() < f32::EPSILON);
     }
@@ -1886,8 +1843,7 @@ mod tests {
         // counts once.
         let copy = row_offset(&items, 0);
         let zoom = row_offset(&items, 3);
-        assert!((zoom - copy - (ROW_HEIGHT + SEPARATOR_HEIGHT)).abs()
-            < f32::EPSILON);
+        assert!((zoom - copy - (ROW_HEIGHT + SEPARATOR_HEIGHT)).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -1923,16 +1879,14 @@ mod tests {
         let row = Rectangle::new(Point::new(100.0, 100.0), Size::new(160.0, 28.0));
         let submenu = level(&mut state, &items, row, false, class());
         let to_the_right = submenu.horizontal_origin(160.0, 600.0);
-        assert!((to_the_right - (100.0 + 160.0 - SUBMENU_OVERLAP)).abs()
-            < f32::EPSILON);
+        assert!((to_the_right - (100.0 + 160.0 - SUBMENU_OVERLAP)).abs() < f32::EPSILON);
 
         // And beside it on the left when the right side has none.
         let mut state = State::new();
         let row = Rectangle::new(Point::new(350.0, 100.0), Size::new(160.0, 28.0));
         let submenu = level(&mut state, &items, row, false, class());
         let to_the_left = submenu.horizontal_origin(160.0, 600.0);
-        assert!((to_the_left - (350.0 - 160.0 + SUBMENU_OVERLAP)).abs()
-            < f32::EPSILON);
+        assert!((to_the_left - (350.0 - 160.0 + SUBMENU_OVERLAP)).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -1943,8 +1897,7 @@ mod tests {
             Item::action("Three", ()),
         ];
         let height = content_height(&items);
-        assert!((height - (ROW_HEIGHT * 3.0 + MENU_PADDING * 2.0)).abs()
-            < f32::EPSILON);
+        assert!((height - (ROW_HEIGHT * 3.0 + MENU_PADDING * 2.0)).abs() < f32::EPSILON);
 
         // A trigger in the upper half opens downward, from its bottom edge.
         let mut state = State::new();
@@ -2003,7 +1956,6 @@ mod tests {
         menu.reconcile_submenu();
         assert!(!menu.state.has_submenu());
     }
-
 
     #[test]
     fn keyboard_moves_skip_rows_that_cannot_answer() {
@@ -2071,10 +2023,7 @@ mod tests {
 
     #[test]
     fn a_state_resets_to_fresh() {
-        let items: Items = vec![Item::submenu(
-            "Export",
-            vec![Item::action("As PDF", ())],
-        )];
+        let items: Items = vec![Item::submenu("Export", vec![Item::action("As PDF", ())])];
 
         let mut state = State::new();
         let mut menu = level(
@@ -2147,17 +2096,18 @@ mod tests {
         let width = measured_width(&renderer, &items, metrics);
 
         let mut paragraph = paragraph::Plain::default();
-        let label = text_width(&renderer, &mut paragraph, "Copy Files path", metrics.text_size);
+        let label = text_width(
+            &renderer,
+            &mut paragraph,
+            "Copy Files path",
+            metrics.text_size,
+        );
         let hint = text_width(&renderer, &mut paragraph, "Ctrl+C", metrics.shortcut_size);
 
         // A row with a shortcut has to fit its label, the hint, the gap
         // between them and the row's own padding. Neither row here carries an
         // icon, so no icon column is reserved.
-        let needed = label
-            + hint
-            + CONTENT_GAP
-            + ROW_PADDING * 2.0
-            + MENU_PADDING * 2.0;
+        let needed = label + hint + CONTENT_GAP + ROW_PADDING * 2.0 + MENU_PADDING * 2.0;
 
         assert!(
             width + 0.5 >= needed,

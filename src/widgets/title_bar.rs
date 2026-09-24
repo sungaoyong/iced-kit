@@ -197,12 +197,7 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
     ///
     /// This is how to add a control that matches the built-in ones, such as a
     /// restore button or a settings button on the trailing edge.
-    pub fn custom_icon(
-        mut self,
-        icon: IconName,
-        message: Message,
-        destructive: bool,
-    ) -> Self {
+    pub fn custom_icon(mut self, icon: IconName, message: Message, destructive: bool) -> Self {
         self.controls.push(Control {
             glyph: ControlGlyph::Named(icon),
             message,
@@ -231,12 +226,10 @@ impl<'a, Message: Clone + 'a> TitleBar<'a, Message> {
             let element: Element<'a, Message, Theme> = match icon {
                 // Through the shared `Icon`, so the leading icon is sized and
                 // colored exactly like the window controls beside the title.
-                ControlGlyph::Named(name) => {
-                    Icon::new(*name).into_element(crate::theme::Size::Md)
+                ControlGlyph::Named(name) => Icon::new(*name).into_element(crate::theme::Size::Md),
+                ControlGlyph::Text(glyph) => {
+                    text(glyph.clone()).size(title_style.size + 2.0).into()
                 }
-                ControlGlyph::Text(glyph) => text(glyph.clone())
-                    .size(title_style.size + 2.0)
-                    .into(),
             };
 
             title = title.push(element);
@@ -415,9 +408,8 @@ mod tests {
 
     #[test]
     fn a_title_bar_renders_with_a_text_glyph_icon() {
-        let element: iced::Element<'_, Message, Theme> = TitleBar::new("My App")
-            .icon_glyph("◆")
-            .into();
+        let element: iced::Element<'_, Message, Theme> =
+            TitleBar::new("My App").icon_glyph("◆").into();
         drop(element);
     }
 

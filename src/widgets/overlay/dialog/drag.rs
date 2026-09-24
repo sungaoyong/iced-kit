@@ -26,7 +26,6 @@ use iced::advanced::{widget::Widget, Clipboard, Shell};
 use iced::mouse::{self, Cursor};
 use iced::{Element, Event, Point, Rectangle, Size, Vector};
 
-
 /// How far the pointer travels before a press becomes a drag, in logical
 /// pixels. The same threshold a tab drag uses, so every grab in the library
 /// asks for the same nudge before it picks something up.
@@ -137,10 +136,10 @@ where
         renderer: &Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        let mut surface = self
-            .surface
-            .as_widget_mut()
-            .layout(&mut tree.children[0], renderer, limits);
+        let mut surface =
+            self.surface
+                .as_widget_mut()
+                .layout(&mut tree.children[0], renderer, limits);
 
         let state = tree.state.downcast_mut::<DragState>();
         let size = surface.size();
@@ -216,7 +215,7 @@ where
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(iced::touch::Event::FingerPressed { .. }) => {
-                        if !shell.is_event_captured()
+                if !shell.is_event_captured()
                     && cursor
                         .position()
                         .is_some_and(|point| bounds.contains(point))
@@ -233,9 +232,7 @@ where
                 // Measured from the press, so a click on the title stays a
                 // click and only a real movement picks the dialog up.
                 if state.pending && !state.dragging {
-                    if let (Some(start), Some(position)) =
-                        (state.start, cursor.position())
-                    {
+                    if let (Some(start), Some(position)) = (state.start, cursor.position()) {
                         let dx = position.x - start.x;
                         let dy = position.y - start.y;
 
@@ -247,11 +244,9 @@ where
                 }
 
                 if state.dragging {
-                    if let (Some(start), Some(position)) =
-                        (state.start, cursor.position())
-                    {
-                        state.offset = state.base
-                            + Vector::new(position.x - start.x, position.y - start.y);
+                    if let (Some(start), Some(position)) = (state.start, cursor.position()) {
+                        state.offset =
+                            state.base + Vector::new(position.x - start.x, position.y - start.y);
                         // The layout moves with the drag, so the next frame
                         // both draws and hit-tests where the surface now is.
                         shell.invalidate_layout();
@@ -296,9 +291,7 @@ where
             renderer,
         );
 
-        if child == mouse::Interaction::None
-            && cursor.is_over(surface_layout.bounds())
-        {
+        if child == mouse::Interaction::None && cursor.is_over(surface_layout.bounds()) {
             mouse::Interaction::Grab
         } else {
             child
@@ -316,24 +309,36 @@ where
             return;
         };
 
-        self.surface
-            .as_widget_mut()
-            .operate(&mut tree.children[0], surface_layout, renderer, operation);
+        self.surface.as_widget_mut().operate(
+            &mut tree.children[0],
+            surface_layout,
+            renderer,
+            operation,
+        );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{clamp_offset, MIN_VISIBLE};
-    use iced::{Vector, Size};
+    use iced::{Size, Vector};
 
     /// The window the drag tests render in, and a dialog card in it.
-    const VIEW: Size = Size { width: 1280.0, height: 1000.0 };
-    const CARD: Size = Size { width: 448.0, height: 164.8 };
+    const VIEW: Size = Size {
+        width: 1280.0,
+        height: 1000.0,
+    };
+    const CARD: Size = Size {
+        width: 448.0,
+        height: 164.8,
+    };
 
     /// Where the card starts when the layer centres it.
     fn centre() -> Vector {
-        Vector::new((VIEW.width - CARD.width) / 2.0, (VIEW.height - CARD.height) / 2.0)
+        Vector::new(
+            (VIEW.width - CARD.width) / 2.0,
+            (VIEW.height - CARD.height) / 2.0,
+        )
     }
 
     #[test]
@@ -409,8 +414,10 @@ mod tests {
 
         // The card is wider than the window, so its right edge can only be
         // pulled to the clamp's own limit, never past it.
-        let position = Vector::new((VIEW.width - wide.width) / 2.0, (VIEW.height - wide.height) / 2.0)
-            + moved;
+        let position = Vector::new(
+            (VIEW.width - wide.width) / 2.0,
+            (VIEW.height - wide.height) / 2.0,
+        ) + moved;
         let bottom_right = position + Vector::new(wide.width, wide.height);
 
         assert!(bottom_right.x >= MIN_VISIBLE - 0.01);

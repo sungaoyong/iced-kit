@@ -1,7 +1,7 @@
 //! Accordion and pagination.
 //!
-//! Both are stateless: the caller owns which section is open, and which page is
-//! current, and receives a message when either changes.
+//! Both are stateless: the caller owns which sections are open, and which page
+//! is current, and receives a message when either changes.
 
 use crate::icons::IconName;
 use crate::theme::{Size, Theme};
@@ -14,6 +14,8 @@ use iced::{Color, Element, Length, Padding};
 pub struct Section {
     title: String,
     subtitle: Option<String>,
+    icon: Option<IconName>,
+    disabled: bool,
 }
 
 impl Section {
@@ -22,6 +24,8 @@ impl Section {
         Self {
             title: title.into(),
             subtitle: None,
+            icon: None,
+            disabled: false,
         }
     }
 
@@ -31,18 +35,40 @@ impl Section {
         self
     }
 
+    /// Draws an icon before the title, in place of the disclosure chevron.
+    ///
+    /// The chevron is drawn at the row's trailing edge when an icon is set, so
+    /// the open state stays readable either way.
+    pub fn icon(mut self, icon: IconName) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Disables the section: its header does not toggle.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
     /// Returns the section's title.
     #[must_use]
     pub fn title(&self) -> &str {
         &self.title
     }
+
+    /// Whether the section's header can be pressed.
+    #[must_use]
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
 }
 
 /// Builds a vertical accordion.
 ///
-/// Only one section is open at a time, which is the behaviour that keeps a long
-/// settings list scannable. `open` is the index of the expanded section, or
-/// `None` when all are collapsed.
+/// `open` holds the indices of the expanded sections. One open at a time is the
+/// behaviour that keeps a long settings list scannable, so a caller that wants
+/// it passes a one-element slice; [`Accordion::multiple`] accepts a set for a
+/// caller that does not.
 ///
 /// ```
 /// # use iced_kit::widgets::{accordion, AccordionSection};
@@ -64,31 +90,224 @@ pub fn accordion<'a, Message: Clone + 'a>(
     on_toggle: impl Fn(usize) -> Message + 'a,
     body: impl Fn(usize) -> Element<'a, Message, Theme> + 'a,
 ) -> Element<'a, Message, Theme> {
-    let title_style = Size::Md.text();
+    let open: Vec<usize> = open.into_iter().collect();
+    build_accordion(sections, &open, on_toggle, body)
+}
+
+/// Builds a vertical accordion with the reference's full option set.
+///
+/// [`accordion`] covers the common single-open case; this is the entry point
+/// when the options matter.
+///
+/// ```
+/// # use iced_kit::widgets::{accordion_builder, AccordionSection};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Toggled(usize) }
+/// # fn view(open: &[usize]) -> Element<'static, Message, Theme> {
+/// accordion_builder(
+///     vec![AccordionSection::new("General")],
+///     open,
+///     Message::Toggled,
+///     |i| iced::widget::text(format!("Body {i}")).into(),
+/// )
+/// .multiple(true)
+/// .bordered(false)
+/// .into()
+/// # }
+/// ```
+pub fn accordion_builder<'a, Message: Clone + 'a>(
+    sections: Vec<Section>,
+    open: &[usize],
+    on_toggle: impl Fn(usize) -> Message + 'a,
+    body: impl Fn(usize) -> Element<'a, Message, Theme> + 'a,
+) -> Accordion<'a, Message> {
+    Accordion {
+        sections,
+        open: open.to_vec(),
+        on_toggle: Box::new(on_toggle),
+        body: Box::new(body),
+        multiple: false,
+        bordered: true,
+        disabled: false,
+        size: Size::Md,
+    }
+}
+
+/// A vertical accordion under construction.
+///
+/// [`accordion`] returns this, so the options that the reference's `Accordion`
+/// carries are set on the builder:
+///
+/// ```
+/// # use iced_kit::widgets::{accordion, AccordionSection};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Toggled(usize) }
+/// # fn view(open: &[usize]) -> Element<'static, Message, Theme> {
+/// accordion(vec![AccordionSection::new("General")], open, Message::Toggled, |i| {
+///     iced::widget::text(format!("Body {i}")).into()
+/// })
+/// .multiple(true)
+/// .bordered(false)
+/// .size(iced_kit::Size::Lg)
+/// # }
+/// ```
+#[must_use = "an Accordion does nothing unless it is turned into an Element"]
+pub struct Accordion<'a, Message> {
+    sections: Vec<Section>,
+    open: Vec<usize>,
+    on_toggle: Box<dyn Fn(usize) -> Message + 'a>,
+    body: Box<dyn Fn(usize) -> Element<'a, Message, Theme> + 'a>,
+    multiple: bool,
+    bordered: bool,
+    disabled: bool,
+    size: Size,
+}
+
+impl<'a, Message: Clone + 'a> Accordion<'a, Message> {
+    /// Allows more than one section open at a time.
+    ///
+    /// The caller still owns the open set: this only says whether the set is
+    /// allowed to hold more than one index.
+    pub fn multiple(mut self, multiple: bool) -> Self {
+        self.multiple = multiple;
+        self
+    }
+
+    /// Draws the sections as one bordered card. Default `true`.
+    pub fn bordered(mut self, bordered: bool) -> Self {
+        self.bordered = bordered;
+        self
+    }
+
+    /// Disables every section's header.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Sets the size step, which scales the header's padding and text.
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Turns the accordion into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        let Self {
+            sections,
+            open,
+            on_toggle,
+            body,
+            multiple: _,
+            bordered,
+            disabled,
+            size,
+        } = self;
+
+        build_accordion_with(
+            sections,
+            &open,
+            on_toggle,
+            body,
+            AccordionStyle {
+                bordered,
+                disabled,
+                size,
+            },
+        )
+    }
+}
+
+impl<'a, Message: Clone + 'a> From<Accordion<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(accordion: Accordion<'a, Message>) -> Self {
+        accordion.into_element()
+    }
+}
+
+/// The appearance options an [`Accordion`] settled on.
+#[derive(Debug, Clone, Copy)]
+struct AccordionStyle {
+    bordered: bool,
+    disabled: bool,
+    size: Size,
+}
+
+/// Lays out an accordion for [`accordion`], which takes a single open index.
+fn build_accordion<'a, Message: Clone + 'a>(
+    sections: Vec<Section>,
+    open: &[usize],
+    on_toggle: impl Fn(usize) -> Message + 'a,
+    body: impl Fn(usize) -> Element<'a, Message, Theme> + 'a,
+) -> Element<'a, Message, Theme> {
+    build_accordion_with(
+        sections,
+        open,
+        Box::new(on_toggle),
+        Box::new(body),
+        AccordionStyle {
+            bordered: true,
+            disabled: false,
+            size: Size::Md,
+        },
+    )
+}
+
+/// Lays out an accordion.
+fn build_accordion_with<'a, Message: Clone + 'a>(
+    sections: Vec<Section>,
+    open: &[usize],
+    on_toggle: Box<dyn Fn(usize) -> Message + 'a>,
+    body: Box<dyn Fn(usize) -> Element<'a, Message, Theme> + 'a>,
+    style: AccordionStyle,
+) -> Element<'a, Message, Theme> {
+    let AccordionStyle {
+        bordered,
+        disabled,
+        size,
+    } = style;
+
+    let title_style = size.text();
     let subtitle_style = Size::Sm.text();
+    let last = sections.len().saturating_sub(1);
+
+    let header_padding = Padding {
+        top: match size {
+            Size::Xs => 6.0,
+            Size::Sm => 8.0,
+            Size::Lg => 14.0,
+            _ => 10.0,
+        },
+        right: 12.0,
+        bottom: match size {
+            Size::Xs => 6.0,
+            Size::Sm => 8.0,
+            Size::Lg => 14.0,
+            _ => 10.0,
+        },
+        left: 12.0,
+    };
 
     let mut items = column![].spacing(0);
 
     for (index, section) in sections.into_iter().enumerate() {
-        let is_open = open == Some(index);
+        let is_open = open.contains(&index);
+        let section_disabled = disabled || section.disabled;
 
-        let mut heading = row![
-            // The chevron is a glyph from the bundled icon font rather than a
-            // text character. A character like `▾` is sized and weighted by
-            // whichever system font happens to resolve it, so it could not be
-            // made to agree with the icons elsewhere in the library.
-            crate::widgets::Icon::new(if is_open {
-                IconName::ChevronDown
-            } else {
-                IconName::ChevronRight
-            })
-            .into_element(Size::Md),
+        let mut heading = row![].spacing(8).align_y(iced::Alignment::Center);
+
+        // A leading icon is optional; the disclosure chevron moves to the
+        // trailing edge when one is set so the two do not sit side by side.
+        if let Some(icon) = section.icon {
+            heading = heading.push(crate::widgets::Icon::new(icon).into_element(size));
+        }
+
+        heading = heading.push(
             text(section.title)
                 .size(title_style.size)
                 .line_height(title_style.line_height()),
-        ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center);
+        );
 
         if let Some(subtitle) = section.subtitle {
             heading = heading.push(
@@ -101,19 +320,31 @@ pub fn accordion<'a, Message: Clone + 'a>(
             );
         }
 
-        let header = button(heading.width(Length::Fill))
-            .width(Length::Fill)
-            .padding(Padding {
-                top: 10.0,
-                right: 12.0,
-                bottom: 10.0,
-                left: 12.0,
+        heading = heading.push(iced::widget::Space::new().width(Length::Fill));
+
+        // The chevron is a glyph from the bundled icon font rather than a
+        // text character. A character like `▾` is sized and weighted by
+        // whichever system font happens to resolve it, so it could not be
+        // made to agree with the icons elsewhere in the library.
+        heading = heading.push(
+            crate::widgets::Icon::new(if is_open {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
             })
-            .class(
-                Box::new(move |theme: &Theme, status| header_style(theme, status, is_open))
-                    as button::StyleFn<'a, Theme>,
-            )
-            .on_press(on_toggle(index));
+            .into_element(size),
+        );
+
+        let mut header = button(heading.width(Length::Fill))
+            .width(Length::Fill)
+            .padding(header_padding)
+            .class(Box::new(move |theme: &Theme, status| {
+                header_style(theme, status, is_open, section_disabled)
+            }) as button::StyleFn<'a, Theme>);
+
+        if !section_disabled {
+            header = header.on_press(on_toggle(index));
+        }
 
         items = items.push(header);
 
@@ -132,32 +363,63 @@ pub fn accordion<'a, Message: Clone + 'a>(
                 .duration(crate::motion::DURATION_NORMAL),
         );
 
-        items = items.push(
-            container(iced::widget::Space::new().height(Length::Fixed(1.0)))
-                .width(Length::Fill)
-                .height(Length::Fixed(1.0))
-                .class(Box::new(|theme: &Theme| container::Style {
-                    background: Some(iced::Background::Color(theme.colors().border)),
-                    ..container::Style::default()
-                }) as container::StyleFn<'a, Theme>),
-        );
+        // A bordered accordion is one card whose items are joined by their
+        // separators; an unbordered one has no separators either, because there
+        // is no edge for them to agree with.
+        if bordered && index != last {
+            items = items.push(
+                container(iced::widget::Space::new().height(Length::Fixed(1.0)))
+                    .width(Length::Fill)
+                    .height(Length::Fixed(1.0))
+                    .class(Box::new(|theme: &Theme| container::Style {
+                        background: Some(iced::Background::Color(theme.colors().border)),
+                        ..container::Style::default()
+                    }) as container::StyleFn<'a, Theme>),
+            );
+        }
     }
 
-    items.into()
+    if !bordered {
+        return items.into();
+    }
+
+    container(items)
+        .width(Length::Fill)
+        .class(Box::new(|theme: &Theme| container::Style {
+            border: iced::Border {
+                color: theme.colors().border,
+                width: 1.0,
+                radius: f32::from(theme.radius().lg).into(),
+            },
+            ..container::Style::default()
+        }) as container::StyleFn<'a, Theme>)
+        .into()
 }
 
 /// The appearance of an accordion header.
-fn header_style(theme: &Theme, status: button::Status, is_open: bool) -> button::Style {
+fn header_style(
+    theme: &Theme,
+    status: button::Status,
+    is_open: bool,
+    disabled: bool,
+) -> button::Style {
     let colors = theme.colors();
     let hovered = matches!(status, button::Status::Hovered);
 
+    let text_color = if disabled {
+        Color {
+            a: colors.muted_foreground.a * 0.6,
+            ..colors.muted_foreground
+        }
+    } else if is_open {
+        colors.foreground
+    } else {
+        colors.muted_foreground
+    };
+
     button::Style {
-        background: hovered.then_some(iced::Background::Color(colors.accent)),
-        text_color: if is_open {
-            colors.foreground
-        } else {
-            colors.muted_foreground
-        },
+        background: (hovered && !disabled).then_some(iced::Background::Color(colors.accent)),
+        text_color,
         border: iced::Border {
             color: Color::TRANSPARENT,
             width: 0.0,
@@ -341,8 +603,11 @@ fn page_window(page: usize, total: usize) -> Vec<Option<usize>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{accordion, page_button, page_window, pagination, Section};
-    use crate::theme::Theme;
+    use super::{
+        accordion, accordion_builder, page_button, page_window, pagination, Accordion, Section,
+    };
+    use crate::icons::IconName;
+    use crate::theme::{Size, Theme};
     use std::rc::Rc;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -393,6 +658,62 @@ mod tests {
         let section = Section::new("General").subtitle("Basic options");
         assert_eq!(section.title(), "General");
         assert_eq!(section.subtitle.as_deref(), Some("Basic options"));
+    }
+
+    #[test]
+    fn a_section_takes_an_icon_and_a_disabled_flag() {
+        let section = Section::new("Files").icon(IconName::File).disabled(true);
+
+        assert_eq!(section.title(), "Files");
+        assert!(section.is_disabled());
+        assert!(section.icon.is_some());
+    }
+
+    #[test]
+    fn an_accordion_records_its_options() {
+        let accordion: Accordion<'_, Message> =
+            accordion_builder(vec![Section::new("One")], &[0], Message::Toggled, |_| {
+                iced::widget::text("Body").into()
+            })
+            .multiple(true)
+            .bordered(false)
+            .disabled(true)
+            .size(Size::Lg);
+
+        assert!(accordion.multiple);
+        assert!(!accordion.bordered);
+        assert!(accordion.disabled);
+        assert_eq!(accordion.size, Size::Lg);
+        assert_eq!(accordion.open, vec![0]);
+    }
+
+    #[test]
+    fn a_multi_section_accordion_keeps_every_open_index() {
+        let accordion: Accordion<'_, Message> =
+            accordion_builder(vec![Section::new("One")], &[0, 2], Message::Toggled, |_| {
+                iced::widget::text("Body").into()
+            })
+            .multiple(true);
+
+        assert_eq!(accordion.open, vec![0, 2]);
+    }
+
+    #[test]
+    fn a_header_style_marks_its_open_and_disabled_states() {
+        use iced::widget::button::Status;
+
+        let theme = Theme::light();
+        let open = super::header_style(&theme, Status::Active, true, false);
+        let closed = super::header_style(&theme, Status::Active, false, false);
+        let disabled = super::header_style(&theme, Status::Active, true, true);
+
+        assert_eq!(open.text_color, theme.colors().foreground);
+        assert_eq!(closed.text_color, theme.colors().muted_foreground);
+        assert!(disabled.text_color.a < open.text_color.a);
+        // A disabled header must not highlight on hover.
+        assert!(super::header_style(&theme, Status::Hovered, true, true)
+            .background
+            .is_none());
     }
 
     #[test]
