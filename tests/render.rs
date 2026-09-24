@@ -2503,3 +2503,38 @@ fn calendar_and_date_field_render() {
         false,
     );
 }
+
+/// A color picker trigger, and the panel with its square, hue slider and
+/// swatches.
+#[test]
+fn color_picker_renders() {
+    use iced_kit::widgets::{color_picker, color_picker_panel, parse_hex};
+
+    let color = parse_hex("#336699").expect("a valid color").to_color();
+
+    let trigger: Element<'_, Message, Theme> = color_picker::<Message>(color)
+        .on_toggle(Message::Noop)
+        .into();
+
+    let labelled: Element<'_, Message, Theme> = color_picker::<Message>(color)
+        .label("Accent")
+        .open(true)
+        .on_toggle(Message::Noop)
+        .into();
+
+    let panel: Element<'_, Message, Theme> = color_picker_panel::<Message>(color)
+        .on_change(|_| Message::Noop)
+        .into();
+
+    let swatchless: Element<'_, Message, Theme> = color_picker_panel::<Message>(color)
+        .on_change(|_| Message::Noop)
+        .swatches([])
+        .show_hex(false)
+        .into();
+
+    assert_renders(
+        "color_picker",
+        row![column![trigger, labelled].spacing(8), panel, swatchless].spacing(16),
+        false,
+    );
+}

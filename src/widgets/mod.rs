@@ -15,6 +15,7 @@ pub mod avatar;
 pub mod button;
 pub mod carousel;
 pub mod chart;
+pub mod color_picker;
 pub mod combobox;
 pub mod data_table;
 pub mod date;
@@ -53,6 +54,10 @@ pub use button::{
 };
 pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
 pub use chart::{Chart, ChartKind, Series};
+pub use color_picker::{
+    color_picker, color_picker_panel, default_swatches, parse_hex, ColorPicker, ColorPickerPanel,
+    Hsv,
+};
 pub use combobox::{
     combobox, combobox_panel, filter_options, ComboBox, ComboBoxOption, ComboBoxPanel,
 };
