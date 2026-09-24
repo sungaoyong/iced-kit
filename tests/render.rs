@@ -2170,3 +2170,72 @@ fn the_dock_example_workspace_renders() {
          If the change was intentional, delete that file and rerun."
     );
 }
+
+/// A form in each label direction, and one in two columns with a footer,
+/// must render its fields with labels, required markers and descriptions.
+#[test]
+fn form_layouts_render() {
+    use iced_kit::widgets::{button, field, form, text_area, FormLabelLayout};
+
+    let empty_bio = iced::widget::text_editor::Content::with_text("");
+    let empty_bio_2 = iced::widget::text_editor::Content::with_text("");
+
+    let vertical = form()
+        .child(
+            field().label("Name").push(
+                text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop),
+            ),
+        )
+        .child(
+            field().label("Email").required(true).push(
+                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
+            ),
+        )
+        .child(
+            field()
+                .label("Bio")
+                .description("Use at most 100 words to describe yourself.")
+                .push(
+                    text_area::<Message>("Write something…", &empty_bio)
+                        .on_edit(|_| Message::Noop),
+                ),
+        );
+
+    let horizontal = form()
+        .label_layout(FormLabelLayout::Horizontal)
+        .label_width(80.0)
+        .child(
+            field().label("Email").required(true).description("We never share it.").push(
+                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
+            ),
+        )
+        .child(
+            field()
+                .label_indent(false)
+                .push(muted_text("This is a full width form field.")),
+        );
+
+    let columns = form()
+        .columns(2)
+        .child(
+            field().label("Name").push(
+                text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop),
+            ),
+        )
+        .child(
+            field().label("Email").required(true).push(
+                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
+            ),
+        )
+        .child(
+            field().label("Bio").col_span(2).push(
+                text_area::<Message>("Write something…", &empty_bio_2)
+                    .on_edit(|_| Message::Noop),
+            ),
+        )
+        .footer(button("Save").primary().on_press(Message::Noop));
+
+    assert_renders("form_vertical", column![vertical].spacing(16), false);
+    assert_renders("form_horizontal", column![horizontal].spacing(16), false);
+    assert_renders("form_columns", column![columns].spacing(16), false);
+}
