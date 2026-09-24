@@ -89,6 +89,8 @@ struct App {
     search: String,
     amount: String,
     notes: iced::widget::text_editor::Content,
+    /// The form layout demo's bio, edited through the text area.
+    bio: iced::widget::text_editor::Content,
     notifications: bool,
     newsletter: bool,
     plan: Plan,
@@ -200,6 +202,7 @@ enum Message {
     SearchChanged(String),
     AmountChanged(String),
     NotesEdited(iced::widget::text_editor::Action),
+    BioEdited(iced::widget::text_editor::Action),
     NotificationsToggled(bool),
     NewsletterToggled(bool),
     PlanPicked(Plan),
@@ -273,6 +276,7 @@ impl Default for App {
             search: String::new(),
             amount: String::new(),
             notes: iced::widget::text_editor::Content::new(),
+            bio: iced::widget::text_editor::Content::new(),
             notifications: false,
             newsletter: false,
             plan: Plan::default(),
@@ -387,6 +391,9 @@ impl App {
             Message::AmountChanged(value) => self.amount = value,
             Message::NotesEdited(action) => {
                 self.notes.perform(action);
+            }
+            Message::BioEdited(action) => {
+                self.bio.perform(action);
             }
             Message::NotificationsToggled(value) => self.notifications = value,
             Message::NewsletterToggled(value) => self.newsletter = value,
@@ -530,6 +537,7 @@ impl App {
             self.header(),
             self.buttons_section(),
             self.form_section(),
+            self.form_layout_section(),
             self.input_group_section(),
             self.selection_section(),
             self.display_section(),
@@ -896,6 +904,43 @@ impl App {
                 .spacing(4),
             ]
             .spacing(16),
+        )
+    }
+
+    fn form_layout_section(&self) -> Element<'_, Message, Theme> {
+        Self::section(
+            "Form layout",
+            form()
+                .columns(2)
+                .child(
+                    field().label("Name").push(
+                        text_input::<Message>("Ada Lovelace", &self.name)
+                            .on_input(Message::NameChanged),
+                    ),
+                )
+                .child(
+                    field().label("Email").required(true).push(
+                        text_input::<Message>("you@example.com", &self.email)
+                            .on_input(Message::EmailChanged),
+                    ),
+                )
+                .child(
+                    field()
+                        .label("Bio")
+                        .description("Use at most 100 words to describe yourself.")
+                        .col_span(2)
+                        .push(
+                            text_area::<Message>("Write something…", &self.bio)
+                                .on_edit(Message::BioEdited),
+                        ),
+                )
+                .child(
+                    field()
+                        .label_indent(false)
+                        .col_span(2)
+                        .push(muted_text("This is a full width form field.")),
+                )
+                .footer(row![button("Save").primary().on_press(Message::Save)].spacing(8)),
         )
     }
 
