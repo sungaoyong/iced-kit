@@ -231,3 +231,15 @@ MessageScroller::new(items, &state, |item, index| Element)
 - `cargo test` 通过（含第 6 段所列单测与烟测）。
 - `examples/chat.rs` 可运行，展示：左右对齐消息、头像、多种 bubble variant、reactions、marker 三形态与两种 loading、attachment 五状态、长对话列表的贴底/上滑/跳到底/底部渐隐。
 - 视觉与语义与 `gpui-kit` 参考逐项对齐（差异仅第 5.6 / 第 7 段所列框架强制项）。
+
+## 9. 实现偏差与有意简化（Task 1-6 定稿）
+
+实现经两阶段代码审查后，以下相对本文档前述 API 的偏差被确认为**有意为之**，据 iced 0.14 约束或 YAGNI 保留，非缺陷：
+
+- **`Attachment::id` / `AttachmentGroup::new(id)` 未实现**：本项目所用 iced 0.14 中 `iced::ElementId` 已更名为 `Id`，且 `button` 未提供链式 `.id()`（经核实）。可点击卡片依赖 iced 基于 widget `Path` 的稳定 id。若后续同构多卡出现命中冲突，再评估经 `iced::widget::Id` 手动注入。
+- **`MessageScroller::scrollbar(bool)` 未实现**：`VirtualList` 未暴露滚动条开关，透传无实际效果，故省略（避免无效 API）。
+- **`Marker::with_shimmer_style`、`MarkerIcon`/`MarkerContent` 独立容器**：shimmer 走默认样式；图标/正文以 `.icon(IconName)`/`.content(String)`/`.child(Element)` 内联，未拆成独立 child 收集容器。
+- **`Message` 挂载方法命名**：`.header_el/.footer_el`（而非 `.header(MessageHeader)`）；未提供 `.avatar_slot()`，`MessageAvatar` 可经 `.avatar(impl Into<Element>)` 间接挂载。
+- **签名微调**：`.with_bottom_fade(Option<Color>)`（需显式传色，不自动取 background）、`.on_jump_to_bottom(Message)`（携带一个消息值而非回调）。
+- **跳到底落点**：新增 `MessageScrollerState::pin_to_tail()`（仅置 follow 标志，交 `anchor_bottom` 定位）作为按钮首选路径；`scroll_to_end(content_height, viewport)` 保留为已知尺寸的显式偏移路径。
+- **底部渐隐**：以堆叠半透明带（顶部带全透明起、向下渐浓）实现，非自定义 `Widget` 渐变图元；jump 按钮为纯显隐（motion 过渡为可接受简化）。

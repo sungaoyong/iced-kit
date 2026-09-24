@@ -21,6 +21,9 @@ const FOLLOW_THRESHOLD: f32 = 80.0;
 pub struct MessageScrollerState {
     list: VirtualListState,
     follow_tail: bool,
+    /// Last-seen item count, for the application to diff appends/prepends.
+    /// The renderer does not read it: tail-following is driven purely by
+    /// `follow_tail` plus the viewport's `anchor_bottom`.
     seen_len: usize,
 }
 
@@ -115,7 +118,23 @@ impl MessageScrollerState {
         self.follow_tail != was
     }
 
-    /// Jumps to the very bottom and pins the view there.
+    /// Pins the view to the newest message without computing an offset.
+    ///
+    /// This is the primitive a "jump to bottom" button should reach for: it only
+    /// flips the follow flag, and the next render lets the viewport's
+    /// `anchor_bottom` place the tail exactly. Prefer it over
+    /// [`scroll_to_end`](Self::scroll_to_end), which needs content/viewport
+    /// heights the caller rarely knows precisely.
+    pub fn pin_to_tail(&mut self) {
+        self.follow_tail = true;
+    }
+
+    /// Jumps to the very bottom and pins the view there, given the total content
+    /// and viewport heights.
+    ///
+    /// Because `content_height` is typically an estimate (rows may not all be
+    /// measured), most callers should use [`pin_to_tail`](Self::pin_to_tail)
+    /// instead; this is the explicit-offset path for restoring a known position.
     pub fn scroll_to_end(&mut self, content_height: f32, viewport: f32) {
         let max = (content_height - viewport).max(0.0);
         self.list.update(max, viewport);
@@ -296,8 +315,9 @@ fn fade_overlay<'a, Message: 'a>(
 
     let mut bands = column![].spacing(0).width(Length::Fill);
     for index in 0..BANDS {
-        // Ramp the alpha up toward the bottom so content dissolves into `color`.
-        let ratio = (index + 1) as f32 / BANDS as f32;
+        // Ramp from fully transparent at the top band to the target alpha at the
+        // bottom, so the fade has no hard seam where it meets the content.
+        let ratio = index as f32 / (BANDS - 1) as f32;
         let band = Color {
             a: color.a * ratio,
             ..color
@@ -432,6 +452,16 @@ mod tests {
         s.scroll_to_end(1000.0, 400.0);
         assert!(s.is_following_tail());
         assert_eq!(s.list_offset(), 600.0);
+    }
+
+    #[test]
+    fn pin_to_tail_refollows_without_touching_offset() {
+        let mut s = MessageScrollerState::new(10);
+        s.apply_scroll(1000.0, 400.0, 100.0); // detached, offset 100
+        let before = s.list_offset();
+        s.pin_to_tail();
+        assert!(s.is_following_tail(), "the flag flips so anchor_bottom places it");
+        assert_eq!(s.list_offset(), before, "no offset is guessed on the jump path");
     }
 
     #[test]
