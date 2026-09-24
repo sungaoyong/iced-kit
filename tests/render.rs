@@ -3048,3 +3048,57 @@ fn chat_message_scroller_jump_button_renders() {
 
     assert_renders("chat_scroller_jump", scroller, false);
 }
+
+/// Markers in every variant, loading style and icon state.
+///
+/// The spacing here is the reference's: an icon sits 8px from its text and a
+/// rule 4px from it. The spinner appears only when the icon slot is free, so
+/// the row with an icon is the case that proves the rule.
+#[test]
+fn chat_markers_render() {
+    use iced_kit::widgets::chat::{marker, Marker, MarkerLoadingStyle, MarkerVariant};
+
+    let plain: Element<'_, Message, Theme> = marker::<Message>("— Today —").into();
+
+    let separator: Element<'_, Message, Theme> = Marker::<Message>::new()
+        .content("Yesterday")
+        .with_variant(MarkerVariant::Separator)
+        .into();
+
+    let bordered: Element<'_, Message, Theme> = Marker::<Message>::new()
+        .content("System note")
+        .with_variant(MarkerVariant::Border)
+        .into();
+
+    let spinner: Element<'_, Message, Theme> = Marker::<Message>::new()
+        .content("Reading 3 files")
+        .loading(true)
+        .into();
+
+    // An icon takes the slot, so no spinner is drawn beside it.
+    let icon_and_loading: Element<'_, Message, Theme> = Marker::<Message>::new()
+        .icon(iced_kit::icons::IconName::Search)
+        .content("Searching")
+        .loading(true)
+        .into();
+
+    let shimmering: Element<'_, Message, Theme> = Marker::<Message>::new()
+        .content("Thinking…")
+        .loading(true)
+        .with_loading_style(MarkerLoadingStyle::Shimmer)
+        .into();
+
+    assert_renders(
+        "chat_markers",
+        column![
+            plain,
+            separator,
+            bordered,
+            spinner,
+            icon_and_loading,
+            shimmering,
+        ]
+        .spacing(12),
+        false,
+    );
+}

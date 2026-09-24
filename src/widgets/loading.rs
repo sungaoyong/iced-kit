@@ -99,6 +99,17 @@ impl<'a, Message: Clone + 'a> From<Collapsible<'a, Message>> for Element<'a, Mes
     }
 }
 
+/// How long one pulse of a breathing wash takes.
+const BREATHE_PERIOD: std::time::Duration = std::time::Duration::from_millis(1600);
+
+/// The weakest a breathing wash gets. Not zero: the wash must stay visible or
+/// the content would appear to flicker in and out.
+const BREATHE_MIN: f32 = 0.0;
+
+/// The strongest a breathing wash gets. Kept low so the content stays legible
+/// under it.
+const BREATHE_MAX: f32 = 0.35;
+
 /// How far a shimmer's highlight spreads.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShimmerSpread {
@@ -506,6 +517,216 @@ impl<Message> Widget<Message, Theme, iced::Renderer> for ShimmerShell<'_, Messag
 impl<'a, Message: 'a> From<ShimmerShell<'a, Message>> for Element<'a, Message, Theme> {
     fn from(shimmer: ShimmerShell<'a, Message>) -> Self {
         Element::new(shimmer)
+    }
+}
+
+/// Pulses its content, for something waiting that has nothing to shimmer.
+///
+/// iced's renderer has no alpha for a subtree, so this cannot dim what it
+/// wraps. What it does instead is draw a soft, muted wash over the content and
+/// pulse that: the content stays legible, and the movement is what says work is
+/// still in progress. A caller with text to sweep should use [`shimmer`]
+/// instead, which is the more informative effect.
+pub fn breathe<'a, Message: Clone + 'a>(
+    content: impl Into<Element<'a, Message, Theme>>,
+) -> Element<'a, Message, Theme> {
+    Breathing {
+        content: content.into(),
+    }
+    .into()
+}
+
+/// The widget that pulses a wash over its content.
+struct Breathing<'a, Message> {
+    content: Element<'a, Message, Theme>,
+}
+
+/// The phase a breathing wash is at, and when it was last advanced.
+#[derive(Debug, Clone, Copy, Default)]
+struct BreathingState {
+    /// Where in the cycle the wash is, in radians.
+    phase: f32,
+    /// The frame the phase was last advanced to.
+    last: Option<Instant>,
+}
+
+impl<Message> Widget<Message, Theme, iced::Renderer> for Breathing<'_, Message> {
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<BreathingState>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(BreathingState::default())
+    }
+
+    fn children(&self) -> Vec<tree::Tree> {
+        vec![tree::Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut tree::Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn size(&self) -> IcedSize<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut tree::Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut tree::Tree,
+        layout: layout::Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(&mut tree.children[0], layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut tree::Tree,
+        event: &iced::Event,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+
+        if shell.is_event_captured() {
+            return;
+        }
+
+        // A reduced-motion application shows the settling state and stops
+        // asking for frames, so the wash simply stays where it is.
+        if crate::motion::reduce_motion() {
+            return;
+        }
+
+        if let iced::Event::Window(iced::window::Event::RedrawRequested(now)) = event {
+            let state = tree.state.downcast_mut::<BreathingState>();
+            let elapsed = state
+                .last
+                .map_or(std::time::Duration::ZERO, |last| now.duration_since(last));
+            state.last = Some(*now);
+
+            let period = BREATHE_PERIOD.as_secs_f32().max(0.001);
+            state.phase = (state.phase + elapsed.as_secs_f32() / period * std::f32::consts::TAU)
+                .rem_euclid(std::f32::consts::TAU);
+
+            shell.request_redraw();
+        }
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &iced::advanced::renderer::Style,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let bounds = layout.bounds();
+
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            viewport,
+        );
+
+        if !bounds.intersects(viewport) || crate::motion::reduce_motion() {
+            return;
+        }
+
+        // A sine keeps the wash's strength continuous, so the pulse has no
+        // seam where the cycle restarts.
+        let phase = tree.state.downcast_ref::<BreathingState>().phase;
+        let strength = (phase.sin() * 0.5 + 0.5) * (BREATHE_MAX - BREATHE_MIN) + BREATHE_MIN;
+
+        renderer.fill_quad(
+            iced::advanced::renderer::Quad {
+                bounds,
+                border: iced::Border {
+                    radius: 0.0.into(),
+                    ..iced::Border::default()
+                },
+                shadow: iced::Shadow::default(),
+                snap: true,
+            },
+            Color {
+                a: strength,
+                ..theme.colors().surface
+            },
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &tree::Tree,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout,
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut tree::Tree,
+        layout: layout::Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, Message, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+}
+
+impl<'a, Message: 'a> From<Breathing<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(breathing: Breathing<'a, Message>) -> Self {
+        Element::new(breathing)
     }
 }
 
