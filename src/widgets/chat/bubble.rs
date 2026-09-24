@@ -2,8 +2,23 @@
 //! the emoji reactions that may accompany it.
 
 use crate::theme::{Size, Theme};
+use iced::advanced::layout::{self, Limits};
+use iced::advanced::widget::{tree, Operation};
+use iced::advanced::{mouse, Clipboard, Shell, Widget};
 use iced::widget::{column, container, row, text};
-use iced::{Alignment, Background, Border, Color, Element, Length, Padding};
+use iced::{
+    Alignment, Background, Border, Color, Element, Length, Padding, Point, Rectangle,
+    Size as IcedSize, Vector,
+};
+
+/// The gap between reaction controls in a cluster.
+const REACTION_GAP: f32 = 4.0;
+
+/// The width of the ring drawn around a reaction cluster.
+///
+/// The ring is in the page color, so the cluster reads as a separate layer
+/// floating over the bubble rather than as a patch inside it.
+const REACTION_RING: f32 = 3.0;
 
 /// Horizontal alignment for messages and message-owned chat surfaces.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -93,6 +108,11 @@ impl<'a, Message: 'a> From<BubbleContent<'a, Message>> for Element<'a, Message, 
 pub struct BubbleReactions<'a, Message> {
     side: BubbleReactionSide,
     children: Vec<Element<'a, Message, Theme>>,
+    /// Whether any child was given through [`BubbleReactions::action`].
+    ///
+    /// A cluster of controls already carries each control's padding, so the
+    /// cluster adds none of its own; a cluster of bare text does need it.
+    has_action: bool,
 }
 
 impl<'a, Message: 'a> BubbleReactions<'a, Message> {
@@ -100,6 +120,7 @@ impl<'a, Message: 'a> BubbleReactions<'a, Message> {
         Self {
             side: BubbleReactionSide::default(),
             children: Vec::new(),
+            has_action: false,
         }
     }
 
@@ -110,21 +131,91 @@ impl<'a, Message: 'a> BubbleReactions<'a, Message> {
     }
 
     /// Adds a reaction control (usually a small [`Button`](crate::widgets::Button)).
+    ///
+    /// A control is shaped to the cluster's own radius, so a row of reactions
+    /// reads as one pill rather than as buttons inside a pill.
     pub fn action(mut self, el: impl Into<Element<'a, Message, Theme>>) -> Self {
+        self.children.push(el.into());
+        self.has_action = true;
+        self
+    }
+
+    /// Adds content that is not a control: a reaction count, a divider, a label.
+    ///
+    /// Unlike [`action`](Self::action), the element keeps its own styling.
+    pub fn child(mut self, el: impl Into<Element<'a, Message, Theme>>) -> Self {
         self.children.push(el.into());
         self
     }
 
-    /// Alias for [`action`](Self::action) for non-button children.
-    pub fn child(mut self, el: impl Into<Element<'a, Message, Theme>>) -> Self {
-        self.children.push(el.into());
-        self
+    /// Whether any child was added as a control.
+    #[must_use]
+    pub fn has_action(&self) -> bool {
+        self.has_action
+    }
+
+    /// How many children the cluster holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.children.len()
+    }
+
+    /// Whether the cluster is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.children.is_empty()
     }
 }
 
 impl<'a, Message: 'a> Default for BubbleReactions<'a, Message> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<'a, Message: 'a> BubbleReactions<'a, Message> {
+    /// Renders the cluster as the reference's pill: a rounded, muted capsule
+    /// with a thick ring in the page color, so it reads as floating over the
+    /// bubble it annotates rather than as a patch inside it.
+    fn into_element(self) -> Element<'a, Message, Theme> {
+        let mut cluster = row(self.children)
+            .spacing(REACTION_GAP)
+            .align_y(Alignment::Center);
+
+        // A cluster of bare text (a reaction count, say) needs its own padding.
+        // A cluster of controls already carries each control's padding, and
+        // adding more would make the pill bulge around them.
+        if !self.has_action {
+            cluster = cluster.padding(Padding::from([2.0, 6.0]));
+        }
+
+        container(cluster)
+            .padding(REACTION_RING)
+            .class(Box::new(|theme: &Theme| {
+                let colors = theme.colors();
+
+                container::Style {
+                    // The background is the page color and the fill is muted, so
+                    // the ring that separates the pill from the bubble is the
+                    // page-color edge the padding leaves visible.
+                    background: Some(Background::Color(colors.background)),
+                    border: Border {
+                        color: colors.muted,
+                        width: 0.0,
+                        radius: f32::from(theme.radius().full).into(),
+                    },
+                    text_color: Some(colors.foreground),
+                    ..Default::default()
+                }
+            })
+                as iced::widget::container::StyleFn<'a, Theme>)
+            .into()
+    }
+}
+
+impl<'a, Message: 'a> From<BubbleReactions<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(reactions: BubbleReactions<'a, Message>) -> Self {
+        reactions.into_element()
     }
 }
 
@@ -235,23 +326,285 @@ impl<'a, Message: 'a> From<Bubble<'a, Message>> for Element<'a, Message, Theme> 
                 .into()
         };
 
-        let mut stack = column![surface].spacing(4).width(stack_width);
-        if let Some(reactions) = bubble.reactions {
-            if !reactions.children.is_empty() {
-                let cluster: Element<'a, Message, Theme> =
-                    row(reactions.children).spacing(4).into();
-                stack = match reactions.side {
-                    BubbleReactionSide::Top => column![cluster, stack].align_x(edge),
-                    BubbleReactionSide::Bottom => column![stack, cluster].align_x(edge),
-                }
-                .spacing(4)
-                .width(stack_width);
+        // The reaction pill rides over the bubble's edge rather than sitting
+        // beside it, so the two overlap: the pill is an annotation on the
+        // message, and the pair must occupy one box rather than two stacked.
+        let cluster = bubble
+            .reactions
+            .filter(|reactions| !reactions.is_empty())
+            .map(|reactions| (reactions.side, reactions.into_element()));
+
+        let stack = match cluster {
+            None => container(surface).width(stack_width).into(),
+            Some((side, cluster)) => {
+                Element::from(Overlap::new(surface, cluster, side, stack_width))
             }
-        }
+        };
 
         // The outer container spans the row so it can push the shrunken stack
         // to the leading or trailing edge.
         container(stack).width(Length::Fill).align_x(edge).into()
+    }
+}
+
+/// Stacks a bubble with a reaction pill that rides over its edge.
+///
+/// iced has no absolute positioning and no negative margins, so a pill that
+/// overlaps the bubble's edge has to be laid out by hand: the two children are
+/// placed with the pill inset past the bubble's own edge, and the result's
+/// height is the union of the two rather than their sum. That union is what
+/// keeps a message the same height whether or not it has reactions, so a
+/// transcript does not jump as they arrive.
+struct Overlap<'a, Message> {
+    bubble: Element<'a, Message, Theme>,
+    pill: Element<'a, Message, Theme>,
+    side: BubbleReactionSide,
+    width: Length,
+}
+
+impl<'a, Message> Overlap<'a, Message> {
+    fn new(
+        bubble: Element<'a, Message, Theme>,
+        pill: Element<'a, Message, Theme>,
+        side: BubbleReactionSide,
+        width: Length,
+    ) -> Self {
+        Self {
+            bubble,
+            pill,
+            side,
+            width,
+        }
+    }
+}
+
+impl<Message> Widget<Message, Theme, iced::Renderer> for Overlap<'_, Message> {
+    fn children(&self) -> Vec<tree::Tree> {
+        vec![tree::Tree::new(&self.bubble), tree::Tree::new(&self.pill)]
+    }
+
+    fn diff(&self, tree: &mut tree::Tree) {
+        tree.diff_children(&[&self.bubble, &self.pill]);
+    }
+
+    fn size(&self) -> IcedSize<Length> {
+        IcedSize::new(self.width, Length::Shrink)
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut tree::Tree,
+        renderer: &iced::Renderer,
+        limits: &Limits,
+    ) -> layout::Node {
+        let max = limits.width(self.width).max();
+
+        let bubble = self.bubble.as_widget_mut().layout(
+            &mut tree.children[0],
+            renderer,
+            &Limits::new(IcedSize::ZERO, max),
+        );
+        let pill = self.pill.as_widget_mut().layout(
+            &mut tree.children[1],
+            renderer,
+            &Limits::new(IcedSize::ZERO, max),
+        );
+
+        let bubble_size = bubble.size();
+        let pill_size = pill.size();
+
+        // How far the pill reaches past the bubble's edge: three quarters of
+        // the pill's height, matching the reference's approximation of
+        // shadcn's `translate-y-3/4`. Enough to read as riding on the edge,
+        // while leaving the message's last line uncovered.
+        let overhang = pill_size.height * 0.75;
+
+        let (bubble_y, pill_y, height) = match self.side {
+            // Over the top edge: the pill starts at the origin and the bubble
+            // is pushed down by what the pill does not overhang.
+            BubbleReactionSide::Top => {
+                let bubble_y = pill_size.height - overhang;
+                (bubble_y, 0.0, bubble_y + bubble_size.height)
+            }
+            // Over the bottom edge: the bubble comes first, and the pill's top
+            // sits at the bubble's bottom less the overhang.
+            BubbleReactionSide::Bottom => {
+                let pill_y = bubble_size.height - overhang;
+                (0.0, pill_y, pill_y + pill_size.height)
+            }
+        };
+
+        let width = bubble_size.width.max(pill_size.width);
+
+        // The pill tucks against the bubble's trailing edge, the way a reaction
+        // badge hangs off the corner of the message it belongs to.
+        let pill_x = (bubble_size.width - pill_size.width).max(0.0);
+
+        let nodes = vec![
+            bubble.move_to(Point::new(0.0, bubble_y)),
+            pill.move_to(Point::new(pill_x, pill_y)),
+        ];
+
+        layout::Node::with_children(IcedSize::new(width, height), nodes)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut tree::Tree,
+        layout: layout::Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+
+        for (index, child) in [&mut self.bubble, &mut self.pill].into_iter().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+
+            child.as_widget_mut().operate(
+                &mut tree.children[index],
+                child_layout,
+                renderer,
+                operation,
+            );
+        }
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut tree::Tree,
+        event: &iced::Event,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+
+        // The pill draws over the bubble, so it answers for a press first:
+        // a reaction that sits on the message's edge must still be clickable.
+        for index in [1, 0] {
+            let Some(child_layout) = children.get(index).copied() else {
+                continue;
+            };
+
+            let child = if index == 0 {
+                &mut self.bubble
+            } else {
+                &mut self.pill
+            };
+
+            child.as_widget_mut().update(
+                &mut tree.children[index],
+                event,
+                child_layout,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+
+            if shell.is_event_captured() {
+                break;
+            }
+        }
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &iced::advanced::renderer::Style,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+
+        // The bubble first, so the pill and its ring draw over it.
+        for (index, child) in [&self.bubble, &self.pill].into_iter().enumerate() {
+            let Some(child_layout) = children.get(index).copied() else {
+                break;
+            };
+
+            child.as_widget().draw(
+                &tree.children[index],
+                renderer,
+                theme,
+                style,
+                child_layout,
+                cursor,
+                viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &tree::Tree,
+        layout: layout::Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        let children: Vec<layout::Layout<'_>> = layout.children().collect();
+
+        // Front to back, matching the draw order.
+        for index in [1, 0] {
+            let Some(child_layout) = children.get(index).copied() else {
+                continue;
+            };
+
+            let child = if index == 0 { &self.bubble } else { &self.pill };
+
+            let interaction = child.as_widget().mouse_interaction(
+                &tree.children[index],
+                child_layout,
+                cursor,
+                viewport,
+                renderer,
+            );
+
+            if interaction != mouse::Interaction::None {
+                return interaction;
+            }
+        }
+
+        mouse::Interaction::None
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut tree::Tree,
+        layout: layout::Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, Message, Theme, iced::Renderer>> {
+        let overlays = [&mut self.bubble, &mut self.pill]
+            .into_iter()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+            .filter_map(|((child, tree), layout)| {
+                child
+                    .as_widget_mut()
+                    .overlay(tree, layout, renderer, viewport, translation)
+            })
+            .collect::<Vec<_>>();
+
+        (!overlays.is_empty())
+            .then(|| iced::advanced::overlay::Group::with_children(overlays).overlay())
+    }
+}
+
+impl<'a, Message: 'a> From<Overlap<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(overlap: Overlap<'a, Message>) -> Self {
+        Element::new(overlap)
     }
 }
 
@@ -440,6 +793,63 @@ mod tests {
                 .reactions(BubbleReactions::new().side(side).action(note))
                 .into();
             drop(el);
+        }
+    }
+
+    /// The distinction the reference draws: an `action` is a control, and a
+    /// cluster of controls needs no padding of its own; a `child` is bare
+    /// content, and a cluster of those does.
+    #[test]
+    fn a_reaction_cluster_tracks_whether_it_holds_a_control() {
+        let note: Element<'_, Msg, Theme> = text("👍 2").into();
+        let bare = BubbleReactions::<Msg>::new().child(note);
+        assert_eq!(bare.len(), 1);
+        assert!(!bare.has_action(), "a plain child is not a control");
+
+        let with_action = BubbleReactions::<Msg>::new().action(text("👍"));
+        assert!(with_action.has_action(), "an action is a control");
+
+        let count: Element<'_, Msg, Theme> = text("👍 2").into();
+        let mixed = BubbleReactions::<Msg>::new()
+            .child(count)
+            .action(text("👍"));
+        assert!(
+            mixed.has_action(),
+            "one control is enough to claim the padding"
+        );
+
+        let empty = BubbleReactions::<Msg>::new();
+        assert!(empty.is_empty());
+        assert!(!empty.has_action());
+    }
+
+    /// A cluster renders standalone as a pill, and a bubble with no reactions
+    /// must not grow a pill.
+    #[test]
+    fn reaction_clusters_render_standalone() {
+        let count: Element<'_, Msg, Theme> = text("🎉 4").into();
+        let cluster: Element<'_, Msg, Theme> = BubbleReactions::new().child(count).into();
+        drop(cluster);
+
+        let no_reactions: Element<'_, Msg, Theme> =
+            bubble("plain").reactions(BubbleReactions::new()).into();
+        drop(no_reactions);
+    }
+
+    /// All four combinations of side and alignment must lay out, since the pill
+    /// is positioned by hand.
+    #[test]
+    fn the_pill_lays_out_on_every_side_and_alignment() {
+        for side in [BubbleReactionSide::Top, BubbleReactionSide::Bottom] {
+            for alignment in [MessageAlignment::Start, MessageAlignment::End] {
+                let note: Element<'_, Msg, Theme> = text("👍 2").into();
+                let el: Element<'_, Msg, Theme> = bubble("a message long enough to wrap")
+                    .alignment(alignment)
+                    .max_width(200.0)
+                    .reactions(BubbleReactions::new().side(side).child(note))
+                    .into();
+                drop(el);
+            }
         }
     }
 

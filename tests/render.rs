@@ -2980,3 +2980,45 @@ fn chat_message_avatar_rail_renders() {
         false,
     );
 }
+
+/// Reaction clusters riding over a bubble's edge.
+///
+/// The pill is drawn over the bubble rather than beside it, which needs a
+/// hand-written layout: iced has no absolute positioning or negative margins.
+/// Both sides and both alignments are shown, because each places the pill
+/// differently.
+#[test]
+fn chat_reaction_pills_render() {
+    use iced_kit::widgets::chat::{bubble, BubbleReactionSide, BubbleReactions, MessageAlignment};
+
+    let pill = |label: &'static str, side: BubbleReactionSide, alignment: MessageAlignment| {
+        let note: Element<'_, Message, Theme> = muted_text(label).into();
+        bubble::<Message>("A message with reactions")
+            .alignment(alignment)
+            .max_width(240.0)
+            .reactions(BubbleReactions::new().side(side).child(note))
+    };
+
+    let top_start: Element<'_, Message, Theme> =
+        pill("👍 2", BubbleReactionSide::Top, MessageAlignment::Start).into();
+    let bottom_start: Element<'_, Message, Theme> =
+        pill("🎉 4", BubbleReactionSide::Bottom, MessageAlignment::Start).into();
+    let top_end: Element<'_, Message, Theme> =
+        pill("❤️ 1", BubbleReactionSide::Top, MessageAlignment::End).into();
+    let bottom_end: Element<'_, Message, Theme> =
+        pill("😄 3", BubbleReactionSide::Bottom, MessageAlignment::End).into();
+
+    assert_renders(
+        "chat_reaction_pills",
+        column![
+            top_start,
+            bottom_start,
+            top_end,
+            bottom_end,
+            // A message with no reactions must not reserve the pill's space.
+            bubble::<Message>("No reactions at all").max_width(240.0),
+        ]
+        .spacing(20),
+        false,
+    );
+}
