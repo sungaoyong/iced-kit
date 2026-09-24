@@ -124,7 +124,7 @@ impl App {
         };
 
         let scroller = MessageScroller::new(&self.messages, &self.scroller, line_row)
-            .row_height(104.0)
+            .row_height(132.0)
             .jump_button(true)
             .with_bottom_fade(Some(fade))
             .on_scroll(Message::Scrolled)
@@ -251,7 +251,9 @@ fn line_row(line: &Line, index: usize) -> Element<'_, Message, Theme> {
     if line.author == Author::Bot {
         message = message.avatar(avatar("AI", 30));
     }
-    message.into()
+    // The scroller gives every row a fixed cell, so the message gets its own
+    // vertical breathing room instead of bubbles butting up against each other.
+    container(message).padding([12.0, 4.0]).into()
 }
 
 /// The initial transcript, sized to make virtualization meaningful.

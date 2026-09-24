@@ -1,7 +1,7 @@
 //! Chat bubbles: the surface a message's content sits in, its alignment, and
 //! the emoji reactions that may accompany it.
 
-use crate::theme::Theme;
+use crate::theme::{Size, Theme};
 use iced::widget::{column, container, row, text};
 use iced::{Alignment, Background, Border, Element, Length, Padding};
 
@@ -56,7 +56,12 @@ impl<'a, Message: 'a> BubbleContent<'a, Message> {
 
     /// Adds a text line to the bubble body.
     pub fn text(mut self, content: impl text::IntoFragment<'a>) -> Self {
-        self.children.push(text(content).into());
+        self.children.push(
+            text(content)
+                .size(Size::Md.text().size)
+                .line_height(Size::Md.text().line_height())
+                .into(),
+        );
         self
     }
 
@@ -239,7 +244,9 @@ impl<'a, Message: 'a> From<Bubble<'a, Message>> for Element<'a, Message, Theme> 
 /// Resolves a bubble variant to a container style against the theme.
 fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
     let c = theme.colors();
-    let radius = f32::from(theme.radius().lg).into();
+    // The reference chat surface uses a large (2xl) corner; our radius scale
+    // tops out at `xl` (12px), so the bubble pins a generous 16px directly.
+    let radius = 16.0.into();
     match variant {
         BubbleVariant::Filled => container::Style {
             background: Some(Background::Color(c.primary)),
@@ -250,8 +257,11 @@ fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
             },
             ..Default::default()
         },
+        // The theme's `secondary` role is tuned for buttons and reads a tier
+        // heavier than a conversation surface; the near-background `muted` tier
+        // matches the reference bubble in both light and dark themes.
         BubbleVariant::Secondary => container::Style {
-            background: Some(Background::Color(c.secondary)),
+            background: Some(Background::Color(c.muted)),
             text_color: Some(c.secondary_foreground),
             border: Border {
                 radius,
@@ -261,7 +271,7 @@ fn bubble_style(theme: &Theme, variant: BubbleVariant) -> container::Style {
         },
         BubbleVariant::Muted => container::Style {
             background: Some(Background::Color(c.muted)),
-            text_color: Some(c.muted_foreground),
+            text_color: Some(c.foreground),
             border: Border {
                 radius,
                 ..Default::default()
@@ -326,7 +336,11 @@ impl<'a, Message: 'a> From<BubbleGroup<'a, Message>> for Element<'a, Message, Th
 
 /// Builds a [`Bubble`] from a single text line.
 pub fn bubble<'a, Message: 'a>(content: impl text::IntoFragment<'a>) -> Bubble<'a, Message> {
-    Bubble::new().child(text(content))
+    Bubble::new().child(
+        text(content)
+            .size(Size::Md.text().size)
+            .line_height(Size::Md.text().line_height()),
+    )
 }
 
 #[cfg(test)]

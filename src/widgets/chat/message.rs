@@ -9,7 +9,7 @@
 use super::bubble::{Bubble, MessageAlignment};
 use crate::theme::{Size, Theme};
 use iced::widget::{column, container, row, text};
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Element, Length, Padding};
 
 /// A vertical stack of consecutive messages from the same sender.
 #[must_use = "a MessageGroup does nothing unless it is turned into an Element"]
@@ -86,9 +86,9 @@ impl<'a, M: 'a> MessageHeader<'a, M> {
     pub fn text(mut self, content: impl text::IntoFragment<'a>) -> Self {
         self.children.push(
             text(content)
-                .size(Size::Sm.text().size)
+                .size(Size::Xs.text().size)
                 .class(Box::new(|theme: &Theme| text::Style {
-                    color: Some(theme.colors().foreground),
+                    color: Some(theme.colors().muted_foreground),
                 }) as iced::widget::text::StyleFn<'a, Theme>)
                 .into(),
         );
@@ -110,7 +110,7 @@ impl<'a, M: 'a> Default for MessageHeader<'a, M> {
 
 impl<'a, M: 'a> From<MessageHeader<'a, M>> for Element<'a, M, Theme> {
     fn from(header: MessageHeader<'a, M>) -> Self {
-        row(header.children).spacing(6).into()
+        meta_row(header.children)
     }
 }
 
@@ -153,8 +153,17 @@ impl<'a, M: 'a> Default for MessageFooter<'a, M> {
 
 impl<'a, M: 'a> From<MessageFooter<'a, M>> for Element<'a, M, Theme> {
     fn from(footer: MessageFooter<'a, M>) -> Self {
-        row(footer.children).spacing(6).into()
+        meta_row(footer.children)
     }
+}
+
+/// Shared chrome for the header and footer lines: inset horizontally by a
+/// bubble's own padding so the small muted text lines up with the surface.
+fn meta_row<'a, M: 'a>(children: Vec<Element<'a, M, Theme>>) -> Element<'a, M, Theme> {
+    container(row(children).spacing(4))
+        .width(Length::Shrink)
+        .padding(Padding::from([0.0, 12.0]))
+        .into()
 }
 
 /// The content slot of a [`Message`]: a bubble plus any extra elements.
@@ -283,7 +292,7 @@ impl<'a, M: 'a> From<Message<'a, M>> for Element<'a, M, Theme> {
             MessageAlignment::End => Alignment::End,
         };
 
-        let mut body = column![].spacing(4).width(Length::Fill);
+        let mut body = column![].spacing(6).align_x(edge).width(Length::Fill);
         if let Some(header) = message.header {
             body = body.push(header);
         }
@@ -294,7 +303,7 @@ impl<'a, M: 'a> From<Message<'a, M>> for Element<'a, M, Theme> {
             body = body.push(footer);
         }
 
-        let mut parts = row![].spacing(8).align_y(Alignment::Start);
+        let mut parts = row![].spacing(8).align_y(Alignment::End);
         match message.alignment {
             MessageAlignment::Start => {
                 if let Some(avatar) = message.avatar {
