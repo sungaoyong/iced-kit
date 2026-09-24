@@ -14,6 +14,7 @@
 pub mod avatar;
 pub mod button;
 pub mod carousel;
+pub mod chat;
 pub mod chart;
 pub mod color_picker;
 pub mod combobox;
