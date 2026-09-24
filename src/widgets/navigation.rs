@@ -136,21 +136,25 @@ pub fn accordion_builder<'a, Message: Clone + 'a>(
 
 /// A vertical accordion under construction.
 ///
-/// [`accordion`] returns this, so the options that the reference's `Accordion`
-/// carries are set on the builder:
+/// [`accordion_builder`] returns this, so the options the reference's
+/// `Accordion` carries are set on the builder:
 ///
 /// ```
-/// # use iced_kit::widgets::{accordion, AccordionSection};
+/// # use iced_kit::widgets::{accordion_builder, AccordionSection};
 /// # use iced_kit::Theme;
 /// # use iced::Element;
 /// # #[derive(Clone, Debug)] enum Message { Toggled(usize) }
 /// # fn view(open: &[usize]) -> Element<'static, Message, Theme> {
-/// accordion(vec![AccordionSection::new("General")], open, Message::Toggled, |i| {
-///     iced::widget::text(format!("Body {i}")).into()
-/// })
+/// accordion_builder(
+///     vec![AccordionSection::new("General")],
+///     open,
+///     Message::Toggled,
+///     |i| iced::widget::text(format!("Body {i}")).into(),
+/// )
 /// .multiple(true)
 /// .bordered(false)
 /// .size(iced_kit::Size::Lg)
+/// .into()
 /// # }
 /// ```
 #[must_use = "an Accordion does nothing unless it is turned into an Element"]
