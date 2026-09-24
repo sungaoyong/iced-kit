@@ -55,21 +55,33 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 
 **Form** — `button`, `icon_button`, `ButtonGroup`, `DropdownButton`, `Toggle`,
 `ToggleGroup`, `text_input`, `password`, `text_area`, `input_group`, `select`,
-`checkbox`, `radio`, `switch`, `slider`, `number_input`, `otp_input`
+`searchable_select`, `combobox` (searchable, multi-select, with a filtered
+panel), `checkbox`, `radio`, `switch`, `slider`, `number_input`, `otp_input`,
+`calendar`, `date_picker` (a month grid with ranges, presets and a chosen first
+day of the week), `color_picker` (a saturation/value square, a hue strip and
+swatches)
 
 **Form layout** — `form`/`field` arrange labelled controls into a form:
 vertical or horizontal label placement, a `columns` grid with
 `col_span`/`col_start`/`col_end` placement, `required` markers, muted
 `description` lines, and a trailing `footer` for the form's actions
 
-**Display** — `card`, `group_box`, `divider`, `vertical_divider`, `badge`,
-`progress`, `alert`, `empty_state`, `label`, `tag`
+**Display** — `card`, `group_box`, `divider`, `vertical_divider`,
+`horizontal_separator` (labelled and dashed rules), `badge` (label, dot, count
+with a maximum, and icon forms), `progress`, `alert` (with a banner form and a
+close button), `empty_state`, `label`, `tag`, `avatar_group` (overlapping
+avatars with an overflow chip), `label_builder` (masked values and search
+highlights), `description_list` (label/value rows in one or several columns),
+`link`, `clipboard_button`, `rating`, `tree` (an expandable hierarchy over
+caller-owned state)
 
 **Feedback** — `spinner` (arc and dots), `ring_progress`, `skeleton`,
-`skeleton_list_item`, `skeleton_table`
+`skeleton_list_item`, `skeleton_table`, `collapsible`, `shimmer` (text, blocks
+and any element, with a configurable sweep)
 
 **Data** — `list`, `ListItem`, `VirtualList` (variable-height virtualization),
-`DataTable` (sortable, virtualized), `Markdown`
+`DataTable` (sortable, virtualized, with heading groups, pinned columns and a
+skeleton loading state), `Markdown`
 
 **Charts** — `LineChart`, `AreaChart` (overlaid or stacked), `BarChart`
 (grouped/stacked, four orientations), `PieChart` (pie or donut), `RadarChart`,
@@ -78,7 +90,10 @@ vertical or horizontal label placement, a `columns` grid with
 **Typography** — `heading`, `paragraph`, `muted_text`, `code`, `kbd`,
 `shortcut`, `avatar`, `avatar_with_name`
 
-**Navigation** — `tabs`, `accordion`, `pagination`, `carousel` (horizontal or
+**Navigation** — `tabs` (underline, tab, outline, pill and segmented variants,
+with sizes and icon slots), `accordion` (multiple-open, bordered, sized, with
+per-section icons), `breadcrumb`, `stepper` (horizontal or vertical, marking
+what is done), `app_menu_bar`, `pagination`, `carousel` (horizontal or
 vertical, with previous/next controls, a dot indicator, looping, arrow keys and
 drag-to-snap), `Sidebar` (a collapsible panel with a header, grouped menus and
 a footer; `Icon`, `Offcanvas` and `None` collapsing modes, an animated width
@@ -95,10 +110,12 @@ resize), `SettingPage`, `SettingGroup`, `SettingItem` and `SettingField`
 through the bundled icon font. Components draw from it throughout, including a
 title bar's window controls (`─`/`□`/`✕` are `IconName::Minus`/`Square`/`X`)
 
-**Overlays** — `Modal`, `Dialog`, `AlertDialog`, `Drawer`, `Toast`/`Toasts`,
-`Dropdown`/`MenuItem`, `ContextMenu`, `Popover`, `tooltip`. A dialog body can
-also be assembled by hand from `DialogHeader`, `dialog_title`,
-`dialog_description`, `DialogContent` and `DialogFooter`
+**Overlays** — `Modal`, `Dialog`, `AlertDialog`, `Drawer`, `sheet` (a drawer
+that stops below the window's title bar), `Toast`/`Toasts`, `Dropdown`/`MenuItem`,
+`ContextMenu`, `Popover`, `HoverCard` (opens on hover), `tooltip` (optionally
+naming a keyboard shortcut). A dialog body can also be assembled by hand from
+`DialogHeader`, `dialog_title`, `dialog_description`, `DialogContent` and
+`DialogFooter`, and a status strip from `status_bar`
 
 **Motion** — surfaces animate as they arrive: a drawer slides in from its edge, a
 dialog rises, a dropdown drops, a toast comes in from the corner it sits in. The
