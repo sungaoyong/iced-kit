@@ -98,6 +98,9 @@ struct App {
     file_items: Vec<iced_kit::widgets::TreeItem>,
     /// The combobox demo's options, kept for the same reason.
     country_options: Vec<iced_kit::widgets::ComboBoxOption<usize>>,
+    /// The chat demo's transcript and its scroll state, both caller-owned.
+    chat: MessageScrollerState,
+    chat_lines: Vec<String>,
     notifications: bool,
     newsletter: bool,
     plan: Plan,
@@ -288,6 +291,8 @@ impl Default for App {
             notes: iced::widget::text_editor::Content::new(),
             bio: iced::widget::text_editor::Content::new(),
             file_items: file_tree_items(),
+            chat: MessageScrollerState::new(chat_lines().len()),
+            chat_lines: chat_lines(),
             country_options: vec![
                 iced_kit::widgets::ComboBoxOption::new(0, "Germany"),
                 iced_kit::widgets::ComboBoxOption::new(1, "Ghana"),
@@ -561,6 +566,7 @@ impl App {
             self.form_section(),
             self.form_layout_section(),
             self.new_components_section(),
+            self.chat_section(),
             self.input_group_section(),
             self.selection_section(),
             self.display_section(),
@@ -964,6 +970,72 @@ impl App {
                         .push(muted_text("This is a full width form field.")),
                 )
                 .footer(row![button("Save").primary().on_press(Message::Save)].spacing(8)),
+        )
+    }
+
+    /// The chat family: bubbles, message rows, markers, an attachment and a
+    /// tail-following transcript.
+    fn chat_section(&self) -> Element<'_, Message, Theme> {
+        let thumbs: Element<'_, Message, Theme> = muted_text("👍 2").into();
+
+        let received: Element<'_, Message, Theme> =
+            message(bubble("How are the docs coming along?"))
+                .avatar(avatar::<Message>("Ada Lovelace", 32))
+                .header("Ada Lovelace")
+                .footer("12:30")
+                .into();
+
+        let sent: Element<'_, Message, Theme> = message(
+            bubble("Nearly there — one section left.")
+                .with_variant(BubbleVariant::Secondary)
+                .reactions(BubbleReactions::new().child(thumbs)),
+        )
+        .alignment(MessageAlignment::End)
+        .header("Grace Hopper")
+        .footer("Sent")
+        .into();
+
+        let in_a_slot: Element<'_, Message, Theme> = message(
+            bubble("An avatar through a numbered slot.").with_variant(BubbleVariant::Muted),
+        )
+        .avatar(MessageAvatar::new().child(muted_text("AL")))
+        .header_el(MessageHeader::new().text("System"))
+        .into();
+
+        let failed: Element<'_, Message, Theme> = attachment::<Message>("draft.pdf")
+            .status(AttachmentStatus::Failed)
+            .content(
+                AttachmentContent::new()
+                    .title(AttachmentTitle::new("draft.pdf"))
+                    .description(AttachmentDescription::new("Upload failed — retry")),
+            )
+            .into();
+
+        let scroller: Element<'_, Message, Theme> =
+            MessageScroller::new(&self.chat_lines, &self.chat, |line, _| {
+                muted_text(line.clone()).into()
+            })
+            .jump_button(true)
+            .with_bottom_fade(Some(iced::Color::from_rgb8(0xfa, 0xfa, 0xfa)))
+            .row_height(28.0)
+            .height(220.0)
+            .into();
+
+        Self::section(
+            "Chat",
+            column![
+                received,
+                sent,
+                in_a_slot,
+                row![
+                    marker::<Message>("— Today —"),
+                    marker::<Message>("System note").with_variant(MarkerVariant::Border),
+                ]
+                .spacing(16),
+                failed,
+                scroller,
+            ]
+            .spacing(12),
         )
     }
 
@@ -2075,4 +2147,21 @@ fn file_tree_items() -> Vec<iced_kit::widgets::TreeItem> {
         TreeItem::new("main", "main.rs"),
         TreeItem::new("widgets", "widgets").child(TreeItem::new("button", "button.rs")),
     ])]
+}
+
+/// A short transcript for the chat demo.
+fn chat_lines() -> Vec<String> {
+    [
+        "Ada: How are the docs coming along?",
+        "Grace: Nearly there — one section left.",
+        "Ada: Take your time.",
+        "Grace: The chat components are in.",
+        "Ada: Bubbles, markers, attachments?",
+        "Grace: All of it, and the scroller.",
+        "Ada: Nice.",
+        "Grace: Scroll up and the jump button appears.",
+    ]
+    .iter()
+    .map(|line| (*line).to_owned())
+    .collect()
 }

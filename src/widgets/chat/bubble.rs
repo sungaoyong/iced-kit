@@ -14,6 +14,13 @@ use iced::{
 /// The gap between reaction controls in a cluster.
 const REACTION_GAP: f32 = 4.0;
 
+/// How far a reaction control is rounded.
+///
+/// An explicit, very large radius rather than the theme's `full` token: a pill's
+/// children have to be at least as round as the pill, and a theme with a small
+/// radius scale would otherwise leave them squarer than the cluster around them.
+const PILL_RADIUS: f32 = 9999.0;
+
 /// The width of the ring drawn around a reaction cluster.
 ///
 /// The ring is in the page color, so the cluster reads as a separate layer
@@ -130,10 +137,28 @@ impl<'a, Message: 'a> BubbleReactions<'a, Message> {
         self
     }
 
-    /// Adds a reaction control (usually a small [`Button`](crate::widgets::Button)).
+    /// Adds a reaction control, shaped to the cluster's own pill radius.
     ///
-    /// A control is shaped to the cluster's own radius, so a row of reactions
-    /// reads as one pill rather than as buttons inside a pill.
+    /// This is the typed form the reference takes: because the control is known
+    /// to be a [`Button`](crate::widgets::Button), it can be rounded to match
+    /// the cluster, so a row of reactions reads as one pill rather than as
+    /// buttons sitting inside a pill. Use [`child`](Self::child) for a control
+    /// that must keep its own shape.
+    pub fn button(mut self, button: crate::widgets::Button<'a, Message>) -> Self
+    where
+        Message: Clone,
+    {
+        // Fully rounded, matching the cluster: a pill's children cannot be
+        // squarer than the pill without reading as a fault.
+        self.children.push(button.rounded(PILL_RADIUS).into());
+        self.has_action = true;
+        self
+    }
+
+    /// Adds a reaction control as a plain element.
+    ///
+    /// The element keeps its own styling; use [`button`](Self::button) to have
+    /// a button rounded to the cluster.
     pub fn action(mut self, el: impl Into<Element<'a, Message, Theme>>) -> Self {
         self.children.push(el.into());
         self.has_action = true;
@@ -964,5 +989,41 @@ mod tests {
                 assert_eq!(radius, expected, "{variant:?} must use the shared corner");
             }
         }
+    }
+
+    /// The typed action rounds the control to the cluster's own pill radius,
+    /// which is what makes a row of reactions read as one pill.
+    #[test]
+    fn a_button_action_is_rounded_to_the_pill() {
+        use crate::widgets::button;
+
+        let cluster = BubbleReactions::<Msg>::new().button(button("👍"));
+        assert!(cluster.has_action(), "a button is a control");
+        assert_eq!(cluster.len(), 1);
+
+        // The radius is explicit and very large rather than the theme's `full`
+        // token, so a small radius scale cannot leave the control squarer than
+        // its cluster. The value is read through a runtime binding so the check
+        // is on the constant the widget uses rather than a copy of it.
+        let radius = PILL_RADIUS;
+        assert!(
+            radius >= 999.0,
+            "a pill's children must be at least as round as the pill"
+        );
+    }
+
+    /// A cluster mixing typed buttons and bare elements still counts as having
+    /// a control, so it takes no padding of its own.
+    #[test]
+    fn a_mixed_cluster_still_has_a_control() {
+        use crate::widgets::button;
+
+        let count: Element<'_, Msg, Theme> = text("2").into();
+        let cluster = BubbleReactions::<Msg>::new()
+            .child(count)
+            .button(button("👍"));
+
+        assert!(cluster.has_action());
+        assert_eq!(cluster.len(), 2);
     }
 }

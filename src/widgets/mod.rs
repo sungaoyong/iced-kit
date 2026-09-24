@@ -14,8 +14,8 @@
 pub mod avatar;
 pub mod button;
 pub mod carousel;
-pub mod chat;
 pub mod chart;
+pub mod chat;
 pub mod color_picker;
 pub mod combobox;
 pub mod data_table;
@@ -57,7 +57,18 @@ pub use button::{
     LoadingIcon, Toggle, ToggleGroup, ToggleVariant,
 };
 pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
+// The chat family is re-exported whole: its five parts compose into one screen,
+// so a caller building that screen wants all of them and its names are already
+// namespaced by their own variety (`Bubble`, `Marker`, `Attachment`).
 pub use chart::{Chart, ChartKind, Series};
+pub use chat::{
+    attachment, attachment_group, bubble, marker, message, message_group, message_scroller,
+    Attachment, AttachmentActions, AttachmentAxis, AttachmentContent, AttachmentDescription,
+    AttachmentGroup, AttachmentMedia, AttachmentStatus, AttachmentTitle, Bubble, BubbleContent,
+    BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant, Marker, MarkerLoadingStyle,
+    MarkerVariant, Message, MessageAlignment, MessageAvatar, MessageContent, MessageFooter,
+    MessageGroup, MessageHeader, MessageScroller, MessageScrollerState,
+};
 pub use color_picker::{
     color_picker, color_picker_panel, default_swatches, parse_hex, ColorPicker, ColorPickerPanel,
     Hsv,

@@ -14,7 +14,7 @@ use iced::advanced::renderer::Renderer as _;
 use iced::advanced::widget::{tree, Operation};
 use iced::advanced::{mouse, Clipboard, Shell, Widget};
 use iced::time::Instant;
-use iced::widget::{column, container, stack, Space};
+use iced::widget::{container, stack};
 use iced::{
     Alignment, Background, Color, Element, Length, Padding, Rectangle, Size as IcedSize, Vector,
 };
@@ -304,8 +304,8 @@ impl<'a, T: 'a, Message: Clone + 'a> MessageScroller<'a, T, Message> {
         // edge. Both stay in the tree while they are shown or still leaving, so
         // scrolled-up and scrolled-back do not blink them off and on.
         if let Some(color) = bottom_fade {
-            let fade = fade_overlay(color, width, height);
-            layers.push(Transition::new(fade, scrolled_up).into());
+            let fade: Element<'a, Message, Theme> = FadeOverlay::new(color, scrolled_up).into();
+            layers.push(fade);
         }
 
         if jump_button {
@@ -319,12 +319,11 @@ impl<'a, T: 'a, Message: Clone + 'a> MessageScroller<'a, T, Message> {
 
 /// Eases its child in from below and out again, with a spring.
 ///
-/// The effect is a rise, not a fade: iced's renderer has no alpha for a subtree,
-/// so an overlay cannot be dissolved in place. What this owns is the offset and
-/// the visibility — a hidden overlay is drawn until it has risen away, and then
-/// skipped entirely rather than left as a transparent layer over the
-/// transcript. The bottom fade's own gradient is drawn at its full strength
-/// throughout, since its bands are built before a frame is drawn.
+/// The effect is a rise: iced's renderer has no alpha for a subtree, so a child
+/// that has to fade applies the progress itself — which is what [`FadeOverlay`]
+/// does. What this owns is the offset and the visibility, so a hidden overlay
+/// rises away and is then skipped rather than left as a transparent layer over
+/// the transcript.
 struct Transition<'a, Message> {
     content: Element<'a, Message, Theme>,
     showing: bool,
@@ -418,31 +417,7 @@ impl<Message> Widget<Message, Theme, iced::Renderer> for Transition<'_, Message>
             );
         }
 
-        let iced::Event::Window(iced::window::Event::RedrawRequested(now)) = event else {
-            return;
-        };
-
-        let target = if self.showing { 1.0 } else { 0.0 };
-        let spring = transition_spring();
-        let state = tree.state.downcast_mut::<TransitionState>();
-
-        if !state.primed {
-            // The first frame places the overlay rather than easing it in.
-            state.progress.set(target);
-            state.primed = true;
-            state.last = Some(*now);
-            return;
-        }
-
-        let elapsed = state
-            .last
-            .map_or(std::time::Duration::ZERO, |last| now.duration_since(last));
-        state.last = Some(*now);
-        state.progress.step(target, spring, elapsed);
-
-        if !state.progress.is_settled(target, spring) {
-            shell.request_redraw();
-        }
+        step_spring(tree, event, self.showing, shell);
     }
 
     fn draw(
@@ -560,43 +535,203 @@ impl<'a, T: 'a, Message: Clone + 'a> From<MessageScroller<'a, T, Message>>
     }
 }
 
-/// Builds a translucent gradient (as stacked bands) hugging the bottom edge.
-fn fade_overlay<'a, Message: 'a>(
-    color: Color,
-    width: Length,
-    height: Length,
-) -> Element<'a, Message, Theme> {
-    const BANDS: usize = 4;
-    const FADE_HEIGHT: f32 = 48.0;
+/// How tall the bottom fade is, in logical pixels.
+const FADE_HEIGHT: f32 = 48.0;
 
-    let mut bands = column![].spacing(0).width(Length::Fill);
-    for index in 0..BANDS {
-        // Ramp from fully transparent at the top band to the target alpha at the
-        // bottom, so the fade has no hard seam where it meets the content.
-        let ratio = index as f32 / (BANDS - 1) as f32;
-        let band = Color {
-            a: color.a * ratio,
-            ..color
-        };
-        bands = bands.push(
-            container(
-                Space::new()
-                    .width(Length::Fill)
-                    .height(Length::Fixed(FADE_HEIGHT / BANDS as f32)),
-            )
-            .style(move |_: &Theme| iced::widget::container::Style {
-                background: Some(Background::Color(band)),
-                ..Default::default()
-            }),
-        );
+/// How many bands the fade's gradient is drawn in.
+///
+/// iced fills quads rather than painting a gradient, so the ramp is a stack of
+/// bands. Four is enough to read as one gradient at this height.
+const FADE_BANDS: usize = 4;
+
+/// A gradient hugging the bottom edge, easing in and out with a spring.
+///
+/// Drawn by the widget rather than built as a tree of bands: a prebuilt tree
+/// fixes each band's alpha at construction, so it could only appear and
+/// disappear. Drawing it here applies the transition's progress to every band,
+/// which is what lets it fade.
+struct FadeOverlay {
+    color: Color,
+    showing: bool,
+}
+
+impl FadeOverlay {
+    fn new(color: Color, showing: bool) -> Self {
+        Self { color, showing }
+    }
+}
+
+impl<Message> Widget<Message, Theme, iced::Renderer> for FadeOverlay {
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<TransitionState>()
     }
 
-    container(bands)
-        .width(width)
-        .height(height)
-        .align_x(Alignment::Center)
-        .align_y(Alignment::End)
-        .into()
+    fn state(&self) -> tree::State {
+        tree::State::new(TransitionState::default())
+    }
+
+    fn size(&self) -> IcedSize<Length> {
+        IcedSize::new(Length::Fill, Length::Fill)
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut tree::Tree,
+        _renderer: &iced::Renderer,
+        limits: &Limits,
+    ) -> layout::Node {
+        layout::Node::new(limits.max())
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut tree::Tree,
+        event: &iced::Event,
+        _layout: layout::Layout<'_>,
+        _cursor: mouse::Cursor,
+        _renderer: &iced::Renderer,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        _viewport: &Rectangle,
+    ) {
+        // The fade is decoration: it never takes an event, so a press reaches
+        // the transcript drawn beneath it.
+        step_spring(tree, event, self.showing, shell);
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut iced::Renderer,
+        _theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: layout::Layout<'_>,
+        _cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let state = tree.state.downcast_ref::<TransitionState>();
+
+        // An unprimed overlay is drawn where it belongs rather than at zero: a
+        // frame is painted before the update that primes the spring, so reading
+        // the bare value would paint the first frame wrong.
+        let progress = if state.primed {
+            state.progress.value()
+        } else if self.showing {
+            1.0
+        } else {
+            0.0
+        };
+
+        // Fully out: nothing to draw, and drawing it would leave a ghost of the
+        // fade over the transcript below it.
+        if progress <= 0.001 {
+            return;
+        }
+
+        let bounds = layout.bounds();
+        let height = FADE_HEIGHT.min(bounds.height);
+        let top = bounds.y + bounds.height - height;
+        let band_height = height / FADE_BANDS as f32;
+
+        for index in 0..FADE_BANDS {
+            let band = Rectangle {
+                x: bounds.x,
+                y: top + band_height * index as f32,
+                width: bounds.width,
+                // A hair taller, so rounding between bands leaves no seam.
+                height: band_height + 0.5,
+            };
+
+            if !band.intersects(viewport) {
+                continue;
+            }
+
+            renderer.fill_quad(
+                iced::advanced::renderer::Quad {
+                    bounds: band,
+                    border: iced::Border {
+                        radius: 0.0.into(),
+                        ..iced::Border::default()
+                    },
+                    shadow: iced::Shadow::default(),
+                    snap: true,
+                },
+                Color {
+                    a: band_alpha(self.color, index, progress),
+                    ..self.color
+                },
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        _tree: &tree::Tree,
+        _layout: layout::Layout<'_>,
+        _cursor: mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        mouse::Interaction::None
+    }
+}
+
+impl<'a, Message: 'a> From<FadeOverlay> for Element<'a, Message, Theme> {
+    fn from(fade: FadeOverlay) -> Self {
+        Element::new(fade)
+    }
+}
+
+/// One band's alpha: the ramp's share of the color, scaled by how far the fade
+/// has eased in.
+///
+/// The ramp runs from transparent at the top band to the full strength at the
+/// bottom, so the fade has no hard seam where it meets the transcript. Scaling
+/// the whole ramp by `progress` is what lets it ease in and out rather than only
+/// appear and disappear.
+fn band_alpha(color: Color, index: usize, progress: f32) -> f32 {
+    let ratio = index as f32 / (FADE_BANDS - 1) as f32;
+
+    color.a * ratio * progress.clamp(0.0, 1.0)
+}
+
+/// Steps a transition's spring for this frame, asking for another frame while it
+/// is still travelling.
+///
+/// Shared by the fade and the jump button: both are overlays whose only state is
+/// how far in they are.
+fn step_spring<Message>(
+    tree: &mut tree::Tree,
+    event: &iced::Event,
+    showing: bool,
+    shell: &mut Shell<'_, Message>,
+) {
+    let iced::Event::Window(iced::window::Event::RedrawRequested(now)) = event else {
+        return;
+    };
+
+    let target = if showing { 1.0 } else { 0.0 };
+    let spring = transition_spring();
+    let state = tree.state.downcast_mut::<TransitionState>();
+
+    if !state.primed {
+        // The first frame places the overlay rather than easing it in, so a
+        // scroller that mounts already scrolled does not animate on startup.
+        state.progress.set(target);
+        state.primed = true;
+        state.last = Some(*now);
+        return;
+    }
+
+    let elapsed = state
+        .last
+        .map_or(std::time::Duration::ZERO, |last| now.duration_since(last));
+    state.last = Some(*now);
+    state.progress.step(target, spring, elapsed);
+
+    if !state.progress.is_settled(target, spring) {
+        shell.request_redraw();
+    }
 }
 
 /// Builds the floating jump-to-bottom button, anchored to the bottom centre.
@@ -850,16 +985,13 @@ mod render_tests {
         assert!(progress.is_settled(1.0, spring));
     }
 
-    /// Both overlays render through the transition, shown and hidden: a hidden
-    /// one is on its way out and still draws until it has settled.
+    /// Both overlays render shown and hidden. The fade draws itself and owns
+    /// its own spring; the jump button is wrapped in the generic transition.
     #[test]
     fn overlays_render_hidden_and_shown() {
         for showing in [false, true] {
-            let fade: Element<'_, Msg, Theme> = Transition::new(
-                fade_overlay(iced::Color::BLACK, Length::Fill, Length::Fill),
-                showing,
-            )
-            .into();
+            let fade: Element<'_, Msg, Theme> =
+                FadeOverlay::new(iced::Color::BLACK, showing).into();
             drop(fade);
 
             let jump: Element<'_, Msg, Theme> = Transition::new(
@@ -869,6 +1001,45 @@ mod render_tests {
             .into();
             drop(jump);
         }
+    }
+
+    /// The fade's shape, and the ramp its bands follow.
+    #[test]
+    fn the_fade_ramps_from_transparent_to_full() {
+        assert_eq!(FADE_HEIGHT, 48.0);
+        assert_eq!(FADE_BANDS, 4);
+
+        let color = iced::Color::from_rgb8(0xff, 0xff, 0xff);
+
+        // Eased fully in, the top band is invisible and the bottom is at the
+        // color's own strength: that is what removes the seam at the top of the
+        // fade.
+        assert_eq!(band_alpha(color, 0, 1.0), 0.0);
+        assert_eq!(band_alpha(color, FADE_BANDS - 1, 1.0), color.a);
+
+        // Each band is at least as strong as the one above it.
+        for index in 1..FADE_BANDS {
+            assert!(
+                band_alpha(color, index, 1.0) >= band_alpha(color, index - 1, 1.0),
+                "band {index} must not be weaker than the one above it"
+            );
+        }
+    }
+
+    /// The transition scales the whole ramp, which is what lets the fade ease in
+    /// rather than blink on: at half progress every band is half as strong.
+    #[test]
+    fn the_transition_scales_the_whole_ramp() {
+        let color = iced::Color::from_rgb8(0x00, 0x00, 0x00);
+        let full = band_alpha(color, 2, 1.0);
+
+        assert!(full > 0.0);
+        assert!((band_alpha(color, 2, 0.5) - full * 0.5).abs() < f32::EPSILON);
+        assert_eq!(band_alpha(color, 2, 0.0), 0.0, "fully out draws nothing");
+
+        // A progress outside the range cannot overshoot the color's strength.
+        assert_eq!(band_alpha(color, 2, 2.0), full);
+        assert_eq!(band_alpha(color, 2, -1.0), 0.0);
     }
 
     /// The jump control is an icon button, so its overlay carries an icon rather

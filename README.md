@@ -90,6 +90,15 @@ skeleton loading state), `Markdown`
 **Typography** — `heading`, `paragraph`, `muted_text`, `code`, `kbd`,
 `shortcut`, `avatar`, `avatar_with_name`
 
+**Chat** — `bubble` (seven surfaces: filled, secondary, muted, tinted, outline,
+destructive and ghost, with reactions in a pill that rides over the bubble's
+edge), `message` (an avatar or a numbered slot, a header, a content surface and a
+footer, aligned to either edge), `message_group`, `marker` (plain, separator and
+bordered forms, loading with a spinner or a shimmer), `attachment` (five upload
+statuses, a media preview, a title and description, an action row, at five size
+steps) and `message_scroller` (virtualized, tail-following, with a bottom fade
+and a jump-to-latest control)
+
 **Navigation** — `tabs` (underline, tab, outline, pill and segmented variants,
 with sizes and icon slots), `accordion` (multiple-open, bordered, sized, with
 per-section icons), `breadcrumb`, `stepper` (horizontal or vertical, marking
