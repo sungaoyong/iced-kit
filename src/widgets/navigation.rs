@@ -673,6 +673,7 @@ pub enum StepLayout {
 /// )
 /// .layout(StepLayout::Horizontal)
 /// .on_select(Message::Went)
+/// .into()
 /// # }
 /// ```
 #[must_use = "a Stepper does nothing unless it is turned into an Element"]
