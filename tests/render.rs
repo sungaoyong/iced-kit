@@ -2464,3 +2464,42 @@ fn combobox_states_render() {
         false,
     );
 }
+
+/// A month grid, a two-month view with a range, and the date field in both
+/// its empty and filled states.
+#[test]
+fn calendar_and_date_field_render() {
+    use iced_kit::widgets::{calendar, date_picker, Date, Weekday};
+
+    let month = Date::from_ymd(2024, 2, 1).expect("a real date");
+    let selected = Date::from_ymd(2024, 2, 14).expect("a real date");
+
+    let one: Element<'_, Message, Theme> = calendar::<Message>(month, Some(selected))
+        .on_select(|_| Message::Noop)
+        .into();
+
+    let ranged: Element<'_, Message, Theme> = calendar::<Message>(month, None)
+        .number_of_months(2)
+        .first_day_of_week(Weekday::Sunday)
+        .range((
+            Date::from_ymd(2024, 2, 5).unwrap(),
+            Date::from_ymd(2024, 2, 16).unwrap(),
+        ))
+        .on_select(|_| Message::Noop)
+        .into();
+
+    let empty: Element<'_, Message, Theme> = date_picker::<Message>("Pick a date", "").into();
+
+    let filled: Element<'_, Message, Theme> = date_picker::<Message>("Pick a date", "2024-02-14")
+        .open(true)
+        .on_toggle(Message::Noop)
+        .clearable(Message::Noop)
+        .fill(true)
+        .into();
+
+    assert_renders(
+        "calendar",
+        column![one, column![empty, filled].spacing(8), ranged].spacing(20),
+        false,
+    );
+}

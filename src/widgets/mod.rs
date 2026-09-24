@@ -17,6 +17,7 @@ pub mod carousel;
 pub mod chart;
 pub mod combobox;
 pub mod data_table;
+pub mod date;
 pub mod display;
 #[cfg(feature = "dock")]
 pub mod dock;
@@ -56,6 +57,9 @@ pub use combobox::{
     combobox, combobox_panel, filter_options, ComboBox, ComboBoxOption, ComboBoxPanel,
 };
 pub use data_table::{Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width};
+pub use date::{
+    calendar, date_picker, month_grid, month_name, Calendar, Date, DatePicker, DatePreset, Weekday,
+};
 pub use display::{
     alert, alert_builder, badge, badge_builder, card, divider, empty_state, horizontal_separator,
     progress, vertical_divider, vertical_separator, Alert, Badge, BadgeVariant, Separator,
