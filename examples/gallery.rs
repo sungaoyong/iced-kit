@@ -91,6 +91,13 @@ struct App {
     notes: iced::widget::text_editor::Content,
     /// The form layout demo's bio, edited through the text area.
     bio: iced::widget::text_editor::Content,
+    /// The new-components demo's file tree, expanded once at construction.
+    file_tree: iced_kit::widgets::Tree,
+    /// The tree's items, kept beside its state so the borrow lives as long as
+    /// the demo does.
+    file_items: Vec<iced_kit::widgets::TreeItem>,
+    /// The combobox demo's options, kept for the same reason.
+    country_options: Vec<iced_kit::widgets::ComboBoxOption<usize>>,
     notifications: bool,
     newsletter: bool,
     plan: Plan,
@@ -194,6 +201,9 @@ impl std::fmt::Display for Plan {
 #[derive(Debug, Clone)]
 enum Message {
     ToggleTheme,
+    /// A press the demo does not act on: the new-components section shows what
+    /// these controls look like rather than wiring every one to state.
+    Noop,
     NameChanged(String),
     EmailChanged(String),
     PasswordChanged(String),
@@ -277,6 +287,17 @@ impl Default for App {
             amount: String::new(),
             notes: iced::widget::text_editor::Content::new(),
             bio: iced::widget::text_editor::Content::new(),
+            file_items: file_tree_items(),
+            country_options: vec![
+                iced_kit::widgets::ComboBoxOption::new(0, "Germany"),
+                iced_kit::widgets::ComboBoxOption::new(1, "Ghana"),
+                iced_kit::widgets::ComboBoxOption::new(2, "Japan").disabled(true),
+            ],
+            file_tree: {
+                let mut tree = iced_kit::widgets::Tree::new().items(file_tree_items());
+                tree.expand_all();
+                tree
+            },
             notifications: false,
             newsletter: false,
             plan: Plan::default(),
@@ -379,6 +400,7 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Noop => {}
             Message::ToggleTheme => self.dark = !self.dark,
             Message::NameChanged(value) => self.name = value,
             Message::EmailChanged(value) => self.email = value,
@@ -538,6 +560,7 @@ impl App {
             self.buttons_section(),
             self.form_section(),
             self.form_layout_section(),
+            self.new_components_section(),
             self.input_group_section(),
             self.selection_section(),
             self.display_section(),
@@ -941,6 +964,66 @@ impl App {
                         .push(muted_text("This is a full width form field.")),
                 )
                 .footer(row![button("Save").primary().on_press(Message::Save)].spacing(8)),
+        )
+    }
+
+    /// The batch of components added alongside the reference's remaining set:
+    /// a searchable combobox, a date field, a colour picker, a stepper, a tree,
+    /// a breadcrumb and a description list.
+    fn new_components_section(&self) -> Element<'_, Message, Theme> {
+        use iced_kit::widgets::{
+            breadcrumb, color_picker, date_picker, description_list, stepper, tree, Crumb,
+            Description, DescriptionLayout, Step, StepLayout,
+        };
+
+        Self::section(
+            "New components",
+            column![
+                row![
+                    combobox::<usize, Message>(&self.country_options, Some(2), "Country")
+                        .clearable(Message::Noop)
+                        .on_toggle(Message::ToggleDropdown)
+                        .fill(true),
+                    date_picker::<Message>("Pick a date", "2024-02-14")
+                        .fill(true)
+                        .on_toggle(Message::ToggleDropdown),
+                ]
+                .spacing(16),
+                row![
+                    color_picker::<Message>(iced::Color::from_rgb8(0x33, 0x66, 0x99)),
+                    rating::<Message>(4).on_select(|_| Message::Noop),
+                    clipboard_button::<Message>("cargo test")
+                        .label("Copy")
+                        .on_copy(|_| Message::Noop),
+                ]
+                .spacing(16)
+                .align_y(iced::Alignment::Center),
+                breadcrumb(vec![
+                    Crumb::link("Home", Message::Noop),
+                    Crumb::link("Projects", Message::Noop),
+                    Crumb::new("iced-kit"),
+                ]),
+                stepper(
+                    vec![
+                        Step::new("Cart"),
+                        Step::new("Address"),
+                        Step::new("Payment"),
+                    ],
+                    1,
+                )
+                .layout(StepLayout::Horizontal)
+                .on_select(|_| Message::Noop),
+                tree::<Message>(&self.file_items, &self.file_tree)
+                    .on_event(|_| Message::Noop)
+                    .max_height(140.0),
+                description_list(vec![
+                    Description::new("Version").value("0.1.0"),
+                    Description::new("License").value("MIT OR Apache-2.0"),
+                ])
+                .layout(DescriptionLayout::Horizontal)
+                .bordered(true),
+            ]
+            .spacing(16),
         )
     }
 
@@ -1982,4 +2065,14 @@ impl App {
             .width(Length::Fill)
             .into()
     }
+}
+
+/// The file tree the new-components demo shows.
+fn file_tree_items() -> Vec<iced_kit::widgets::TreeItem> {
+    use iced_kit::widgets::TreeItem;
+
+    vec![TreeItem::new("src", "src").children([
+        TreeItem::new("main", "main.rs"),
+        TreeItem::new("widgets", "widgets").child(TreeItem::new("button", "button.rs")),
+    ])]
 }
