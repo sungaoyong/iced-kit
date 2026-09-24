@@ -3022,3 +3022,29 @@ fn chat_reaction_pills_render() {
         false,
     );
 }
+
+/// The message scroller's jump-to-bottom control, floating over the transcript.
+///
+/// The control only appears once the reader has scrolled away from the tail, so
+/// the state is scrolled up deliberately: this is the one state where the
+/// button and the bottom fade are both drawn.
+#[test]
+fn chat_message_scroller_jump_button_renders() {
+    use iced_kit::widgets::chat::{MessageScroller, MessageScrollerState};
+
+    let items: Vec<String> = (0..40).map(|index| format!("Message {index}")).collect();
+
+    let mut state = MessageScrollerState::new(items.len());
+    // Far from the bottom, so the tail-follow releases and the overlays draw.
+    state.apply_scroll(40.0 * 28.0, 200.0, 0.0);
+
+    let scroller: Element<'_, Message, Theme> =
+        MessageScroller::new(&items, &state, |item, _| muted_text(item.clone()).into())
+            .jump_button(true)
+            .with_bottom_fade(Some(iced::Color::from_rgb8(0xff, 0xff, 0xff)))
+            .row_height(28.0)
+            .height(200.0)
+            .into();
+
+    assert_renders("chat_scroller_jump", scroller, false);
+}
