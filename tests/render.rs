@@ -2933,3 +2933,50 @@ fn chat_ghost_bubble_inset_renders() {
         false,
     );
 }
+
+/// Message rows with and without avatars, in both alignments.
+///
+/// The avatar rail and the footer that clears it are both geometric: an avatar
+/// only reads as a rail if every one is the same 32px square, and the footer's
+/// 40px offset is what keeps a timestamp under the text rather than under the
+/// avatar.
+#[test]
+fn chat_message_avatar_rail_renders() {
+    use iced_kit::widgets::avatar;
+    use iced_kit::widgets::chat::{
+        bubble, message, MessageAlignment, MessageAvatar, MessageHeader,
+    };
+
+    let with_avatar: Element<'_, Message, Theme> = message(bubble("With an avatar"))
+        .avatar(avatar::<Message>("Ada Lovelace", 32))
+        .header("Ada Lovelace")
+        .footer("12:30")
+        .into();
+
+    let in_a_slot: Element<'_, Message, Theme> = message(bubble("Avatar in a slot"))
+        .avatar(MessageAvatar::new().child(avatar::<Message>("Grace Hopper", 32)))
+        .header("Grace Hopper")
+        .footer("12:31")
+        .into();
+
+    let no_avatar: Element<'_, Message, Theme> = message(bubble("No avatar at all"))
+        .header("System")
+        .footer("12:32")
+        .into();
+
+    let trailing: Element<'_, Message, Theme> = message(
+        bubble("Sent by the reader")
+            .with_variant(iced_kit::widgets::chat::BubbleVariant::Secondary),
+    )
+    .alignment(MessageAlignment::End)
+    .avatar(avatar::<Message>("Grace Hopper", 32))
+    .header_el(MessageHeader::new().text("Grace"))
+    .footer("Sent")
+    .into();
+
+    assert_renders(
+        "chat_message_rail",
+        column![with_avatar, in_a_slot, no_avatar, trailing].spacing(20),
+        false,
+    );
+}

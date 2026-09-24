@@ -11,6 +11,9 @@ use crate::theme::{Size, Theme};
 use iced::widget::{column, container, row, text};
 use iced::{Alignment, Element, Length, Padding};
 
+/// The gap between a message's avatar column and its content column.
+const GAP: f32 = 8.0;
+
 /// The horizontal inset a message's header and footer lines carry by default.
 ///
 /// It matches a bubble's own horizontal padding, so the small muted lines up
@@ -49,7 +52,18 @@ impl<'a, M: 'a> From<MessageGroup<'a, M>> for Element<'a, M, Theme> {
     }
 }
 
+/// The side of a message's avatar, in logical pixels.
+///
+/// Every message in a transcript uses this one size, so a column of avatars
+/// reads as a single aligned rail rather than a ragged one.
+pub const AVATAR_SIZE: f32 = 32.0;
+
 /// The avatar slot of a [`Message`].
+///
+/// The slot reserves the avatar's square and takes the theme's muted surface as
+/// its backing, so an avatar that is only initials still reads as a distinct
+/// object against the page rather than as loose text. An indexed avatar inside
+/// it (the family's [`Avatar`](crate::widgets::Avatar)) keeps its own tint.
 #[must_use = "a MessageAvatar does nothing unless it is given to a Message"]
 pub struct MessageAvatar<'a, M> {
     children: Vec<Element<'a, M, Theme>>,
@@ -77,7 +91,25 @@ impl<'a, M: 'a> Default for MessageAvatar<'a, M> {
 
 impl<'a, M: 'a> From<MessageAvatar<'a, M>> for Element<'a, M, Theme> {
     fn from(slot: MessageAvatar<'a, M>) -> Self {
-        column(slot.children).spacing(4).into()
+        // The slot is a fixed square: it does not shrink (or a long message
+        // would squeeze the avatar) and it does not grow.
+        container(column(slot.children).spacing(4))
+            .width(Length::Fixed(AVATAR_SIZE))
+            .height(Length::Fixed(AVATAR_SIZE))
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center)
+            .class(Box::new(|theme: &Theme| iced::widget::container::Style {
+                background: Some(iced::Background::Color(theme.colors().muted)),
+                border: iced::Border {
+                    // A circle, matching the family's avatar shape, so a bare
+                    // slot and a real avatar occupy the same silhouette.
+                    radius: (AVATAR_SIZE / 2.0).into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+                as iced::widget::container::StyleFn<'a, Theme>)
+            .into()
     }
 }
 
@@ -107,14 +139,7 @@ impl<'a, M: 'a> MessageHeader<'a, M> {
 
     /// Adds a text run to the header.
     pub fn text(mut self, content: impl text::IntoFragment<'a>) -> Self {
-        self.children.push(
-            text(content)
-                .size(Size::Xs.text().size)
-                .class(Box::new(|theme: &Theme| text::Style {
-                    color: Some(theme.colors().muted_foreground),
-                }) as iced::widget::text::StyleFn<'a, Theme>)
-                .into(),
-        );
+        self.children.push(meta_text(content));
         self
     }
 
@@ -172,14 +197,7 @@ impl<'a, M: 'a> MessageFooter<'a, M> {
 
     /// Adds a muted text run to the footer.
     pub fn text(mut self, content: impl text::IntoFragment<'a>) -> Self {
-        self.children.push(
-            text(content)
-                .size(Size::Xs.text().size)
-                .class(Box::new(|theme: &Theme| text::Style {
-                    color: Some(theme.colors().muted_foreground),
-                }) as iced::widget::text::StyleFn<'a, Theme>)
-                .into(),
-        );
+        self.children.push(meta_text(content));
         self
     }
 
@@ -209,6 +227,24 @@ impl<'a, M: 'a> From<MessageFooter<'a, M>> for Element<'a, M, Theme> {
     }
 }
 
+/// One run of a meta line: small, medium weight, muted.
+///
+/// The weight is what separates these lines from message text at the same size:
+/// a timestamp set at normal weight reads as part of the message.
+fn meta_text<'a, M: 'a>(content: impl text::IntoFragment<'a>) -> Element<'a, M, Theme> {
+    text(content)
+        .size(Size::Xs.text().size)
+        .line_height(Size::Xs.text().line_height())
+        .font(iced::Font {
+            weight: iced::font::Weight::Medium,
+            ..iced::Font::DEFAULT
+        })
+        .class(Box::new(|theme: &Theme| text::Style {
+            color: Some(theme.colors().muted_foreground),
+        }) as iced::widget::text::StyleFn<'a, Theme>)
+        .into()
+}
+
 /// Shared chrome for the header and footer lines.
 ///
 /// Inset horizontally by a bubble's own padding so the small muted text lines
@@ -230,7 +266,7 @@ fn meta_row<'a, M: 'a>(
 /// The content slot of a [`Message`]: a bubble plus any extra elements.
 #[must_use = "a MessageContent does nothing unless it is given to a Message"]
 pub struct MessageContent<'a, M> {
-    bubble: Option<Element<'a, M, Theme>>,
+    bubble: Option<Bubble<'a, M>>,
     children: Vec<Element<'a, M, Theme>>,
     /// Whether the content is a bubble that draws no surface.
     surface_less: bool,
@@ -252,7 +288,7 @@ impl<'a, M: 'a> MessageContent<'a, M> {
     /// for them to line up with.
     pub fn bubble(mut self, bubble: Bubble<'a, M>) -> Self {
         self.surface_less |= bubble.is_ghost();
-        self.bubble = Some(bubble.into());
+        self.bubble = Some(bubble);
         self
     }
 
@@ -273,13 +309,26 @@ impl<'a, M: 'a> Default for MessageContent<'a, M> {
 
 impl<'a, M: 'a> From<MessageContent<'a, M>> for Element<'a, M, Theme> {
     fn from(content: MessageContent<'a, M>) -> Self {
+        content.into_element_with(MessageAlignment::default())
+    }
+}
+
+impl<'a, M: 'a> MessageContent<'a, M> {
+    /// Renders the content, pushing the bubble to `alignment`'s edge.
+    ///
+    /// The bubble is aligned here rather than the column that holds it: a
+    /// full-width column with an end alignment still draws its children from
+    /// the leading edge, so the bubble itself is the thing that has to move.
+    fn into_element_with(self, alignment: MessageAlignment) -> Element<'a, M, Theme> {
         let mut col = column![].spacing(4).width(Length::Fill);
-        if let Some(bubble) = content.bubble {
-            col = col.push(bubble);
+
+        if let Some(bubble) = self.bubble {
+            col = col.push(bubble.alignment(alignment));
         }
-        for el in content.children {
+        for el in self.children {
             col = col.push(el);
         }
+
         col.into()
     }
 }
@@ -368,18 +417,25 @@ impl<'a, M: 'a> From<Message<'a, M>> for Element<'a, M, Theme> {
             .as_ref()
             .is_some_and(|content| content.surface_less);
 
+        let has_avatar = message.avatar.is_some();
+
         let mut body = column![].spacing(6).align_x(edge).width(Length::Fill);
         if let Some(header) = message.header {
             body = body.push(header.into_element_with(content_inset));
         }
         if let Some(content) = message.content {
-            body = body.push(content);
-        }
-        if let Some(footer) = message.footer {
-            body = body.push(footer.into_element_with(content_inset));
+            body = body.push(content.into_element_with(message.alignment));
         }
 
-        let mut parts = row![].spacing(8).align_y(Alignment::End);
+        // The footer is built outside the avatar row, so a bottom-anchored
+        // avatar can never push it down: it stays where the text ends. With an
+        // avatar present it must still clear the avatar's column, which is the
+        // avatar's own width plus the row's gap.
+        let footer: Option<Element<'a, M, Theme>> = message
+            .footer
+            .map(|footer| footer.into_element_with(content_inset));
+
+        let mut parts = row![].spacing(GAP).align_y(Alignment::End);
         match message.alignment {
             MessageAlignment::Start => {
                 if let Some(avatar) = message.avatar {
@@ -395,7 +451,45 @@ impl<'a, M: 'a> From<Message<'a, M>> for Element<'a, M, Theme> {
             }
         }
 
-        container(parts.width(Length::Fill))
+        // The offset clears the avatar's column on whichever side the avatar
+        // sits, and is zero when the message has no avatar.
+        let offset = if has_avatar { AVATAR_SIZE + GAP } else { 0.0 };
+
+        let mut stack = column![parts.width(Length::Fill)].spacing(6);
+        if let Some(footer) = footer {
+            // The offset clears the avatar's column, and the alignment pushes
+            // the line to the message's own edge: a trailing message's
+            // timestamp belongs under its text, not under its avatar.
+            let (inset, align) = match message.alignment {
+                MessageAlignment::Start => (
+                    Padding {
+                        top: 0.0,
+                        right: 0.0,
+                        bottom: 0.0,
+                        left: offset,
+                    },
+                    Alignment::Start,
+                ),
+                MessageAlignment::End => (
+                    Padding {
+                        top: 0.0,
+                        right: offset,
+                        bottom: 0.0,
+                        left: 0.0,
+                    },
+                    Alignment::End,
+                ),
+            };
+
+            stack = stack.push(
+                container(footer)
+                    .padding(inset)
+                    .width(Length::Fill)
+                    .align_x(align),
+            );
+        }
+
+        container(stack.width(Length::Fill))
             .align_x(edge)
             .width(Length::Fill)
             .into()
@@ -556,5 +650,73 @@ mod tests {
             .content(MessageContent::new().bubble(bubble("x")))
             .into();
         drop(pinned);
+    }
+
+    /// The avatar slot reserves one fixed square, so a column of avatars reads
+    /// as a single aligned rail rather than a ragged one.
+    #[test]
+    fn the_avatar_slot_has_a_fixed_size() {
+        assert_eq!(AVATAR_SIZE, 32.0);
+
+        // The slot renders whether or not anything was put in it.
+        let empty: Element<'_, Msg, Theme> = MessageAvatar::new().into();
+        drop(empty);
+
+        let filled: Element<'_, Msg, Theme> = MessageAvatar::new().child(text("AB")).into();
+        drop(filled);
+    }
+
+    /// The footer clears the avatar's column when there is an avatar, and does
+    /// not when there is not: the offset is the avatar's width plus the row's
+    /// gap, and zero otherwise.
+    #[test]
+    fn the_footer_clears_the_avatar_column() {
+        let offset = |has_avatar: bool| {
+            if has_avatar {
+                AVATAR_SIZE + GAP
+            } else {
+                0.0
+            }
+        };
+
+        assert_eq!(offset(true), 40.0, "32px avatar plus an 8px gap");
+        assert_eq!(offset(false), 0.0);
+        assert_eq!(GAP, 8.0);
+    }
+
+    /// The footer sits outside the avatar row, so a bottom-anchored avatar
+    /// cannot shift it. Both alignments and both avatar states must render.
+    #[test]
+    fn messages_render_with_a_footer_beside_and_without_an_avatar() {
+        for alignment in [MessageAlignment::Start, MessageAlignment::End] {
+            for with_avatar in [false, true] {
+                let mut msg = Message::new()
+                    .alignment(alignment)
+                    .content(MessageContent::new().bubble(bubble("hi")))
+                    .footer("12:30");
+
+                if with_avatar {
+                    let av: Element<'_, Msg, Theme> = text("AB").into();
+                    msg = msg.avatar(av);
+                }
+
+                let el: Element<'_, Msg, Theme> = msg.into();
+                drop(el);
+            }
+        }
+    }
+
+    /// A meta line takes the medium weight, which is what separates a timestamp
+    /// or an author name from message text at the same size.
+    #[test]
+    fn meta_lines_take_the_medium_weight() {
+        let el: Element<'_, Msg, Theme> = meta_text("12:30");
+        drop(el);
+
+        // Both the header and the footer route through it.
+        let header: Element<'_, Msg, Theme> = MessageHeader::new().text("Ada").into();
+        let footer: Element<'_, Msg, Theme> = MessageFooter::new().text("12:30").into();
+        drop(header);
+        drop(footer);
     }
 }
