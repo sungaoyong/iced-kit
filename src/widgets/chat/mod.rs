@@ -20,5 +20,8 @@ pub use bubble::{
     MessageAlignment,
 };
 pub use marker::{marker, Marker, MarkerLoadingStyle, MarkerVariant};
-// pub use message::{ ... };
+pub use message::{
+    message, message_group, Message, MessageAvatar, MessageContent, MessageFooter, MessageGroup,
+    MessageHeader,
+};
 // pub use scroller::{ ... };
