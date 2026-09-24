@@ -15,7 +15,10 @@ pub mod scroller;
 
 // Re-exports are switched on as each component lands (Tasks 1-6 of the plan).
 // pub use attachment::{ ... };
-// pub use bubble::{ ... };
+pub use bubble::{
+    bubble, Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant,
+    MessageAlignment,
+};
 pub use marker::{marker, Marker, MarkerLoadingStyle, MarkerVariant};
 // pub use message::{ ... };
 // pub use scroller::{ ... };
