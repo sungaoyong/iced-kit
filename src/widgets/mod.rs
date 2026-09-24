@@ -75,7 +75,7 @@ pub use sidebar::{
 };
 pub use skeleton::{skeleton, skeleton_list_item, skeleton_table, SkeletonShape};
 pub use spinner::{ring_progress, spinner, spinner_styled, SpinnerStyle};
-pub use tabs::{tabs, Tab};
+pub use tabs::{tabs, Tab, TabStrip, TabVariant};
 pub use title_bar::{TitleBar, WindowControl};
 pub use toggle::{checkbox, radio, slider, switch};
 pub use typography::{code, heading, kbd, muted_text, paragraph, shortcut, Heading};

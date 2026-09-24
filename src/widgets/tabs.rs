@@ -6,16 +6,124 @@
 //! The selected tab is marked by an underline that slides between tabs rather
 //! than jumping, which is what shows the selection as one thing moving through
 //! the strip instead of two unrelated states.
+//!
+//! # The variants
+//!
+//! [`tabs`] returns a [`TabStrip`] builder whose [`TabStrip::variant`] selects
+//! how the strip marks its selection, matching the reference's `TabVariant`:
+//!
+//! - [`TabVariant::Underline`] — a rule that slides under the selected label.
+//!   The default, and the only variant the indicator overlay is used for.
+//! - [`TabVariant::Tab`] — a bordered folder-tab look: the selected tab takes
+//!   the page surface and a top border, sitting flush with the strip's edge.
+//! - [`TabVariant::Outline`] — every tab is outlined; the selected one is
+//!   outlined in the primary color.
+//! - [`TabVariant::Pill`] — the selected tab is a filled primary pill.
+//! - [`TabVariant::Segmented`] — a muted track with the selected tab as a
+//!   raised background-colored segment.
+//!
+//! The four non-underline variants do not slide: their selection is painted by
+//! the tab itself, so there is nothing for an overlay to interpolate.
 
 use crate::theme::{Size, Theme};
 use iced::advanced::widget::{tree, Operation, Widget};
 use iced::advanced::{layout, mouse, renderer, Clipboard, Shell};
 use iced::time::Instant;
-use iced::widget::{button, row, text};
+use iced::widget::{button, container, row, text};
 use iced::{Color, Element, Event, Length, Padding, Rectangle, Size as IcedSize};
 
 /// The thickness of the underline marking the selected tab, in logical pixels.
 const INDICATOR_THICKNESS: f32 = 2.0;
+
+/// How a tab strip marks its selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TabVariant {
+    /// A sliding rule under the selected label. The default.
+    #[default]
+    Underline,
+    /// Bordered tabs with the selected one taking the page surface.
+    Tab,
+    /// Every tab outlined; the selected one in the primary color.
+    Outline,
+    /// The selected tab is a filled primary pill.
+    Pill,
+    /// A muted track with the selected tab raised on it.
+    Segmented,
+}
+
+impl TabVariant {
+    /// The name this variant is read from a config by.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Underline => "underline",
+            Self::Tab => "tab",
+            Self::Outline => "outline",
+            Self::Pill => "pill",
+            Self::Segmented => "segmented",
+        }
+    }
+
+    /// The variant a name refers to, for a caller reading one from a config.
+    ///
+    /// An unrecognized name falls back to the default rather than failing: a
+    /// variant is presentation, and a config that names one this version does
+    /// not know is better drawn plainly than refused.
+    #[must_use]
+    pub fn from_name(name: &str) -> Self {
+        match name.to_lowercase().as_str() {
+            "tab" => Self::Tab,
+            "outline" => Self::Outline,
+            "pill" => Self::Pill,
+            "segmented" => Self::Segmented,
+            _ => Self::Underline,
+        }
+    }
+
+    /// Whether the selection is drawn by a sliding overlay.
+    ///
+    /// Only the underline variant needs one; the others paint the selection as
+    /// part of the tab, so an overlay would be a second, contradictory marker.
+    fn slides(self) -> bool {
+        matches!(self, Self::Underline)
+    }
+
+    /// The strip's own background and padding.
+    fn strip(self, theme: &Theme) -> (Option<Color>, Padding) {
+        let colors = theme.colors();
+
+        match self {
+            Self::Segmented => (
+                Some(colors.muted),
+                Padding {
+                    top: 2.0,
+                    right: 2.0,
+                    bottom: 2.0,
+                    left: 2.0,
+                },
+            ),
+            _ => (None, Padding::ZERO),
+        }
+    }
+
+    /// The gap between adjacent tabs.
+    fn gap(self) -> f32 {
+        match self {
+            Self::Underline | Self::Tab => 0.0,
+            Self::Outline | Self::Pill => 4.0,
+            Self::Segmented => 2.0,
+        }
+    }
+
+    /// The corner radius of a tab.
+    fn radius(self, theme: &Theme) -> f32 {
+        match self {
+            Self::Underline | Self::Tab => 0.0,
+            Self::Outline | Self::Pill => f32::from(theme.radius().full),
+            Self::Segmented => f32::from(theme.radius().md),
+        }
+    }
+}
 
 /// One tab in a [`tabs`] strip.
 #[derive(Debug, Clone)]
@@ -23,6 +131,9 @@ const INDICATOR_THICKNESS: f32 = 2.0;
 pub struct Tab {
     label: String,
     enabled: bool,
+    icon: Option<crate::icons::IconName>,
+    prefix: Option<String>,
+    suffix: Option<String>,
 }
 
 impl Tab {
@@ -31,6 +142,9 @@ impl Tab {
         Self {
             label: label.into(),
             enabled: true,
+            icon: None,
+            prefix: None,
+            suffix: None,
         }
     }
 
@@ -40,10 +154,83 @@ impl Tab {
         self
     }
 
+    /// Draws an icon before the label.
+    pub fn icon(mut self, icon: crate::icons::IconName) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Draws a short run of text before the icon, for a count or a status dot.
+    pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.prefix = Some(prefix.into());
+        self
+    }
+
+    /// Draws a short run of text after the label, for a count or a badge.
+    pub fn suffix(mut self, suffix: impl Into<String>) -> Self {
+        self.suffix = Some(suffix.into());
+        self
+    }
+
     /// Returns the tab's label.
     #[must_use]
     pub fn label(&self) -> &str {
         &self.label
+    }
+
+    /// Whether the tab can be selected.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
+/// A tab strip under construction.
+///
+/// [`tabs`] returns this, so the variant and size are set on the builder:
+///
+/// ```
+/// # use iced_kit::widgets::{tabs, Tab, TabVariant};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Selected(usize) }
+/// # fn view(current: usize) -> Element<'static, Message, Theme> {
+/// tabs(vec![Tab::new("General"), Tab::new("Advanced")], current, Message::Selected)
+///     .variant(TabVariant::Pill)
+///     .into()
+/// # }
+/// ```
+#[must_use = "a TabStrip does nothing unless it is turned into an Element"]
+pub struct TabStrip<'a, Message> {
+    tabs: Vec<Tab>,
+    selected: usize,
+    on_select: Box<dyn Fn(usize) -> Message + 'a>,
+    variant: TabVariant,
+    size: Size,
+}
+
+impl<'a, Message: Clone + 'a> TabStrip<'a, Message> {
+    /// Sets how the strip marks its selection.
+    pub fn variant(mut self, variant: TabVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    /// Sets the size step, which scales the tab height, padding and text.
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Turns the strip into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        build_strip(self)
+    }
+}
+
+impl<'a, Message: Clone + 'a> From<TabStrip<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(strip: TabStrip<'a, Message>) -> Self {
+        strip.into_element()
     }
 }
 
@@ -70,15 +257,45 @@ pub fn tabs<'a, Message: Clone + 'a>(
     tabs: Vec<Tab>,
     selected: usize,
     on_select: impl Fn(usize) -> Message + 'a,
+) -> TabStrip<'a, Message> {
+    TabStrip {
+        tabs,
+        selected,
+        on_select: Box::new(on_select),
+        variant: TabVariant::default(),
+        size: Size::Md,
+    }
+}
+
+/// Lays out a strip once its options are settled.
+fn build_strip<'a, Message: Clone + 'a>(
+    strip: TabStrip<'a, Message>,
 ) -> Element<'a, Message, Theme> {
-    let text_style = Size::Md.text();
-    let height = Size::Md.height() + 4.0;
+    let TabStrip {
+        tabs,
+        selected,
+        on_select,
+        variant,
+        size,
+    } = strip;
+
+    let text_style = size.text();
+    let height = tab_height(variant, size);
     let count = tabs.len();
 
-    let strip =
+    // The strip's own gap and padding, and the tab's, are read once here rather
+    // than per tab: they are decided by the variant and size, not by the tab.
+    let gap = variant.gap();
+    let seg_padding = variant.strip(&Theme::light()).1;
+    let seg_padding = Padding {
+        top: seg_padding.top.max(0.0),
+        ..seg_padding
+    };
+
+    let strip_row =
         tabs.into_iter()
             .enumerate()
-            .fold(row![].spacing(0), |row, (index, tab)| {
+            .fold(row![].spacing(gap), |strip_row, (index, tab)| {
                 let is_selected = index == selected;
 
                 // The line box is the tab's own height, not the text's. A raw
@@ -86,36 +303,118 @@ pub fn tabs<'a, Message: Clone + 'a>(
                 // centring it, so a text-height line box leaves the label against
                 // the top of the tab. Sizing the box to the control is what puts
                 // the baseline where the eye expects it.
-                let label = text(tab.label)
+                let label = text(tab.label.clone())
                     .size(text_style.size)
                     .line_height(iced::Pixels(height.max(text_style.line_height)));
 
-                let mut widget = button(label)
+                // Icon, prefix and suffix sit on the tab's centre line beside
+                // the label, spaced by the size step's gap.
+                let content: Element<'_, Message, Theme> = {
+                    let mut parts = row![].spacing(size.gap()).align_y(iced::Alignment::Center);
+
+                    if let Some(prefix) = tab.prefix.clone() {
+                        parts = parts.push(
+                            text(prefix)
+                                .size(text_style.size)
+                                .line_height(iced::Pixels(height.max(text_style.line_height))),
+                        );
+                    }
+
+                    if let Some(icon) = tab.icon {
+                        parts = parts.push(crate::widgets::Icon::new(icon).into_element(size));
+                    }
+
+                    parts = parts.push(label);
+
+                    if let Some(suffix) = tab.suffix.clone() {
+                        parts = parts.push(
+                            text(suffix)
+                                .size(text_style.size)
+                                .line_height(iced::Pixels(height.max(text_style.line_height))),
+                        );
+                    }
+
+                    parts.into()
+                };
+
+                let horizontal_padding = match variant {
+                    TabVariant::Underline => match size {
+                        Size::Xs => 8.0,
+                        Size::Sm => 10.0,
+                        Size::Lg => 16.0,
+                        _ => 12.0,
+                    },
+                    _ => match size {
+                        Size::Xs => 8.0,
+                        Size::Sm => 10.0,
+                        Size::Lg => 16.0,
+                        _ => 12.0,
+                    },
+                };
+
+                let mut widget = button(content)
                     .padding(Padding {
                         top: 0.0,
-                        right: 12.0,
+                        right: horizontal_padding,
                         bottom: 0.0,
-                        left: 12.0,
+                        left: horizontal_padding,
                     })
                     .height(Length::Fixed(height))
                     .class(Box::new(move |theme: &Theme, status| {
-                        tab_style(theme, status, is_selected)
+                        tab_style(theme, status, is_selected, variant, size)
                     }) as button::StyleFn<'a, Theme>);
 
                 if tab.enabled {
                     widget = widget.on_press(on_select(index));
                 }
 
-                row.push(widget)
+                strip_row.push(widget)
             });
 
-    let strip: Element<'a, Message, Theme> = strip.into();
+    // The segmented variant draws a track behind its tabs; the others are
+    // transparent, so no container is built for them at all.
+    let strip: Element<'a, Message, Theme> = match variant.strip(&Theme::light()).0 {
+        None => strip_row.into(),
+        Some(_) => container(strip_row)
+            .padding(seg_padding)
+            .class(Box::new(|theme: &Theme| container::Style {
+                background: Some(iced::Background::Color(theme.colors().muted)),
+                border: iced::Border {
+                    radius: f32::from(theme.radius().lg).into(),
+                    ..iced::Border::default()
+                },
+                ..container::Style::default()
+            }) as container::StyleFn<'a, Theme>)
+            .into(),
+    };
+
+    if !variant.slides() {
+        // Nothing needs interpolating, so the row is the whole strip.
+        return strip;
+    }
 
     // A stale index selects nothing, so the indicator is simply absent rather
     // than pointing at a tab that is not there.
     let selected = (selected < count).then_some(selected);
 
-    TabStrip::new(strip, selected, INDICATOR_THICKNESS).into()
+    TabStripWidget::new(strip, selected, INDICATOR_THICKNESS).into()
+}
+
+/// The height of a tab at this variant and size.
+///
+/// Ported from the reference's `TabVariant::height`, whose underline tabs are
+/// shorter because the rule takes the difference.
+fn tab_height(variant: TabVariant, size: Size) -> f32 {
+    match (variant, size) {
+        (TabVariant::Underline, Size::Xs) => 26.0,
+        (TabVariant::Underline, Size::Sm) => 30.0,
+        (TabVariant::Underline, Size::Lg) => 44.0,
+        (TabVariant::Underline, _) => 36.0,
+        (_, Size::Xs) => 20.0,
+        (_, Size::Sm) => 24.0,
+        (_, Size::Lg) => 36.0,
+        (_, _) => 32.0,
+    }
 }
 
 /// A row of tabs with a sliding underline.
@@ -124,14 +423,14 @@ pub fn tabs<'a, Message: Clone + 'a>(
 /// of the tabs at a position interpolated between them. iced has nothing that
 /// draws an underline under a flex item, and the position is only knowable once
 /// the row has been laid out.
-struct TabStrip<'a, Message, Renderer = iced::Renderer> {
+struct TabStripWidget<'a, Message, Renderer = iced::Renderer> {
     row: Element<'a, Message, Theme, Renderer>,
     /// The selected tab, or `None` when nothing is selected.
     selected: Option<usize>,
     thickness: f32,
 }
 
-impl<'a, Message, Renderer> TabStrip<'a, Message, Renderer> {
+impl<'a, Message, Renderer> TabStripWidget<'a, Message, Renderer> {
     fn new(
         row: Element<'a, Message, Theme, Renderer>,
         selected: Option<usize>,
@@ -160,7 +459,7 @@ struct StripState {
     primed: bool,
 }
 
-impl<Message, Renderer> Widget<Message, Theme, Renderer> for TabStrip<'_, Message, Renderer>
+impl<Message, Renderer> Widget<Message, Theme, Renderer> for TabStripWidget<'_, Message, Renderer>
 where
     Message: Clone,
     Renderer: iced::advanced::Renderer,
@@ -379,13 +678,13 @@ where
     }
 }
 
-impl<'a, Message, Renderer> From<TabStrip<'a, Message, Renderer>>
+impl<'a, Message, Renderer> From<TabStripWidget<'a, Message, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
     Renderer: iced::advanced::Renderer + 'a,
 {
-    fn from(strip: TabStrip<'a, Message, Renderer>) -> Self {
+    fn from(strip: TabStripWidget<'a, Message, Renderer>) -> Self {
         Element::new(strip)
     }
 }
@@ -404,46 +703,173 @@ fn selected_tab_bounds(layout: layout::Layout<'_>, selected: usize) -> Option<Re
     layout.children().nth(selected).map(|tab| tab.bounds())
 }
 
-/// The appearance of a single tab.
-fn tab_style(theme: &Theme, status: button::Status, is_selected: bool) -> button::Style {
+/// The appearance of a single tab, for the variant it belongs to.
+fn tab_style(
+    theme: &Theme,
+    status: button::Status,
+    is_selected: bool,
+    variant: TabVariant,
+    size: Size,
+) -> button::Style {
     let colors = theme.colors();
-    let hovered = matches!(status, button::Status::Hovered);
+    let hovered =
+        matches!(status, button::Status::Hovered) && !matches!(status, button::Status::Disabled);
     let disabled = matches!(status, button::Status::Disabled);
 
-    let text_color = if is_selected {
-        colors.foreground
-    } else if disabled {
-        // A disabled tab is dimmer than an ordinary unselected one, so it does
-        // not read as merely available.
-        iced::Color {
-            a: colors.muted_foreground.a * 0.6,
-            ..colors.muted_foreground
-        }
-    } else {
-        colors.muted_foreground
-    };
+    let radius = variant.radius(theme);
 
-    button::Style {
-        // A disabled tab must not highlight on hover.
-        background: (hovered && !disabled).then_some(iced::Background::Color(colors.accent)),
-        text_color,
-        // The underline is drawn by the strip above the row rather than as a
-        // border here, because it slides between tabs and so cannot belong to
-        // one of them.
+    // The underline's rule is drawn by the strip above the row rather than as a
+    // border here: it slides between tabs, so it cannot belong to one of them.
+    // Every other variant paints its own selection.
+    let mut style = button::Style {
+        background: None,
+        text_color: colors.muted_foreground,
         border: iced::Border {
             color: Color::TRANSPARENT,
             width: 0.0,
-            radius: 0.0.into(),
+            radius: radius.into(),
         },
         shadow: iced::Shadow::default(),
         snap: true,
+    };
+
+    if disabled {
+        style.text_color = Color {
+            a: colors.muted_foreground.a * 0.6,
+            ..colors.muted_foreground
+        };
+        // A disabled tab must not highlight on hover, but its selection still
+        // shows: it is where the strip is, not an affordance.
+        match variant {
+            TabVariant::Underline | TabVariant::Tab => {}
+            TabVariant::Outline => {
+                style.border = iced::Border {
+                    color: if is_selected {
+                        colors.primary
+                    } else {
+                        colors.border
+                    },
+                    width: 1.0,
+                    radius: radius.into(),
+                };
+            }
+            TabVariant::Pill => {
+                if is_selected {
+                    style.background = Some(iced::Background::Color(fade(colors.primary, 0.5)));
+                    style.text_color = fade(colors.primary_foreground, 0.5);
+                }
+            }
+            TabVariant::Segmented => {
+                if is_selected {
+                    style.background = Some(iced::Background::Color(colors.background));
+                }
+            }
+        }
+        return style;
+    }
+
+    match variant {
+        TabVariant::Underline => {
+            style.text_color = if is_selected {
+                colors.foreground
+            } else {
+                colors.muted_foreground
+            };
+        }
+        TabVariant::Tab => {
+            style.text_color = if is_selected {
+                colors.foreground
+            } else {
+                colors.muted_foreground
+            };
+            if is_selected {
+                style.background = Some(iced::Background::Color(colors.surface));
+                style.border = iced::Border {
+                    color: colors.border,
+                    // Only the top and sides are ruled, so the tab reads as
+                    // joined to the page below it.
+                    width: 1.0,
+                    radius: iced::border::Radius {
+                        top_left: f32::from(theme.radius().md).into(),
+                        top_right: f32::from(theme.radius().md).into(),
+                        bottom_left: 0.0_f32.into(),
+                        bottom_right: 0.0_f32.into(),
+                    },
+                };
+            } else if hovered {
+                style.text_color = colors.foreground;
+            }
+        }
+        TabVariant::Outline => {
+            style.text_color = if is_selected {
+                colors.primary
+            } else {
+                colors.muted_foreground
+            };
+            style.border = iced::Border {
+                color: if is_selected {
+                    colors.primary
+                } else {
+                    colors.border
+                },
+                width: 1.0,
+                radius: radius.into(),
+            };
+            if hovered && !is_selected {
+                style.background = Some(iced::Background::Color(colors.accent));
+            }
+        }
+        TabVariant::Pill => {
+            if is_selected {
+                style.background = Some(iced::Background::Color(colors.primary));
+                style.text_color = colors.primary_foreground;
+            } else {
+                style.text_color = colors.muted_foreground;
+                if hovered {
+                    style.background = Some(iced::Background::Color(colors.secondary));
+                    style.text_color = colors.secondary_foreground;
+                }
+            }
+        }
+        TabVariant::Segmented => {
+            style.text_color = if is_selected {
+                colors.foreground
+            } else {
+                colors.muted_foreground
+            };
+            if is_selected {
+                // The raised segment is the page color on the muted track.
+                style.background = Some(iced::Background::Color(colors.background));
+            }
+        }
+    }
+
+    // The size only reaches the style through the radius scale for segmented
+    // tabs, whose inner radius is one step tighter than the track's.
+    if variant == TabVariant::Segmented && matches!(size, Size::Xs | Size::Sm) {
+        style.border.radius = iced::border::Radius {
+            top_left: f32::from(theme.radius().sm).into(),
+            top_right: f32::from(theme.radius().sm).into(),
+            bottom_left: f32::from(theme.radius().sm).into(),
+            bottom_right: f32::from(theme.radius().sm).into(),
+        };
+    }
+
+    style
+}
+
+/// A color at a fraction of its opacity.
+fn fade(color: Color, opacity: f32) -> Color {
+    Color {
+        a: color.a * opacity,
+        ..color
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{tabs, Tab};
-    use crate::theme::Theme;
+    use crate::theme::{Size, Theme};
 
     #[derive(Debug, Clone, PartialEq)]
     enum Message {
@@ -456,7 +882,8 @@ mod tests {
             vec![Tab::new("One"), Tab::new("Two"), Tab::new("Three")],
             0,
             Message::Selected,
-        );
+        )
+        .into();
         drop(element);
     }
 
@@ -466,13 +893,14 @@ mod tests {
             vec![Tab::new("Enabled"), Tab::new("Disabled").enabled(false)],
             0,
             Message::Selected,
-        );
+        )
+        .into();
         drop(element);
     }
 
     #[test]
     fn an_empty_strip_renders() {
-        let element: iced::Element<'_, Message, Theme> = tabs(vec![], 0, Message::Selected);
+        let element: iced::Element<'_, Message, Theme> = tabs(vec![], 0, Message::Selected).into();
         drop(element);
     }
 
@@ -480,7 +908,7 @@ mod tests {
     fn a_selection_index_beyond_the_strip_renders_no_selection() {
         // A stale index must not panic; it simply selects nothing.
         let element: iced::Element<'_, Message, Theme> =
-            tabs(vec![Tab::new("Only")], 99, Message::Selected);
+            tabs(vec![Tab::new("Only")], 99, Message::Selected).into();
         drop(element);
     }
 
@@ -488,11 +916,24 @@ mod tests {
     /// makes it a tab rather than a button is drawn by the strip.
     #[test]
     fn tab_style_marks_the_selected_tab() {
+        use super::TabVariant;
         use iced::widget::button::Status;
 
         let theme = Theme::light();
-        let selected = super::tab_style(&theme, Status::Active, true);
-        let unselected = super::tab_style(&theme, Status::Active, false);
+        let selected = super::tab_style(
+            &theme,
+            Status::Active,
+            true,
+            TabVariant::Underline,
+            Size::Md,
+        );
+        let unselected = super::tab_style(
+            &theme,
+            Status::Active,
+            false,
+            TabVariant::Underline,
+            Size::Md,
+        );
 
         assert_eq!(selected.text_color, theme.colors().foreground);
         assert_eq!(unselected.text_color, theme.colors().muted_foreground);
@@ -502,14 +943,16 @@ mod tests {
     /// A tab must not draw an underline of its own, or there would be two: the
     /// strip draws the one that slides.
     #[test]
-    fn no_tab_draws_its_own_underline() {
+    fn no_underline_tab_draws_its_own_rule() {
+        use super::TabVariant;
         use iced::widget::button::Status;
 
         let theme = Theme::light();
 
         for is_selected in [true, false] {
             for status in [Status::Active, Status::Hovered, Status::Disabled] {
-                let style = super::tab_style(&theme, status, is_selected);
+                let style =
+                    super::tab_style(&theme, status, is_selected, TabVariant::Underline, Size::Md);
 
                 assert_eq!(
                     style.border.width, 0.0,
@@ -517,6 +960,127 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Each painted variant must mark its selection itself, or the strip would
+    /// show no selection at all: nothing interpolates for them.
+    #[test]
+    fn painted_variants_style_their_selection() {
+        use super::TabVariant;
+        use iced::widget::button::Status;
+
+        for variant in [
+            TabVariant::Outline,
+            TabVariant::Pill,
+            TabVariant::Segmented,
+            TabVariant::Tab,
+        ] {
+            let theme = Theme::light();
+            let selected = super::tab_style(&theme, Status::Active, true, variant, Size::Md);
+            let unselected = super::tab_style(&theme, Status::Active, false, variant, Size::Md);
+
+            assert_ne!(
+                (
+                    selected.background,
+                    selected.text_color,
+                    selected.border.color
+                ),
+                (
+                    unselected.background,
+                    unselected.text_color,
+                    unselected.border.color
+                ),
+                "{variant:?} must distinguish its selected tab"
+            );
+        }
+    }
+
+    /// Only the underline variant needs the sliding overlay. A painted variant
+    /// that still requested one would draw the selection twice.
+    #[test]
+    fn only_underline_slides() {
+        use super::TabVariant;
+
+        assert!(TabVariant::Underline.slides());
+        for variant in [
+            TabVariant::Tab,
+            TabVariant::Outline,
+            TabVariant::Pill,
+            TabVariant::Segmented,
+        ] {
+            assert!(!variant.slides(), "{variant:?} paints its own selection");
+        }
+    }
+
+    #[test]
+    fn variant_names_round_trip() {
+        use super::TabVariant;
+
+        for variant in [
+            TabVariant::Underline,
+            TabVariant::Tab,
+            TabVariant::Outline,
+            TabVariant::Pill,
+            TabVariant::Segmented,
+        ] {
+            assert_eq!(TabVariant::from_name(variant.as_str()), variant);
+        }
+
+        assert_eq!(TabVariant::from_name("nope"), TabVariant::Underline);
+        assert_eq!(TabVariant::from_name("PILL"), TabVariant::Pill);
+    }
+
+    #[test]
+    fn the_default_variant_is_underline() {
+        assert_eq!(super::TabVariant::default(), super::TabVariant::Underline);
+    }
+
+    #[test]
+    fn a_variant_scales_its_height_with_size() {
+        use super::TabVariant;
+
+        // Larger steps are taller, in every variant.
+        for variant in [
+            TabVariant::Underline,
+            TabVariant::Tab,
+            TabVariant::Outline,
+            TabVariant::Pill,
+            TabVariant::Segmented,
+        ] {
+            let small = super::tab_height(variant, Size::Sm);
+            let medium = super::tab_height(variant, Size::Md);
+            let large = super::tab_height(variant, Size::Lg);
+
+            assert!(small < medium && medium < large, "{variant:?}");
+        }
+    }
+
+    #[test]
+    fn tabs_take_icons_prefixes_and_suffixes() {
+        use crate::icons::IconName;
+
+        let tab = Tab::new("Files")
+            .icon(IconName::File)
+            .prefix("1")
+            .suffix("9+");
+
+        assert_eq!(tab.label(), "Files");
+        assert!(tab.is_enabled());
+        assert!(tab.icon.is_some());
+        assert_eq!(tab.prefix.as_deref(), Some("1"));
+        assert_eq!(tab.suffix.as_deref(), Some("9+"));
+    }
+
+    #[test]
+    fn a_strip_records_its_variant_and_size() {
+        use super::TabVariant;
+
+        let strip = tabs(vec![Tab::new("One")], 0, Message::Selected)
+            .variant(TabVariant::Segmented)
+            .size(Size::Lg);
+
+        assert_eq!(strip.variant, TabVariant::Segmented);
+        assert_eq!(strip.size, Size::Lg);
     }
 
     /// A fresh strip must place the underline rather than slide it in from the
@@ -583,11 +1147,11 @@ mod tests {
     /// strip reports no selection rather than panicking on the missing one.
     #[test]
     fn a_strip_with_no_selectable_tab_marks_nothing() {
-        let empty: iced::Element<'_, Message, Theme> = tabs(vec![], 0, Message::Selected);
+        let empty: iced::Element<'_, Message, Theme> = tabs(vec![], 0, Message::Selected).into();
         drop(empty);
 
         let stale: iced::Element<'_, Message, Theme> =
-            tabs(vec![Tab::new("Only")], 99, Message::Selected);
+            tabs(vec![Tab::new("Only")], 99, Message::Selected).into();
         drop(stale);
     }
 
