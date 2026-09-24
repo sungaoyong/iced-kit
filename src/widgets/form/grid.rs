@@ -61,55 +61,52 @@ fn place_cells(cells: &[CellSpec], columns: u16) -> Vec<Placement> {
 
     for spec in cells {
         let span = resolve_span(*spec, columns);
-        let placement = match spec.start {
-            Some(start) => {
-                // The cell is locked to this column (1-based), clamped into
-                // the grid. A locked column behind the cursor starts a new
-                // row rather than doubling back over placed cells.
-                let column = start.min(columns.saturating_sub(span) + 1) - 1;
-                if column < cursor.1 {
-                    cursor = (cursor.0 + 1, column);
-                } else {
-                    cursor.1 = column;
-                }
-                while !is_free(&occupied, cursor.0, cursor.1, span) {
-                    cursor = (cursor.0 + 1, column);
-                }
-                Placement {
-                    row: cursor.0,
-                    column: cursor.1,
-                    span,
-                }
+        let placement = if let Some(start) = spec.start {
+            // The cell is locked to this column (1-based), clamped into
+            // the grid. A locked column behind the cursor starts a new
+            // row rather than doubling back over placed cells.
+            let column = start.min(columns.saturating_sub(span) + 1) - 1;
+            if column < cursor.1 {
+                cursor = (cursor.0 + 1, column);
+            } else {
+                cursor.1 = column;
             }
-            None => {
-                // A cell ending at line `end` occupies 0-based columns below
-                // `end - span - 1`, so that is the furthest its column may go.
-                let last = spec
-                    .end
-                    .map_or(columns - span, |end| end.saturating_sub(span + 1))
-                    .min(columns - span);
-                loop {
-                    if cursor.1 + span > columns {
-                        cursor = (cursor.0 + 1, 0);
-                        continue;
-                    }
-                    // The cell may start earlier in this row to honour its
-                    // end line, but never in a row already passed.
-                    if cursor.1 > last {
-                        cursor.1 = last;
-                    }
-                    if is_free(&occupied, cursor.0, cursor.1, span) {
-                        break Placement {
-                            row: cursor.0,
-                            column: cursor.1,
-                            span,
-                        };
-                    }
-                    if cursor.1 >= last {
-                        cursor = (cursor.0 + 1, 0);
-                    } else {
-                        cursor.1 += 1;
-                    }
+            while !is_free(&occupied, cursor.0, cursor.1, span) {
+                cursor = (cursor.0 + 1, column);
+            }
+            Placement {
+                row: cursor.0,
+                column: cursor.1,
+                span,
+            }
+        } else {
+            // A cell ending at line `end` occupies 0-based columns below
+            // `end - span - 1`, so that is the furthest its column may go.
+            let last = spec
+                .end
+                .map_or(columns - span, |end| end.saturating_sub(span + 1))
+                .min(columns - span);
+            loop {
+                if cursor.1 + span > columns {
+                    cursor = (cursor.0 + 1, 0);
+                    continue;
+                }
+                // The cell may start earlier in this row to honour its
+                // end line, but never in a row already passed.
+                if cursor.1 > last {
+                    cursor.1 = last;
+                }
+                if is_free(&occupied, cursor.0, cursor.1, span) {
+                    break Placement {
+                        row: cursor.0,
+                        column: cursor.1,
+                        span,
+                    };
+                }
+                if cursor.1 >= last {
+                    cursor = (cursor.0 + 1, 0);
+                } else {
+                    cursor.1 += 1;
                 }
             }
         };
@@ -211,11 +208,11 @@ impl<Message> Widget<Message, Theme, iced::Renderer> for Grid<'_, Message> {
             .collect();
         let placements = place_cells(&specs, columns);
 
-        let usable = (width - self.column_spacing * (columns - 1) as f32).max(0.0);
-        let column_width = usable / columns as f32;
+        let usable = (width - self.column_spacing * f32::from(columns - 1)).max(0.0);
+        let column_width = usable / f32::from(columns);
         // A spanned cell covers its columns *and* the gaps between them.
         let spanned_width =
-            |span: u16| column_width * span as f32 + self.column_spacing * (span - 1) as f32;
+            |span: u16| column_width * f32::from(span) + self.column_spacing * f32::from(span - 1);
 
         // Lay every cell out at its spanned width, recording row heights.
         let mut heights: Vec<f32> = Vec::new();
@@ -251,7 +248,7 @@ impl<Message> Widget<Message, Theme, iced::Renderer> for Grid<'_, Message> {
         let children = laid_out
             .into_iter()
             .map(|(placement, node)| {
-                let x = placement.column as f32 * (column_width + self.column_spacing);
+                let x = f32::from(placement.column) * (column_width + self.column_spacing);
                 node.move_to(Point::new(x, row_tops[placement.row]))
             })
             .collect();
@@ -393,7 +390,7 @@ impl<Message> Widget<Message, Theme, iced::Renderer> for Grid<'_, Message> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellSpec, Placement, place_cells, resolve_span};
+    use super::{place_cells, resolve_span, CellSpec, Placement};
 
     fn spec(span: u16, start: Option<u16>, end: Option<u16>) -> CellSpec {
         CellSpec { span, start, end }
@@ -404,10 +401,7 @@ mod tests {
     }
 
     fn placed(cells: &[Placement]) -> Vec<(usize, u16, u16)> {
-        cells
-            .iter()
-            .map(|p| (p.row, p.column, p.span))
-            .collect()
+        cells.iter().map(|p| (p.row, p.column, p.span)).collect()
     }
 
     #[test]
@@ -419,15 +413,16 @@ mod tests {
     #[test]
     fn cells_pair_up_in_two_columns() {
         let placed = placed(&place_cells(&plain(4), 2));
-        assert_eq!(
-            placed,
-            vec![(0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 1)]
-        );
+        assert_eq!(placed, vec![(0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 1)]);
     }
 
     #[test]
     fn a_span_widens_a_cell_and_pushes_the_next_one_to_a_new_row() {
-        let cells = vec![spec(2, None, None), spec(1, None, None), spec(1, None, None)];
+        let cells = vec![
+            spec(2, None, None),
+            spec(1, None, None),
+            spec(1, None, None),
+        ];
         let placed = placed(&place_cells(&cells, 2));
         // The wide cell takes the whole first row, so the next flows on.
         assert_eq!(placed, vec![(0, 0, 2), (1, 0, 1), (1, 1, 1)]);

@@ -2182,22 +2182,22 @@ fn form_layouts_render() {
 
     let vertical = form()
         .child(
-            field().label("Name").push(
-                text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop),
-            ),
+            field()
+                .label("Name")
+                .push(text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop)),
         )
         .child(
-            field().label("Email").required(true).push(
-                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
-            ),
+            field()
+                .label("Email")
+                .required(true)
+                .push(text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop)),
         )
         .child(
             field()
                 .label("Bio")
                 .description("Use at most 100 words to describe yourself.")
                 .push(
-                    text_area::<Message>("Write something…", &empty_bio)
-                        .on_edit(|_| Message::Noop),
+                    text_area::<Message>("Write something…", &empty_bio).on_edit(|_| Message::Noop),
                 ),
         );
 
@@ -2205,9 +2205,11 @@ fn form_layouts_render() {
         .label_layout(FormLabelLayout::Horizontal)
         .label_width(80.0)
         .child(
-            field().label("Email").required(true).description("We never share it.").push(
-                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
-            ),
+            field()
+                .label("Email")
+                .required(true)
+                .description("We never share it.")
+                .push(text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop)),
         )
         .child(
             field()
@@ -2218,21 +2220,19 @@ fn form_layouts_render() {
     let columns = form()
         .columns(2)
         .child(
-            field().label("Name").push(
-                text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop),
-            ),
+            field()
+                .label("Name")
+                .push(text_input::<Message>("Ada Lovelace", "").on_input(|_| Message::Noop)),
         )
         .child(
-            field().label("Email").required(true).push(
-                text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop),
-            ),
+            field()
+                .label("Email")
+                .required(true)
+                .push(text_input::<Message>("you@example.com", "").on_input(|_| Message::Noop)),
         )
-        .child(
-            field().label("Bio").col_span(2).push(
-                text_area::<Message>("Write something…", &empty_bio_2)
-                    .on_edit(|_| Message::Noop),
-            ),
-        )
+        .child(field().label("Bio").col_span(2).push(
+            text_area::<Message>("Write something…", &empty_bio_2).on_edit(|_| Message::Noop),
+        ))
         .footer(button("Save").primary().on_press(Message::Noop));
 
     assert_renders("form_vertical", column![vertical].spacing(16), false);

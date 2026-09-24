@@ -57,6 +57,11 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 `ToggleGroup`, `text_input`, `password`, `text_area`, `input_group`, `select`,
 `checkbox`, `radio`, `switch`, `slider`, `number_input`, `otp_input`
 
+**Form layout** — `form`/`field` arrange labelled controls into a form:
+vertical or horizontal label placement, a `columns` grid with
+`col_span`/`col_start`/`col_end` placement, `required` markers, muted
+`description` lines, and a trailing `footer` for the form's actions
+
 **Display** — `card`, `group_box`, `divider`, `vertical_divider`, `badge`,
 `progress`, `alert`, `empty_state`, `label`, `tag`
 

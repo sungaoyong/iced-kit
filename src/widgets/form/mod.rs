@@ -53,13 +53,13 @@ pub enum FieldLabel<'a, Message> {
     Element(Element<'a, Message, Theme>),
 }
 
-impl<'a, Message> From<&str> for FieldLabel<'a, Message> {
+impl<Message> From<&str> for FieldLabel<'_, Message> {
     fn from(value: &str) -> Self {
         Self::Text(value.to_owned())
     }
 }
 
-impl<'a, Message> From<String> for FieldLabel<'a, Message> {
+impl<Message> From<String> for FieldLabel<'_, Message> {
     fn from(value: String) -> Self {
         Self::Text(value)
     }
@@ -298,26 +298,25 @@ impl<'a, Message: 'a> Field<'a, Message> {
             }
         };
 
-        // The description, indented to the control column in a horizontal
-        // form whose label indents.
-        let described: Element<'a, Message, Theme> = match description {
-            None => labelled,
-            Some(description) => {
-                let note = muted_note(description);
-                if props.layout == FormLabelLayout::Horizontal && label_indent && has_label {
+        // The description rows under the label and control, indented to the
+        // control column in a horizontal form whose label indents.
+        let mut root = column![labelled].spacing(gap / 2.0);
+        if let Some(description) = description {
+            let note = muted_note(description);
+            if props.layout == FormLabelLayout::Horizontal && label_indent && has_label {
+                root = root.push(
                     row![
                         iced::widget::Space::new().width(Length::Fixed(props.label_width)),
                         note,
                     ]
-                    .spacing(inner_gap)
-                    .into()
-                } else {
-                    column![note].into()
-                }
+                    .spacing(inner_gap),
+                );
+            } else {
+                root = root.push(column![note]);
             }
-        };
+        }
 
-        column![described].spacing(gap / 2.0).into()
+        root.into()
     }
 }
 
@@ -542,8 +541,9 @@ pub fn field<'a, Message: 'a>() -> Field<'a, Message> {
 
 #[cfg(test)]
 mod tests {
-    use super::{field, field_spacing, form, form_row_spacing, Field, FieldLabel, Form,
-        FormLabelLayout};
+    use super::{
+        field, field_spacing, form, form_row_spacing, Field, FieldLabel, Form, FormLabelLayout,
+    };
     use crate::theme::Size;
     use iced::widget::text;
 

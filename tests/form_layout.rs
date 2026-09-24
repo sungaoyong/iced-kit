@@ -27,7 +27,7 @@ struct Box2D {
 
 impl Box2D {
     fn center_y(&self) -> usize {
-        (self.top + self.bottom) / 2
+        self.top.midpoint(self.bottom)
     }
 }
 
@@ -48,8 +48,7 @@ fn render(
 ) -> (Vec<Option<Box2D>>, f32) {
     iced_kit::motion::set_reduce_motion(true);
 
-    let framed: Element<'_, Message, Theme> =
-        container(element).padding(PADDING).into();
+    let framed: Element<'_, Message, Theme> = container(element).padding(PADDING).into();
 
     let mut simulator = iced_test::Simulator::with_size(
         iced::Settings::default(),
@@ -87,7 +86,11 @@ fn decode_png(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
     let mut reader = decoder.read_info().expect("a readable PNG");
     let mut pixels = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut pixels).expect("a decoded frame");
-    assert_eq!(info.color_type, png::ColorType::Rgba, "eight bits a channel");
+    assert_eq!(
+        info.color_type,
+        png::ColorType::Rgba,
+        "eight bits a channel"
+    );
     (
         pixels[..info.buffer_size()].to_vec(),
         info.width as usize,
@@ -105,7 +108,7 @@ fn find_box(pixels: &[u8], width: usize, height: usize, target: [u8; 3]) -> Opti
         for x in 0..width {
             let index = (y * width + x) * 4;
             let close = |channel: usize, value: u8| {
-                (pixels[index + channel] as i16 - value as i16).abs() <= 6
+                (i16::from(pixels[index + channel]) - i16::from(value)).abs() <= 6
             };
             if close(0, target[0]) && close(1, target[1]) && close(2, target[2]) {
                 left = left.min(x);
@@ -151,7 +154,7 @@ fn block<'a>(color: [u8; 3]) -> Element<'a, Message, Theme> {
 }
 
 /// A labelled field whose control is a findable block.
-fn marked<'a>(color: [u8; 3], label: &'a str) -> Field<'a, Message> {
+fn marked(color: [u8; 3], label: &str) -> Field<'_, Message> {
     field().label(label).push(block(color))
 }
 
@@ -162,13 +165,11 @@ const CONTENT: f32 = PAGE_WIDTH - 2.0 * PADDING;
 
 #[test]
 fn two_columns_place_fields_side_by_side_then_row_by_row() {
-    let element = column![
-        form()
-            .columns(2)
-            .child(marked(RED, "One"))
-            .child(marked(GREEN, "Two"))
-            .child(marked(BLUE, "Three")),
-    ];
+    let element = column![form()
+        .columns(2)
+        .child(marked(RED, "One"))
+        .child(marked(GREEN, "Two"))
+        .child(marked(BLUE, "Three")),];
     let (boxes, scale) = render(element.into(), PAGE_WIDTH, 300.0, "columns");
     let [red, green, blue] = boxes.try_into().expect("three boxes");
     let red = red.expect("the first field's block");
@@ -221,21 +222,21 @@ fn the_label_direction_moves_the_control_across_or_below_the_label() {
 fn the_footer_spans_the_columns_and_aligns_to_the_trailing_edge() {
     let footer_style: iced::widget::container::StyleFn<'static, Theme> =
         Box::new(|_| container::Style {
-            background: Some(iced::Background::Color(Color::from_rgb8(BLUE[0], BLUE[1], BLUE[2]))),
+            background: Some(iced::Background::Color(Color::from_rgb8(
+                BLUE[0], BLUE[1], BLUE[2],
+            ))),
             ..container::Style::default()
         });
-    let element = column![
-        form()
-            .columns(2)
-            .child(marked(RED, "One"))
-            .child(marked(GREEN, "Two"))
-            .footer(
-                container(iced::widget::text(""))
-                    .width(Length::Fixed(80.0))
-                    .height(Length::Fixed(20.0))
-                    .class(footer_style),
-            ),
-    ];
+    let element = column![form()
+        .columns(2)
+        .child(marked(RED, "One"))
+        .child(marked(GREEN, "Two"))
+        .footer(
+            container(iced::widget::text(""))
+                .width(Length::Fixed(80.0))
+                .height(Length::Fixed(20.0))
+                .class(footer_style),
+        ),];
     let (boxes, scale) = render(element.into(), PAGE_WIDTH, 300.0, "footer");
     let [red, green, blue] = boxes.try_into().expect("three boxes");
     let blue = blue.expect("the footer block");
