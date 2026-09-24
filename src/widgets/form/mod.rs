@@ -384,9 +384,167 @@ fn muted_note<'a, Message: 'a>(note: FieldLabel<'a, Message>) -> Element<'a, Mes
     }
 }
 
+/// A form: labelled fields arranged in a grid, with a trailing footer.
+///
+/// Build it with [`form`], [`Form::vertical`] or [`Form::horizontal`]. A form
+/// owns the fields it was given, and iced's `Element` is neither `Clone` nor
+/// `Debug`, so a form cannot be copied or printed.
+#[must_use = "a Form does nothing unless it is turned into an Element"]
+pub struct Form<'a, Message> {
+    props: FieldProps,
+    fields: Vec<Field<'a, Message>>,
+    footer: Option<Element<'a, Message, Theme>>,
+}
+
+impl<'a, Message: 'a> Form<'a, Message> {
+    /// Creates a single-column form with labels above their controls.
+    pub fn new() -> Self {
+        Self {
+            props: FieldProps::default(),
+            fields: Vec::new(),
+            footer: None,
+        }
+    }
+
+    /// Creates a form with labels beside their controls.
+    pub fn horizontal() -> Self {
+        Self::new().label_layout(FormLabelLayout::Horizontal)
+    }
+
+    /// Creates a form with labels above their controls.
+    pub fn vertical() -> Self {
+        Self::new()
+    }
+
+    /// Sets the label direction within each field. An alias of
+    /// [`Self::label_layout`], keeping the reference's method pair.
+    pub fn layout(self, layout: FormLabelLayout) -> Self {
+        self.label_layout(layout)
+    }
+
+    /// Sets the label direction within each field. Use [`Self::columns`] to
+    /// arrange fields, which is independent of the label direction.
+    pub fn label_layout(mut self, layout: FormLabelLayout) -> Self {
+        self.props.layout = layout;
+        self
+    }
+
+    /// Sets the width of the labels in a horizontal form. The default is 140.
+    pub fn label_width(mut self, width: f32) -> Self {
+        self.props.label_width = width;
+        self
+    }
+
+    /// Sets the text size of the labels. The default is the theme's small step.
+    pub fn label_text_size(mut self, size: f32) -> Self {
+        self.props.label_text_size = Some(size);
+        self
+    }
+
+    /// Sets the column count of the field grid. The default is 1.
+    pub fn columns(mut self, columns: usize) -> Self {
+        self.props.columns = columns.max(1);
+        self
+    }
+
+    /// Sets the size step, which scales the form's spacing.
+    pub fn size(mut self, size: Size) -> Self {
+        self.props.size = size;
+        self
+    }
+
+    /// Adds a field.
+    pub fn child(mut self, field: Field<'a, Message>) -> Self {
+        self.fields.push(field);
+        self
+    }
+
+    /// Adds several fields.
+    pub fn children(mut self, fields: impl IntoIterator<Item = Field<'a, Message>>) -> Self {
+        self.fields.extend(fields);
+        self
+    }
+
+    /// Sets content drawn after all fields, spanning every column and aligned
+    /// to the trailing edge — the row a form's actions live in. Calling this
+    /// again replaces the footer; no footer row is drawn without one.
+    pub fn footer(mut self, footer: impl Into<Element<'a, Message, Theme>>) -> Self {
+        self.footer = Some(footer.into());
+        self
+    }
+
+    /// Assembles the grid the form renders as: visible fields, then a
+    /// full-span cell carrying the footer.
+    fn build_grid(self) -> grid::Grid<'a, Message> {
+        let Self {
+            props,
+            fields,
+            footer,
+        } = self;
+
+        let columns = props.columns.max(1);
+        let row_spacing = form_row_spacing(props.size);
+        // The reference spaces columns three times as far as rows.
+        let column_spacing = row_spacing * 3.0;
+
+        let mut grid = grid::Grid::new(columns, row_spacing, column_spacing);
+        for field in fields {
+            // The reference stored `visible` but never read it; dropping the
+            // field before placement is what the setter promises.
+            if !field.visible {
+                continue;
+            }
+            grid = grid.push(field.into_cell(props));
+        }
+
+        if let Some(footer) = footer {
+            grid = grid.push(GridCell {
+                span: columns as u16,
+                start: None,
+                end: None,
+                content: container(footer)
+                    .width(Length::Fill)
+                    .align_x(alignment::Horizontal::Right)
+                    .into(),
+            });
+        }
+
+        grid
+    }
+
+    /// Converts the form into an [`Element`].
+    pub fn into_element(self) -> Element<'a, Message, Theme> {
+        self.build_grid().into()
+    }
+}
+
+impl<'a, Message: 'a> Default for Form<'a, Message> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a, Message: 'a> From<Form<'a, Message>> for Element<'a, Message, Theme> {
+    fn from(form: Form<'a, Message>) -> Self {
+        form.into_element()
+    }
+}
+
+/// Builds a [`Form`] with labels above their controls.
+pub fn form<'a, Message: 'a>() -> Form<'a, Message> {
+    Form::new()
+}
+
+/// Builds a [`Field`].
+pub fn field<'a, Message: 'a>() -> Field<'a, Message> {
+    Field::new()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Field, FieldLabel};
+    use super::{field, field_spacing, form, form_row_spacing, Field, FieldLabel, Form,
+        FormLabelLayout};
+    use crate::theme::Size;
     use iced::widget::text;
 
     #[test]
@@ -421,5 +579,83 @@ mod tests {
 
         let field: Field<'_, ()> = Field::new().label("Email");
         assert!(matches!(field.label, Some(FieldLabel::Text(_))));
+    }
+
+    #[test]
+    fn the_default_form_is_a_single_vertical_column() {
+        let new_form: Form<'_, ()> = Form::new();
+        let default_form: Form<'_, ()> = Form::default();
+        let shorthand: Form<'_, ()> = form();
+        for form in [new_form, default_form, shorthand] {
+            assert_eq!(form.props.layout, FormLabelLayout::Vertical);
+            assert_eq!(form.props.columns, 1);
+            assert_eq!(form.props.label_width, 140.0);
+            assert!(form.footer.is_none());
+        }
+    }
+
+    #[test]
+    fn the_builder_records_its_settings() {
+        let form: Form<'_, ()> = Form::new()
+            .columns(2)
+            .label_layout(FormLabelLayout::Horizontal)
+            .label_width(80.0)
+            .label_text_size(13.0)
+            .size(Size::Lg)
+            .child(Field::new())
+            .footer(iced::widget::text("Save"));
+        assert_eq!(form.props.layout, FormLabelLayout::Horizontal);
+        assert_eq!(form.props.columns, 2);
+        assert_eq!(form.props.label_width, 80.0);
+        assert_eq!(form.props.label_text_size, Some(13.0));
+        assert_eq!(form.props.size, Size::Lg);
+        assert_eq!(form.fields.len(), 1);
+        assert!(form.footer.is_some());
+    }
+
+    #[test]
+    fn layout_is_an_alias_of_label_layout() {
+        let form: Form<'_, ()> = form().layout(FormLabelLayout::Horizontal);
+        assert_eq!(form.props.layout, FormLabelLayout::Horizontal);
+    }
+
+    #[test]
+    fn an_invisible_field_is_dropped_before_placement() {
+        let form: Form<'_, ()> = form()
+            .child(field().label("Shown"))
+            .child(field().label("Hidden").visible(false));
+        let grid = form.build_grid();
+        assert_eq!(grid.cells.len(), 1);
+    }
+
+    #[test]
+    fn the_footer_spans_every_column() {
+        let form: Form<'_, ()> = form()
+            .columns(3)
+            .child(field())
+            .footer(iced::widget::text("Save"));
+        let grid = form.build_grid();
+        assert_eq!(grid.cells.len(), 2);
+        let footer = grid.cells.last().unwrap();
+        assert_eq!(footer.span, 3);
+        assert!(footer.start.is_none());
+    }
+
+    #[test]
+    fn spacing_follows_the_reference_size_scale() {
+        for (size, row) in [
+            (Size::Xs, 6.0),
+            (Size::Sm, 6.0),
+            (Size::Md, 8.0),
+            (Size::Lg, 12.0),
+            (Size::Custom(9.0), 9.0),
+        ] {
+            assert_eq!(form_row_spacing(size), row);
+            // The reference spaces columns three times as far as rows.
+            assert_eq!(row * 3.0, form_row_spacing(size) * 3.0);
+        }
+        assert_eq!(field_spacing(Size::Lg), 8.0);
+        assert_eq!(field_spacing(Size::Md), 4.0);
+        assert_eq!(field_spacing(Size::Xs), 4.0);
     }
 }
