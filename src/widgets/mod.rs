@@ -19,6 +19,7 @@ pub mod data_table;
 pub mod display;
 #[cfg(feature = "dock")]
 pub mod dock;
+pub mod form;
 pub mod group_box;
 pub mod input;
 pub mod list;
