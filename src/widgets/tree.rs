@@ -384,9 +384,8 @@ impl TreeEvent {
 /// # use iced_kit::Theme;
 /// # use iced::Element;
 /// # #[derive(Clone, Debug)] enum Message { Acted(TreeEvent) }
-/// # fn view<'a>(state: &'a Tree) -> Element<'a, Message, Theme> {
-/// let items = [TreeItem::new("src", "src").child(TreeItem::new("main", "main.rs"))];
-/// tree(&items, state).on_event(Message::Acted)
+/// # fn view<'a>(items: &'a [TreeItem], state: &'a Tree) -> Element<'a, Message, Theme> {
+/// tree(items, state).on_event(Message::Acted).into()
 /// # }
 /// ```
 #[must_use = "a TreeView does nothing unless it is turned into an Element"]
