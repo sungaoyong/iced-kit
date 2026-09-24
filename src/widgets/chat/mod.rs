@@ -14,7 +14,10 @@ pub mod message;
 pub mod scroller;
 
 // Re-exports are switched on as each component lands (Tasks 1-6 of the plan).
-// pub use attachment::{ ... };
+pub use attachment::{
+    attachment, attachment_group, Attachment, AttachmentActions, AttachmentAxis, AttachmentContent,
+    AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentStatus, AttachmentTitle,
+};
 pub use bubble::{
     bubble, Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant,
     MessageAlignment,
