@@ -121,3 +121,100 @@ mod tests {
         drop(element);
     }
 }
+/// A select that filters its options as the user types.
+///
+/// iced's own `pick_list` draws a menu it owns and cannot search, so a
+/// searchable select is assembled from the pieces in this module: a trigger
+/// whose text is the query, and a panel over the matching options. The
+/// application owns the query, the open flag and the panel's placement — the
+/// same division of labour as [`combobox`](crate::widgets::combobox).
+///
+/// ```
+/// # use iced_kit::widgets::{searchable_select, ComboBoxOption};
+/// # use iced_kit::Theme;
+/// # use iced::Element;
+/// # #[derive(Clone, Debug)] enum Message { Queried(String), Toggled }
+/// # fn view<'a>(
+/// #     options: &'a [ComboBoxOption<usize>],
+/// #     query: &str,
+/// #     open: bool,
+/// # ) -> Element<'a, Message, Theme> {
+/// searchable_select::<usize, Message>(options)
+///     .query(query)
+///     .open(open)
+///     .on_query(Message::Queried)
+///     .on_toggle(Message::Toggled)
+///     .into()
+/// # }
+/// ```
+pub fn searchable_select<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a>(
+    options: &'a [crate::widgets::combobox::ComboBoxOption<T>],
+) -> crate::widgets::combobox::ComboBox<'a, T, Message> {
+    crate::widgets::combobox::ComboBox::new(options, [], "Select…")
+        .searchable(true)
+        .fill(true)
+}
+
+/// The panel a searchable select drops: the search field and the options.
+///
+/// Pair it with [`searchable_select`], the way a combobox pairs its trigger
+/// with its panel.
+pub fn searchable_select_panel<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a>(
+    options: &'a [crate::widgets::combobox::ComboBoxOption<T>],
+    selected: &'a [T],
+    query: &'a str,
+    on_select: impl Fn(T) -> Message + 'a,
+) -> crate::widgets::combobox::ComboBoxPanel<'a, T, Message> {
+    crate::widgets::combobox::ComboBoxPanel::new(options, selected, query, on_select)
+}
+
+#[cfg(test)]
+mod searchable_tests {
+    use super::{searchable_select, searchable_select_panel};
+    use crate::theme::Theme;
+    use crate::widgets::combobox::ComboBoxOption;
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum Message {
+        Picked(usize),
+        Queried(String),
+        Toggled,
+    }
+
+    #[test]
+    fn a_searchable_select_renders() {
+        let options = vec![
+            ComboBoxOption::new(0, "Apple"),
+            ComboBoxOption::new(1, "Pear"),
+        ];
+
+        let trigger: iced::Element<'_, Message, Theme> =
+            searchable_select::<usize, Message>(&options)
+                .query("ap")
+                .open(true)
+                .on_query(Message::Queried)
+                .on_toggle(Message::Toggled)
+                .into();
+        drop(trigger);
+
+        let panel: iced::Element<'_, Message, Theme> =
+            searchable_select_panel(&options, &[], "ap", Message::Picked)
+                .on_query(Message::Queried)
+                .into();
+        drop(panel);
+    }
+
+    #[test]
+    fn a_searchable_select_filters_what_it_shows() {
+        let options = vec![
+            ComboBoxOption::new(0, "Apple"),
+            ComboBoxOption::new(1, "Pear"),
+        ];
+
+        let all = searchable_select::<usize, Message>(&options);
+        assert_eq!(all.match_count(|_, _| false), 2);
+
+        let narrowed = searchable_select::<usize, Message>(&options).query("pea");
+        assert_eq!(narrowed.match_count(|_, _| false), 1);
+    }
+}

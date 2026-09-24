@@ -15,6 +15,7 @@ pub mod avatar;
 pub mod button;
 pub mod carousel;
 pub mod chart;
+pub mod combobox;
 pub mod data_table;
 pub mod display;
 #[cfg(feature = "dock")]
@@ -51,6 +52,9 @@ pub use button::{
 };
 pub use carousel::{carousel, Carousel, CarouselAxis, CarouselState};
 pub use chart::{Chart, ChartKind, Series};
+pub use combobox::{
+    combobox, combobox_panel, filter_options, ComboBox, ComboBoxOption, ComboBoxPanel,
+};
 pub use data_table::{Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width};
 pub use display::{
     alert, alert_builder, badge, badge_builder, card, divider, empty_state, horizontal_separator,
@@ -79,7 +83,7 @@ pub use overlay::{
     ToastPlacement, Toasts, TooltipPosition,
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
-pub use select::{select, select_fill};
+pub use select::{searchable_select, searchable_select_panel, select, select_fill};
 pub use sidebar::{
     sidebar, Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
     SidebarMenuItem, SidebarSide, SidebarToggleButton,

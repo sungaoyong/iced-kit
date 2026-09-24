@@ -2423,3 +2423,44 @@ fn display_variants_render() {
         false,
     );
 }
+
+/// A combobox trigger in each state, and an open panel over a filtered list.
+#[test]
+fn combobox_states_render() {
+    use iced_kit::widgets::{combobox, combobox_panel, ComboBoxOption};
+
+    let options = vec![
+        ComboBoxOption::new(0usize, "Germany").detail("DE"),
+        ComboBoxOption::new(1, "Ghana").detail("GH"),
+        ComboBoxOption::new(2, "Greece").detail("GR"),
+        ComboBoxOption::new(3, "Japan").detail("JP").disabled(true),
+    ];
+    let selected = [0usize];
+
+    let empty: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&options, None, "Choose a country").into();
+
+    let chosen: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&options, Some(1), "Choose a country")
+            .clearable(Message::Noop)
+            .fill(true)
+            .into();
+
+    let open: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&options, Some(1), "Choose a country")
+            .open(true)
+            .on_toggle(Message::Noop)
+            .fill(true)
+            .into();
+
+    let panel: Element<'_, Message, Theme> =
+        combobox_panel(&options, &selected, "gr", |_| Message::Noop)
+            .on_query(|_| Message::Noop)
+            .into();
+
+    assert_renders(
+        "combobox",
+        column![empty, chosen, open, panel].spacing(16),
+        false,
+    );
+}
