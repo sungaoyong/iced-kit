@@ -53,13 +53,13 @@ pub enum FieldLabel<'a, Message> {
     Element(Element<'a, Message, Theme>),
 }
 
-impl From<&str> for FieldLabel<'_, ()> {
+impl<'a, Message> From<&str> for FieldLabel<'a, Message> {
     fn from(value: &str) -> Self {
         Self::Text(value.to_owned())
     }
 }
 
-impl From<String> for FieldLabel<'_, ()> {
+impl<'a, Message> From<String> for FieldLabel<'a, Message> {
     fn from(value: String) -> Self {
         Self::Text(value)
     }
