@@ -18,10 +18,10 @@
 use iced::mouse::{self, Button};
 use iced::widget::{column, container};
 use iced::{Element, Event, Length, Point};
-use iced_test::Simulator;
 use iced_kit::widgets::button;
 use iced_kit::widgets::overlay::{layer, AlertDialog, AlertTone, Layer, Modal};
 use iced_kit::Theme;
+use iced_test::Simulator;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Message {
@@ -137,7 +137,9 @@ impl Probe {
         }
 
         let left = left.unwrap_or_else(|| {
-            panic!("{label}: no dialog card on the middle row of a {frame_width}x{frame_height} frame")
+            panic!(
+                "{label}: no dialog card on the middle row of a {frame_width}x{frame_height} frame"
+            )
         });
         let right = right.expect("the card should have a right edge");
         let centre = left.midpoint(right);
@@ -170,18 +172,18 @@ impl Probe {
     /// dock's drag tests drive a grab past the press threshold.
     fn drag(&mut self, from: Point, to: Point) {
         self.simulator.point_at(from);
-        let _ = self.simulator.simulate([Event::Mouse(mouse::Event::ButtonPressed(
-            Button::Left,
-        ))]);
+        let _ = self
+            .simulator
+            .simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
 
         self.simulator.point_at(to);
-        let _ = self.simulator.simulate([Event::Mouse(mouse::Event::CursorMoved {
-            position: to,
-        })]);
+        let _ = self
+            .simulator
+            .simulate([Event::Mouse(mouse::Event::CursorMoved { position: to })]);
 
-        let _ = self.simulator.simulate([Event::Mouse(mouse::Event::ButtonReleased(
-            Button::Left,
-        ))]);
+        let _ = self
+            .simulator
+            .simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
     }
 
     /// A point on the card's header, left of the floating close button, in
@@ -236,11 +238,7 @@ fn decode_png(bytes: &[u8]) -> Vec<u8> {
 /// dismisses, and the close button answers at the displaced corner.
 #[test]
 fn a_dialog_is_carried_by_its_surface() {
-    let mut probe = Probe::new(
-        layer(page(), Layer::new().modal(modal())),
-        1280.0,
-        1000.0,
-    );
+    let mut probe = Probe::new(layer(page(), Layer::new().modal(modal())), 1280.0, 1000.0);
 
     let before = probe.measure("before");
     let grab = probe.grab_point(&before);
@@ -269,8 +267,7 @@ fn a_dialog_is_carried_by_its_surface() {
     let settled = probe.measure("settled");
     let settled_centre = probe.centre(&settled);
     assert!(
-        (settled_centre.x - moved.x).abs() <= 1.0
-            && (settled_centre.y - moved.y).abs() <= 1.0,
+        (settled_centre.x - moved.x).abs() <= 1.0 && (settled_centre.y - moved.y).abs() <= 1.0,
         "the card should stay where it was dragged"
     );
 
@@ -284,9 +281,9 @@ fn a_dialog_is_carried_by_its_surface() {
     let _ = probe
         .simulator
         .simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
-    let _ = probe.simulator.simulate([Event::Mouse(
-        mouse::Event::ButtonReleased(Button::Left),
-    )]);
+    let _ = probe
+        .simulator
+        .simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
 
     let messages: Vec<_> = probe.simulator.into_messages().collect();
     assert_eq!(
@@ -300,11 +297,7 @@ fn a_dialog_is_carried_by_its_surface() {
 /// than vanishing off the glass.
 #[test]
 fn a_dialog_dragged_off_the_glass_is_clamped() {
-    let mut probe = Probe::new(
-        layer(page(), Layer::new().modal(modal())),
-        1280.0,
-        1000.0,
-    );
+    let mut probe = Probe::new(layer(page(), Layer::new().modal(modal())), 1280.0, 1000.0);
 
     let before = probe.measure("clamp-before");
     let grab = probe.grab_point(&before);
@@ -391,8 +384,7 @@ fn an_alert_is_carried_by_its_surface() {
     let moved = probe.centre(&after);
 
     assert!(
-        ((moved.x - centre.x) - 80.0).abs() <= 2.0
-            && ((moved.y - centre.y) - 40.0).abs() <= 2.0,
+        ((moved.x - centre.x) - 80.0).abs() <= 2.0 && ((moved.y - centre.y) - 40.0).abs() <= 2.0,
         "the alert should follow the drag: it moved to {moved:?}"
     );
 }

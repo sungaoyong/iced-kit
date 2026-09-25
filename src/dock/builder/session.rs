@@ -6,8 +6,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::dock::builder::compile::{
-    active_panel_in_pane, first_pane, insert_panel_into_state, pane_for_panel,
-    BuiltLayout,
+    active_panel_in_pane, first_pane, insert_panel_into_state, pane_for_panel, BuiltLayout,
 };
 use crate::dock::builder::spec::{LayoutTree, PanelDef};
 use crate::dock::factory::Factory;

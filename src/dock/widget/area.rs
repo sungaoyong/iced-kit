@@ -124,16 +124,24 @@ where
     }
 
     /// The placement a handle under `cursor` belongs to, if any.
-    fn handle_under_cursor(state: &DockAreaState, layout: Layout<'_>, cursor: Cursor) -> Option<DockPlacement> {
+    fn handle_under_cursor(
+        state: &DockAreaState,
+        layout: Layout<'_>,
+        cursor: Cursor,
+    ) -> Option<DockPlacement> {
         let position = cursor.position()?;
         let origin = layout.position();
-        state.handle_bounds.iter().enumerate().find_map(|(slot, bounds)| {
-            let bounds = (*bounds)? + Vector::new(origin.x, origin.y);
-            bounds
-                .contains(position)
-                .then(|| placement_of(slot))
-                .flatten()
-        })
+        state
+            .handle_bounds
+            .iter()
+            .enumerate()
+            .find_map(|(slot, bounds)| {
+                let bounds = (*bounds)? + Vector::new(origin.x, origin.y);
+                bounds
+                    .contains(position)
+                    .then(|| placement_of(slot))
+                    .flatten()
+            })
     }
 }
 
@@ -170,8 +178,7 @@ where
         // Every child, including the zoom slot: `diff_children` walks the slice it
         // is given, so passing only the four regions would leave the fifth slot
         // unseeded while `children` claimed it exists.
-        let mut all: Vec<&Element<'_, Message, Theme, Renderer>> =
-            self.children.iter().collect();
+        let mut all: Vec<&Element<'_, Message, Theme, Renderer>> = self.children.iter().collect();
         all.push(self.zoomed.as_ref().unwrap_or(&self.zoom_placeholder));
         tree.diff_children(&all);
     }
@@ -365,7 +372,11 @@ where
         // handle band rather than of its centre line.
         let child_count = if self.zoomed.is_some() { 1 } else { 4 };
         for (slot, child_layout) in layout.children().take(child_count).enumerate() {
-            let index = if self.zoomed.is_some() { ZOOM_SLOT } else { slot };
+            let index = if self.zoomed.is_some() {
+                ZOOM_SLOT
+            } else {
+                slot
+            };
             let element = if self.zoomed.is_some() {
                 self.zoomed.as_mut()
             } else {
@@ -485,7 +496,11 @@ where
     ) {
         let child_count = if self.zoomed.is_some() { 1 } else { 4 };
         for (slot, child_layout) in layout.children().take(child_count).enumerate() {
-            let index = if self.zoomed.is_some() { ZOOM_SLOT } else { slot };
+            let index = if self.zoomed.is_some() {
+                ZOOM_SLOT
+            } else {
+                slot
+            };
             let element = if self.zoomed.is_some() {
                 self.zoomed.as_mut()
             } else {
@@ -579,10 +594,7 @@ where
     /// side dock takes the full height and the bottom dock spans what the sides
     /// leave. A handle sits on a dock's inner edge and only exists while the dock
     /// is open — a closed dock is not something to drag.
-    fn region_rects(
-        &self,
-        max: Size,
-    ) -> ([Rectangle; 4], [Option<Rectangle>; 4]) {
+    fn region_rects(&self, max: Size) -> ([Rectangle; 4], [Option<Rectangle>; 4]) {
         let state = self.dock_state.borrow();
         let regions = &state.regions;
         let handle = self.handle_width;

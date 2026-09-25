@@ -138,9 +138,7 @@ impl<'a> App<'a> {
     fn press(&mut self, at: Point) {
         self.move_to(at);
         self.event(
-            Event::Mouse(iced::mouse::Event::ButtonPressed(
-                iced::mouse::Button::Left,
-            )),
+            Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
             at,
         );
     }

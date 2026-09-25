@@ -25,8 +25,8 @@ use iced::widget::{container, text};
 use iced::{Element, Length, Point, Size};
 use iced_kit::dock::model::NodeKind;
 use iced_kit::dock::{
-    dock, horizontal, panel, tabs, DockEvent, DockSession, DockWidgetState, LayoutArea,
-    LayoutTree, PanelDef,
+    dock, horizontal, panel, tabs, DockEvent, DockSession, DockWidgetState, LayoutArea, LayoutTree,
+    PanelDef,
 };
 use iced_kit::Theme;
 use iced_test::Simulator;
@@ -87,7 +87,11 @@ fn simulator(session: &DockSession<Panel>) -> Simulator<'_, Message, Theme> {
 /// A simulator that leaves `PanelStyle` at its default, so a group holding one panel
 /// draws a title bar instead of a one-tab strip.
 fn simulator_with_title_bars(session: &DockSession<Panel>) -> Simulator<'_, Message, Theme> {
-    Simulator::with_size(iced::Settings::default(), WINDOW, view_with_title_bars(session))
+    Simulator::with_size(
+        iced::Settings::default(),
+        WINDOW,
+        view_with_title_bars(session),
+    )
 }
 
 fn view_with_title_bars(session: &DockSession<Panel>) -> Element<'_, Message, Theme> {
@@ -156,9 +160,9 @@ fn drive_drag(ui: &mut Simulator<'_, Message, Theme>, from: Point, to: Point) {
     ui.simulate([iced::Event::Mouse(iced::mouse::Event::CursorMoved {
         position: from,
     })]);
-    ui.simulate([iced::Event::Mouse(
-        iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left),
-    )]);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
+        iced::mouse::Button::Left,
+    ))]);
 
     // The first move crosses the drag threshold and starts the drag.
     ui.point_at(halfway);
@@ -171,9 +175,9 @@ fn drive_drag(ui: &mut Simulator<'_, Message, Theme>, from: Point, to: Point) {
         position: to,
     })]);
 
-    ui.simulate([iced::Event::Mouse(
-        iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left),
-    )]);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+        iced::mouse::Button::Left,
+    ))]);
 }
 
 /// Which pane holds a panel, by its string id.
@@ -209,7 +213,10 @@ fn dragging_a_tab_onto_another_group_moves_it() {
     // The right group's content area, which is what a drop is measured against.
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
 
     drag_tab(&mut ui, "Left", target);
@@ -239,7 +246,10 @@ fn dragging_a_tab_onto_a_groups_edge_splits_it() {
     // The far right edge of the right group, which is the `Right` drop band.
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width - 4.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width - 4.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
 
     drag_tab(&mut ui, "Left", target);
@@ -290,7 +300,10 @@ fn dropping_a_tab_back_on_its_own_group_is_ignored() {
 
     let target = {
         let bounds = ui.find("LEFT BODY").expect("the left body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
 
     drag_tab(&mut ui, "Left", target);
@@ -308,8 +321,8 @@ fn dropping_a_tab_back_on_its_own_group_is_ignored() {
 /// left to show, and no way to put it back.
 #[test]
 fn a_lone_panel_cannot_be_dragged_out_of_its_group() {
-    let session = DockSession::from_tree(tabs([panel("only", "Only", Panel::Left)]))
-        .expect("valid");
+    let session =
+        DockSession::from_tree(tabs([panel("only", "Only", Panel::Left)])).expect("valid");
     let mut ui = simulator(&session);
 
     let target = Point::new(500.0, 300.0);
@@ -338,7 +351,10 @@ fn dragging_a_tab_within_its_group_reorders_it() {
     // slot that puts the dragged tab last.
     let target = {
         let bounds = ui.find("Third").expect("the third tab").bounds();
-        Point::new(bounds.x + bounds.width + 30.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width + 30.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
 
     drag_tab(&mut ui, "First", target);
@@ -371,7 +387,11 @@ fn a_dock_handle_and_a_tab_drag_do_not_interfere() {
     let before = {
         let state = session.state();
         let state = state.borrow();
-        state.regions.dock(iced_kit::dock::DockPlacement::Left).unwrap().size()
+        state
+            .regions
+            .dock(iced_kit::dock::DockPlacement::Left)
+            .unwrap()
+            .size()
     };
 
     let start = tab_centre(&mut ui, "Left");
@@ -381,7 +401,11 @@ fn a_dock_handle_and_a_tab_drag_do_not_interfere() {
     let after = {
         let state = session.state();
         let state = state.borrow();
-        state.regions.dock(iced_kit::dock::DockPlacement::Left).unwrap().size()
+        state
+            .regions
+            .dock(iced_kit::dock::DockPlacement::Left)
+            .unwrap()
+            .size()
     };
     assert_eq!(before, after, "dragging a tab must not resize a dock");
 }
@@ -396,7 +420,10 @@ fn a_drag_reports_its_start_and_its_end() {
     let start = tab_centre(&mut ui, "Left");
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     draw_frame(&mut ui);
     drive_drag(&mut ui, start, target);
@@ -407,9 +434,9 @@ fn a_drag_reports_its_start_and_its_end() {
         .collect();
 
     assert!(
-        events
-            .iter()
-            .any(|event| matches!(event, DockEvent::DragStarted { panel } if *panel == Panel::Left)),
+        events.iter().any(
+            |event| matches!(event, DockEvent::DragStarted { panel } if *panel == Panel::Left)
+        ),
         "the drag should have started once the pointer passed the threshold; got {events:?}"
     );
     assert!(
@@ -429,7 +456,10 @@ fn a_started_drag_records_where_it_was_gripped() {
 
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     drag_tab(&mut ui, "Left", target);
 
@@ -450,14 +480,17 @@ fn a_dragged_layout_survives_a_round_trip() {
 
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     drag_tab(&mut ui, "Left", target);
 
     let saved = session.capture(None);
-    let reloaded = DockSession::from_tree(LayoutTree::Tabs(
-        iced_kit::dock::TabsNode::new([PanelDef::new("right", "Right", Panel::Right)]),
-    ))
+    let reloaded = DockSession::from_tree(LayoutTree::Tabs(iced_kit::dock::TabsNode::new([
+        PanelDef::new("right", "Right", Panel::Right),
+    ])))
     .expect("valid");
     reloaded.restore(&saved).expect("restores");
 
@@ -485,7 +518,10 @@ fn a_lone_panels_title_bar_is_a_drag_source() {
     // title onto the right group's body.
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     drag_tab(&mut ui, "Left", target);
 
@@ -502,12 +538,9 @@ fn a_lone_panels_title_bar_is_a_drag_source() {
 /// because there would be nothing left to show.
 #[test]
 fn a_lone_panels_title_bar_does_not_start_a_pointless_drag() {
-    let session = DockSession::from_area(LayoutArea::new(tabs([panel(
-        "only",
-        "Only",
-        Panel::Left,
-    )])))
-    .expect("valid");
+    let session =
+        DockSession::from_area(LayoutArea::new(tabs([panel("only", "Only", Panel::Left)])))
+            .expect("valid");
     let mut ui = simulator_with_title_bars(&session);
 
     drag_tab(&mut ui, "Only", Point::new(500.0, 300.0));
@@ -532,7 +565,10 @@ fn a_title_bar_drag_reports_its_start_and_end() {
     let start = tab_centre(&mut ui, "Left");
     let target = {
         let bounds = ui.find("RIGHT BODY").expect("the right body").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     draw_frame(&mut ui);
     drive_drag(&mut ui, start, target);
@@ -543,9 +579,9 @@ fn a_title_bar_drag_reports_its_start_and_end() {
         .collect();
 
     assert!(
-        events
-            .iter()
-            .any(|event| matches!(event, DockEvent::DragStarted { panel } if *panel == Panel::Left)),
+        events.iter().any(
+            |event| matches!(event, DockEvent::DragStarted { panel } if *panel == Panel::Left)
+        ),
         "dragging a title should report a drag start; got {events:?}"
     );
     assert!(

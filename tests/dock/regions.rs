@@ -70,7 +70,10 @@ fn an_area_compiles_its_centre_and_each_dock() {
 #[test]
 fn a_dock_takes_the_size_it_was_given() {
     let state = state();
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), 240.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        240.0
+    );
     assert_eq!(
         state.regions.dock(DockPlacement::Bottom).unwrap().size(),
         200.0
@@ -128,16 +131,8 @@ fn the_centre_cannot_be_a_dock_placement() {
 #[test]
 fn a_placement_can_only_hold_one_dock() {
     let area = LayoutArea::new(tabs([panel("editor", "Editor", 0u32)]))
-        .dock(
-            DockPlacement::Left,
-            200.0,
-            tabs([panel("a", "A", 1u32)]),
-        )
-        .dock(
-            DockPlacement::Left,
-            200.0,
-            tabs([panel("b", "B", 2u32)]),
-        );
+        .dock(DockPlacement::Left, 200.0, tabs([panel("a", "A", 1u32)]))
+        .dock(DockPlacement::Left, 200.0, tabs([panel("b", "B", 2u32)]));
     let error = DockWidgetState::from_area(area).expect_err("a dock placement is unique");
     assert!(
         matches!(error, iced_kit::dock::Error::DuplicateDockPlacement(_)),
@@ -249,7 +244,10 @@ fn resizing_a_dock_follows_the_pointer_from_its_own_edge() {
 
     // A left dock is sized from the area's left edge.
     assert!(state.resize_dock_to(DockPlacement::Left, Point::new(320.0, 300.0)));
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), 320.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        320.0
+    );
 
     // A right dock from the opposite one.
     state.regions.insert_dock(
@@ -257,7 +255,10 @@ fn resizing_a_dock_follows_the_pointer_from_its_own_edge() {
         iced_kit::dock::model::DockRegion::new(Dock::new(200.0)),
     );
     assert!(state.resize_dock_to(DockPlacement::Right, Point::new(700.0, 300.0)));
-    assert_eq!(state.regions.dock(DockPlacement::Right).unwrap().size(), 300.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Right).unwrap().size(),
+        300.0
+    );
 }
 
 #[test]
@@ -297,7 +298,10 @@ fn dragging_a_closed_docks_handle_reopens_it() {
     // extent would look like nothing happened.
     assert!(state.resize_dock_to(DockPlacement::Left, Point::new(260.0, 300.0)));
     assert!(state.regions.is_dock_open(DockPlacement::Left));
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), 260.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        260.0
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +431,11 @@ fn a_dock_toggle_action_reaches_the_state_and_reports_the_new_flag() {
     assert!(session.dispatch(DockAction::ToggleDock {
         placement: DockPlacement::Left
     }));
-    assert!(!session.state().borrow().regions.is_dock_open(DockPlacement::Left));
+    assert!(!session
+        .state()
+        .borrow()
+        .regions
+        .is_dock_open(DockPlacement::Left));
 }
 
 #[test]
@@ -487,7 +495,10 @@ fn installing_a_new_area_keeps_the_size_the_user_dragged() {
     // The incoming trees are fresh values, but a dock size is not part of a tree,
     // so it is carried across by placement rather than reset to the default.
     state.set_area(area()).expect("the area is valid");
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), 333.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        333.0
+    );
     assert!(!state.regions.is_dock_open(DockPlacement::Left));
 }
 
@@ -601,7 +612,10 @@ fn the_title_bar_and_the_tab_strip_are_the_same_height() {
     // They are the same bar in two presentations, so a group that gains or loses a
     // tab must not move its content.
     let style = iced_kit::widgets::dock::style(&Theme::light());
-    assert_eq!(style.title.height, iced_kit::widgets::dock::tab_bar_height());
+    assert_eq!(
+        style.title.height,
+        iced_kit::widgets::dock::tab_bar_height()
+    );
 }
 
 #[test]
@@ -621,11 +635,7 @@ fn a_vertical_area_is_accepted_like_a_horizontal_one() {
         tabs([panel("a", "A", 0u32)]),
         tabs([panel("b", "B", 1u32)]),
     ]))
-    .dock(
-        DockPlacement::Right,
-        260.0,
-        tabs([panel("c", "C", 2u32)]),
-    );
+    .dock(DockPlacement::Right, 260.0, tabs([panel("c", "C", 2u32)]));
     let state = DockWidgetState::from_area(area).expect("valid");
     assert!(state.regions.has_dock(DockPlacement::Right));
 }
@@ -638,11 +648,7 @@ fn a_horizontal_centre_with_every_dock_installs() {
     ]))
     .dock(DockPlacement::Left, 200.0, tabs([panel("c", "C", 2u32)]))
     .dock(DockPlacement::Right, 200.0, tabs([panel("d", "D", 3u32)]))
-    .dock(
-        DockPlacement::Bottom,
-        180.0,
-        tabs([panel("e", "E", 4u32)]),
-    );
+    .dock(DockPlacement::Bottom, 180.0, tabs([panel("e", "E", 4u32)]));
     let state = DockWidgetState::from_area(area).expect("valid");
     for placement in DockPlacement::DOCKS {
         assert!(state.regions.has_dock(placement), "{placement} is present");
@@ -662,7 +668,10 @@ fn the_size_a_dock_reports_is_never_below_the_minimum() {
     // However small the window, a dock stays usable rather than collapsing to a
     // sliver the user cannot grab.
     state.resize_dock_to(DockPlacement::Left, Point::new(0.0, 0.0));
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), PANEL_MIN_SIZE);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        PANEL_MIN_SIZE
+    );
 }
 
 #[test]
@@ -673,7 +682,13 @@ fn a_zoom_event_reports_the_panel_it_applies_to() {
         zoomed: true,
         panel: Some(3),
     };
-    assert!(matches!(event, DockEvent::ZoomChanged { zoomed: true, panel: Some(3) }));
+    assert!(matches!(
+        event,
+        DockEvent::ZoomChanged {
+            zoomed: true,
+            panel: Some(3)
+        }
+    ));
 }
 
 #[test]
@@ -756,7 +771,10 @@ fn a_session_captures_and_restores_its_whole_workspace() {
         !state.regions.is_dock_open(DockPlacement::Bottom),
         "the closed dock is still closed"
     );
-    assert_eq!(state.regions.dock(DockPlacement::Left).unwrap().size(), 240.0);
+    assert_eq!(
+        state.regions.dock(DockPlacement::Left).unwrap().size(),
+        240.0
+    );
     assert!(state.index.panels.contains_key("files"), "panels came back");
 }
 
@@ -787,11 +805,21 @@ fn restoring_drops_the_panels_the_saved_workspace_never_had() {
         ),
     )
     .expect("valid");
-    assert!(later.state().borrow().index.panels.contains_key("brand-new"));
+    assert!(later
+        .state()
+        .borrow()
+        .index
+        .panels
+        .contains_key("brand-new"));
 
     later.restore(&saved).expect("restores");
     assert!(
-        !later.state().borrow().index.panels.contains_key("brand-new"),
+        !later
+            .state()
+            .borrow()
+            .index
+            .panels
+            .contains_key("brand-new"),
         "the file did not have it, so restoring removed it"
     );
 }
@@ -888,14 +916,14 @@ impl iced_kit::widgets::dock::PanelPresentation<DocPanel, Message, Theme> for Do
 /// the way an application would, then saves and restores through it.
 #[test]
 fn the_documented_workspace_path_compiles_and_round_trips() {
-    use iced_kit::widgets::dock::{
-        DockPlacement, DockSession, LayoutArea, PanelDef, PanelStyle,
-    };
+    use iced_kit::widgets::dock::{DockPlacement, DockSession, LayoutArea, PanelDef, PanelStyle};
 
     type P = DocPanel;
 
     let area = LayoutArea::new(iced_kit::widgets::dock::tabs([PanelDef::new(
-        "editor", "main.rs", P::Editor,
+        "editor",
+        "main.rs",
+        P::Editor,
     )]))
     .dock(
         DockPlacement::Left,
@@ -930,11 +958,9 @@ fn the_documented_workspace_path_compiles_and_round_trips() {
 
     // And the workspace survives a save and a restore.
     let saved = session.capture(Some(1));
-    let reloaded = DockSession::from_area(
-        iced_kit::widgets::dock::LayoutArea::new(iced_kit::widgets::dock::tabs([PanelDef::new(
-            "editor", "main.rs", P::Editor,
-        )])),
-    )
+    let reloaded = DockSession::from_area(iced_kit::widgets::dock::LayoutArea::new(
+        iced_kit::widgets::dock::tabs([PanelDef::new("editor", "main.rs", P::Editor)]),
+    ))
     .expect("a centre-only workspace");
     reloaded.restore(&saved).expect("restores");
 

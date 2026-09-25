@@ -10,8 +10,8 @@ use iced_kit::theme::Theme;
 use iced_kit::widgets::avatar;
 use iced_kit::widgets::chat::{
     attachment, bubble, marker, AttachmentStatus, BubbleReactions, BubbleVariant,
-    Message as ChatMessage, MessageAlignment, MessageContent, MessageScroller, MessageScrollerState,
-    MarkerLoadingStyle, MarkerVariant,
+    MarkerLoadingStyle, MarkerVariant, Message as ChatMessage, MessageAlignment, MessageContent,
+    MessageScroller, MessageScrollerState,
 };
 
 fn main() -> iced::Result {
@@ -132,10 +132,12 @@ impl App {
 
         let header = row![
             text("Chat family").size(22),
-            container(button(text(if self.dark { "Light" } else { "Dark" }))
-                .on_press(Message::ToggleTheme))
-                .width(Length::Fill)
-                .align_x(Alignment::End),
+            container(
+                button(text(if self.dark { "Light" } else { "Dark" }))
+                    .on_press(Message::ToggleTheme)
+            )
+            .width(Length::Fill)
+            .align_x(Alignment::End),
         ]
         .align_y(Alignment::Center);
 
@@ -169,8 +171,9 @@ impl App {
     /// attachment status.
     fn showcase<'a>(&self) -> Element<'a, Message, Theme> {
         let _ = self.dark;
-        let separator: Element<'a, Message, Theme> =
-            marker("Today").with_variant(MarkerVariant::Separator).into();
+        let separator: Element<'a, Message, Theme> = marker("Today")
+            .with_variant(MarkerVariant::Separator)
+            .into();
         let loading: Element<'a, Message, Theme> = marker("Assistant is thinking…")
             .loading(true)
             .with_loading_style(MarkerLoadingStyle::Spinner)
@@ -185,7 +188,12 @@ impl App {
             BubbleVariant::Ghost,
         ]
         .into_iter()
-        .map(|variant| bubble("Sample bubble").with_variant(variant).max_width(160.0).into())
+        .map(|variant| {
+            bubble("Sample bubble")
+                .with_variant(variant)
+                .max_width(160.0)
+                .into()
+        })
         .collect();
 
         let cards: Vec<Element<'a, Message, Theme>> = [

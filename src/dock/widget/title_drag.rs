@@ -251,9 +251,9 @@ where
                         // The pointer left the window mid-drag, so there is nowhere
                         // for the panel to land.
                         None => {
-                            shell.publish(
-                                (self.on_event)(DockAction::Tab(TabAction::DragCancelled)),
-                            );
+                            shell.publish((self.on_event)(DockAction::Tab(
+                                TabAction::DragCancelled,
+                            )));
                         }
                     }
                     // The layout changed under the session, so the tree has to be
@@ -320,9 +320,13 @@ where
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let title_layout = layout.children().next()?;
         let title_tree = tree.children.first_mut()?;
-        self.title
-            .as_widget_mut()
-            .overlay(title_tree, title_layout, renderer, viewport, translation)
+        self.title.as_widget_mut().overlay(
+            title_tree,
+            title_layout,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 }
 

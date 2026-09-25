@@ -22,14 +22,14 @@
 //! is exactly where the bugs were: a title bar instead of a strip, three regions
 //! instead of one, and an application that tracks its own visibility.
 
-use iced::widget::{container, row, scrollable, text, column};
+use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Length, Point, Size};
 use iced_kit::dock::model::NodeKind;
-use iced_kit::widgets::dock as dock_kit;
 use iced_kit::dock::{
     horizontal, tabs, DockEvent, DockPlacement, DockSession, LayoutArea, PanelControl, PanelDef,
-    PanelStyle, PanelPresentation,
+    PanelPresentation, PanelStyle,
 };
+use iced_kit::widgets::dock as dock_kit;
 use iced_kit::Theme;
 use iced_test::Simulator;
 
@@ -146,14 +146,12 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
 
     fn toolbar(&self, panel: Panel) -> Vec<Element<'static, Message, Theme>> {
         let hidden = self.hidden.contains(&panel);
-        vec![
-            iced_kit::widgets::icon_button::<Message>()
-                .icon(if hidden { "◌" } else { "◉" })
-                .ghost()
-                .compact()
-                .on_press(Message::TogglePanelVisible(panel))
-                .into(),
-        ]
+        vec![iced_kit::widgets::icon_button::<Message>()
+            .icon(if hidden { "◌" } else { "◉" })
+            .ghost()
+            .compact()
+            .on_press(Message::TogglePanelVisible(panel))
+            .into()]
     }
 
     fn menu(&self, panel: Panel) -> Vec<iced_kit::widgets::dock::MenuEntry<Message>> {
@@ -238,18 +236,18 @@ fn drag(ui: &mut Simulator<'_, Message, Theme>, from: Point, to: Point) {
     ui.simulate([iced::Event::Mouse(iced::mouse::Event::CursorMoved {
         position: from,
     })]);
-    ui.simulate([iced::Event::Mouse(
-        iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left),
-    )]);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
+        iced::mouse::Button::Left,
+    ))]);
     for position in [halfway, to] {
         ui.point_at(position);
         ui.simulate([iced::Event::Mouse(iced::mouse::Event::CursorMoved {
             position,
         })]);
     }
-    ui.simulate([iced::Event::Mouse(
-        iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left),
-    )]);
+    ui.simulate([iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+        iced::mouse::Button::Left,
+    ))]);
 }
 
 /// The on-screen centre of a pane, from the bounds the dock recorded while drawing.
@@ -258,7 +256,11 @@ fn drag(ui: &mut Simulator<'_, Message, Theme>, from: Point, to: Point) {
 /// happens to be found inside it: a body's text sits near the pane's top, which lands
 /// in the Top edge band and splits rather than merges. Asking the session for the
 /// pane's own bounds is what makes the drop land where the test means it to.
-fn pane_centre(ui: &mut Simulator<'_, Message, Theme>, session: &DockSession<Panel>, id: &str) -> Point {
+fn pane_centre(
+    ui: &mut Simulator<'_, Message, Theme>,
+    session: &DockSession<Panel>,
+    id: &str,
+) -> Point {
     draw_once(ui);
     let pane = pane_of(session, id).unwrap_or_else(|| panic!("`{id}` should have a pane"));
     let state = session.state();
@@ -328,7 +330,10 @@ fn a_tab_can_be_dragged_within_the_centre_group() {
     // centre pane holds one panel, so the panel's title is what is on screen.
     let title = {
         let bounds = ui.find("Preview").expect("the preview title").bounds();
-        Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     let to = pane_centre(&mut ui, &session, "editor");
     drag(&mut ui, title, to);
@@ -387,7 +392,10 @@ fn dock_tabs_can_be_reordered() {
     let from = centre_of(&mut ui, "Explorer");
     let to = {
         let bounds = ui.find("Search").expect("the search tab").bounds();
-        Point::new(bounds.x + bounds.width + 20.0, bounds.y + bounds.height / 2.0)
+        Point::new(
+            bounds.x + bounds.width + 20.0,
+            bounds.y + bounds.height / 2.0,
+        )
     };
     drag(&mut ui, from, to);
 
@@ -477,7 +485,9 @@ fn hiding_the_displayed_panel_falls_back_to_another() {
     // is now `search` even though the stored active index still names `files`.
     let ui_state = session.state();
     let ui_state = ui_state.borrow();
-    let displayed = ui_state.displayed_panel(pane).expect("a panel is still shown");
+    let displayed = ui_state
+        .displayed_panel(pane)
+        .expect("a panel is still shown");
     let tree = ui_state.tree_of(displayed).expect("the panel's tree");
     match tree.kind(displayed) {
         Some(NodeKind::Panel(panel)) => assert_eq!(panel.id, "search"),
@@ -662,10 +672,7 @@ fn hiding_every_panel_of_a_group_clears_its_body() {
         ui.find("BODY TERMINAL").is_err(),
         "the only panel is hidden, so its body is gone"
     );
-    assert!(
-        ui.find("BODY EDITOR").is_ok(),
-        "the centre is unaffected"
-    );
+    assert!(ui.find("BODY EDITOR").is_ok(), "the centre is unaffected");
 }
 
 /// The row the pointer is over is the row that lights up, driven through the
@@ -689,7 +696,9 @@ fn the_row_under_the_pointer_is_the_row_that_lights_up() {
         draw_once(&mut ui);
         let pane = pane_of(&session, "problems").expect("a pane");
         let id = format!("dock-panel-menu:{}", pane.as_u64());
-        ui.find(iced::advanced::widget::Id::from(id)).expect("the menu button").bounds()
+        ui.find(iced::advanced::widget::Id::from(id))
+            .expect("the menu button")
+            .bounds()
     };
     let trigger = button.center();
 

@@ -204,7 +204,10 @@ mod tests {
     fn a_docks_open_flag_survives_a_round_trip() {
         let (built, mut regions) =
             crate::dock::builder::compile::build_area(&area(0u32)).expect("valid");
-        regions.dock_mut(DockPlacement::Left).unwrap().set_open(false);
+        regions
+            .dock_mut(DockPlacement::Left)
+            .unwrap()
+            .set_open(false);
         regions
             .dock_mut(DockPlacement::Left)
             .unwrap()
@@ -248,10 +251,9 @@ mod tests {
             crate::dock::tabs([crate::dock::panel("top", "Top", 0u32)]),
             crate::dock::tabs([crate::dock::panel("bottom", "Bottom", 1u32)]),
         ]);
-        let (built, regions) = crate::dock::builder::compile::build_area(
-            &crate::dock::LayoutArea::new(tree),
-        )
-        .expect("valid");
+        let (built, regions) =
+            crate::dock::builder::compile::build_area(&crate::dock::LayoutArea::new(tree))
+                .expect("valid");
         let state = DockAreaState::capture(&built.layout, &regions, None);
 
         let root = state.center.root_child().expect("a root child");

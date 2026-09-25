@@ -4,8 +4,8 @@
 
 mod action;
 mod area;
-mod controls;
 mod compose;
+mod controls;
 mod dock;
 mod event;
 mod split;
@@ -16,7 +16,7 @@ mod title_drag;
 
 pub use crate::dock::style::PaneContent;
 pub use action::{DockAction, TabAction};
-pub use dock::{dock, Dock, DockBuilder, TabBarScrollbarAttachment};
 pub use controls::MenuEntry;
+pub use dock::{dock, Dock, DockBuilder, TabBarScrollbarAttachment};
 pub use event::DockEvent;
 pub use state::{dispatch_action, finish_drag, DockWidgetState};

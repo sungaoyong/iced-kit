@@ -2,8 +2,8 @@
 
 use crate::setting::{SettingItem, SettingLayout};
 use crate::theme::{Size, Theme};
-use crate::widgets::GroupBoxVariant;
 use crate::widgets::group_box::GroupBox;
+use crate::widgets::GroupBoxVariant;
 use iced::widget::{column, text};
 use iced::{Element, Length};
 
@@ -137,9 +137,10 @@ impl<'a, Message: Clone + 'a> SettingGroup<'a, Message> {
             .spacing(0.0);
 
         if let Some(title) = &self.title {
-            let mut heading =
-                column![text(title.clone()).size(Size::Md.text().size).width(Length::Fill)]
-                    .spacing(4);
+            let mut heading = column![text(title.clone())
+                .size(Size::Md.text().size)
+                .width(Length::Fill)]
+            .spacing(4);
 
             if let Some(description) = &self.description {
                 heading = heading.push(
@@ -222,13 +223,11 @@ mod tests {
 
     #[test]
     fn resettability_and_dirtiness_come_from_the_items() {
-        let clean =
-            SettingGroup::<Msg>::new().item(switch_item("a", true, Some(true)));
+        let clean = SettingGroup::<Msg>::new().item(switch_item("a", true, Some(true)));
         assert!(clean.is_resettable());
         assert!(!clean.is_dirty());
 
-        let dirty =
-            SettingGroup::<Msg>::new().item(switch_item("a", false, Some(true)));
+        let dirty = SettingGroup::<Msg>::new().item(switch_item("a", false, Some(true)));
         assert!(dirty.is_resettable());
         assert!(dirty.is_dirty());
     }
@@ -244,8 +243,7 @@ mod tests {
 
     #[test]
     fn a_group_can_override_its_panel_variant() {
-        let group =
-            SettingGroup::<Msg>::new().variant(GroupBoxVariant::Outline);
+        let group = SettingGroup::<Msg>::new().variant(GroupBoxVariant::Outline);
 
         assert_eq!(group.variant, Some(GroupBoxVariant::Outline));
     }

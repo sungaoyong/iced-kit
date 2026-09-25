@@ -35,7 +35,7 @@ use iced_kit::icons::IconName;
 use iced_kit::theme::Theme;
 use iced_kit::widgets::dock::{
     self, DockAreaState, DockEvent, DockPlacement, DockSession, LayoutArea, MenuEntry,
-    PanelControl, PanelDef, PanelStyle, PanelPresentation,
+    PanelControl, PanelDef, PanelPresentation, PanelStyle,
 };
 use iced_kit::widgets::{icon_button, muted_text};
 
@@ -137,9 +137,7 @@ impl Panel {
                 .map(|line| text(*line).into())
                 .collect(),
             Self::Editor => (1..=30)
-                .map(|n| {
-                    text(format!("{n:>3}  fn view(&self) -> Element<'_, Message> {{")).into()
-                })
+                .map(|n| text(format!("{n:>3}  fn view(&self) -> Element<'_, Message> {{")).into())
                 .collect(),
             Self::Preview => vec![muted_text("Rendered preview").into()],
             Self::Terminal => vec![
@@ -180,7 +178,10 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
         // the tab and the title bar.
         Some(
             row![
-                icon_button::<Message>().icon(panel.icon()).ghost().compact(),
+                icon_button::<Message>()
+                    .icon(panel.icon())
+                    .ghost()
+                    .compact(),
                 text(panel.title()).size(13)
             ]
             .spacing(4)
@@ -198,14 +199,12 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
         // the dock does not draw today, but the seam allows) the eye that brings
         // it back.
         let icon = if hidden { IconName::Eye } else { IconName::X };
-        vec![
-            icon_button::<Message>()
-                .icon(icon)
-                .ghost()
-                .compact()
-                .on_press(Message::TogglePanelVisible(panel))
-                .into(),
-        ]
+        vec![icon_button::<Message>()
+            .icon(icon)
+            .ghost()
+            .compact()
+            .on_press(Message::TogglePanelVisible(panel))
+            .into()]
     }
 
     fn menu(&self, panel: Panel) -> Vec<MenuEntry<Message>> {
@@ -216,8 +215,7 @@ impl PanelPresentation<Panel, Message, Theme> for Panels {
             MenuEntry::new(format!("Pin {} path", panel.short()), Message::Noop)
                 .icon(IconName::Pin)
                 .checked(panel == Panel::Files),
-            MenuEntry::new(format!("Close {}", panel.short()), Message::Noop)
-                .icon(IconName::X),
+            MenuEntry::new(format!("Close {}", panel.short()), Message::Noop).icon(IconName::X),
         ]
     }
 
@@ -368,8 +366,7 @@ impl App {
                     Err(error) => self.last_event = format!("load failed: {error}"),
                 },
                 None => {
-                    self.last_event =
-                        String::from("nothing saved yet — press Save first");
+                    self.last_event = String::from("nothing saved yet — press Save first");
                 }
             },
             Message::Reset => match self.session.set_area(workspace()) {
@@ -534,7 +531,10 @@ fn describe(event: &DockEvent<Panel>) -> String {
             placement_name(*placement)
         ),
         DockEvent::DockResized { placement, size } => {
-            format!("resized the {} dock to {size:.0}px", placement_name(*placement))
+            format!(
+                "resized the {} dock to {size:.0}px",
+                placement_name(*placement)
+            )
         }
         DockEvent::LayoutChanged => "the layout changed".to_owned(),
     }
@@ -886,7 +886,10 @@ mod tests {
     fn pane_centre(app: &App, id: &str) -> iced::Point {
         let pane = pane_of(app, id).unwrap_or_else(|| panic!("`{id}` has a pane"));
         let bounds = pane_bounds(app, pane);
-        iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
+        iced::Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        )
     }
 
     /// Point, press, move twice, release — with a frame drawn between each step.
@@ -895,8 +898,7 @@ mod tests {
         from: iced::Point,
         to: iced::Point,
     ) {
-        let halfway =
-            iced::Point::new(f32::midpoint(from.x, to.x), f32::midpoint(from.y, to.y));
+        let halfway = iced::Point::new(f32::midpoint(from.x, to.x), f32::midpoint(from.y, to.y));
 
         ui.point_at(from);
         ui.simulate([iced::Event::Mouse(iced::mouse::Event::CursorMoved {

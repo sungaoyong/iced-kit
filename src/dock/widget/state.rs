@@ -335,19 +335,15 @@ impl<K> DockWidgetState<K> {
         fn walk<K>(state: &DockWidgetState<K>, tree: &DockLayout<K>, node: NodeId) -> bool {
             match tree.kind(node) {
                 Some(NodeKind::Panel(_)) => !state.is_node_visible(tree, node),
-                Some(NodeKind::Pane(pane)) => pane
-                    .tabs
-                    .iter()
-                    .all(|&tab| walk(state, tree, tab)),
-                Some(NodeKind::Proportional(pg)) => pg
-                    .children
-                    .iter()
-                    .all(|&child| walk(state, tree, child)),
+                Some(NodeKind::Pane(pane)) => pane.tabs.iter().all(|&tab| walk(state, tree, tab)),
+                Some(NodeKind::Proportional(pg)) => {
+                    pg.children.iter().all(|&child| walk(state, tree, child))
+                }
                 // A root with a child is answered by the child; an empty root
                 // draws nothing, so it counts as empty.
-                Some(NodeKind::Root(root)) => root
-                    .child
-                    .is_none_or(|child| walk(state, tree, child)),
+                Some(NodeKind::Root(root)) => {
+                    root.child.is_none_or(|child| walk(state, tree, child))
+                }
                 None => true,
             }
         }
@@ -733,8 +729,12 @@ impl<K: Clone> DockWidgetState<K> {
         target.insert_with_id(panel, entry.clone_for_insert());
 
         let inserted = match index {
-            Some(index) => factory.insert_panel_at(target, target_pane, panel, index).is_ok(),
-            None => factory.add_panel_to_pane(target, target_pane, panel).is_ok(),
+            Some(index) => factory
+                .insert_panel_at(target, target_pane, panel, index)
+                .is_ok(),
+            None => factory
+                .add_panel_to_pane(target, target_pane, panel)
+                .is_ok(),
         };
         if !inserted {
             self.restore_detached(panel, entry, old_owner);
@@ -992,10 +992,11 @@ pub fn dispatch_action<K: Clone>(state: &mut DockWidgetState<K>, action: DockAct
         } => {
             // The group's tree is resolved rather than assumed: a split inside a dock
             // is not in the centre tree.
-            if state
-                .tree_of_mut(group)
-                .is_some_and(|tree| factory.adjust_splitter(tree, group, splitter_index, pair_ratio).is_ok())
-            {
+            if state.tree_of_mut(group).is_some_and(|tree| {
+                factory
+                    .adjust_splitter(tree, group, splitter_index, pair_ratio)
+                    .is_ok()
+            }) {
                 state.layout_dirty = true;
                 changed = true;
             }

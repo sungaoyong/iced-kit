@@ -1,9 +1,9 @@
 //! Setting pages: a named collection of groups.
 
+use crate::icons::IconName;
 use crate::setting::SettingGroup;
 use crate::theme::{Size, Theme};
 use crate::widgets::Icon;
-use crate::icons::IconName;
 use iced::widget::{column, container, row, text};
 use iced::{Element, Length};
 
@@ -196,16 +196,15 @@ impl<'a, Message: Clone + 'a> SettingPage<'a, Message> {
 
     /// Renders the page's icon, when it has one.
     pub(crate) fn render_icon(&self, size: Size) -> Option<Element<'a, Message, Theme>> {
-        self.icon
-            .map(|icon| Icon::new(icon).into_element(size))
+        self.icon.map(|icon| Icon::new(icon).into_element(size))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::SettingPage;
-    use crate::setting::{SettingField, SettingGroup, SettingItem};
     use crate::icons::IconName;
+    use crate::setting::{SettingField, SettingGroup, SettingItem};
 
     #[derive(Debug, Clone)]
     enum Msg {
@@ -248,8 +247,11 @@ mod tests {
 
     #[test]
     fn a_page_with_no_changes_offers_nothing_to_reset() {
-        let page = SettingPage::<Msg>::new("General")
-            .group(SettingGroup::new().item(item("a", true, Some(true))));
+        let page = SettingPage::<Msg>::new("General").group(SettingGroup::new().item(item(
+            "a",
+            true,
+            Some(true),
+        )));
 
         assert!(page.is_resettable(), "the item could be reset");
         assert!(
@@ -260,8 +262,11 @@ mod tests {
 
     #[test]
     fn a_changed_setting_makes_the_page_dirty() {
-        let page = SettingPage::<Msg>::new("General")
-            .group(SettingGroup::new().item(item("a", false, Some(true))));
+        let page = SettingPage::<Msg>::new("General").group(SettingGroup::new().item(item(
+            "a",
+            false,
+            Some(true),
+        )));
 
         assert!(page.is_dirty());
     }

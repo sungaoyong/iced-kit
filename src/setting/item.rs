@@ -116,9 +116,7 @@ impl<'a, Message: 'a> SettingItem<'a, Message> {
     /// Whether a reset would change this item.
     #[must_use]
     pub fn is_resettable(&self) -> bool {
-        self.field
-            .as_ref()
-            .is_some_and(SettingField::is_resettable)
+        self.field.as_ref().is_some_and(SettingField::is_resettable)
     }
 
     /// Whether this item differs from its defaults.
@@ -167,8 +165,10 @@ impl<'a, Message: Clone + 'a> SettingItem<'a, Message> {
         };
         let disabled = *disabled || inherited_disabled;
 
-        let mut label =
-            column![text(title.clone()).size(size.text().size).width(Length::Fill)].spacing(4);
+        let mut label = column![text(title.clone())
+            .size(size.text().size)
+            .width(Length::Fill)]
+        .spacing(4);
 
         if let Some(description) = description {
             label = label.push(
@@ -249,13 +249,13 @@ mod tests {
 
     #[test]
     fn resettability_follows_the_field() {
-        let with_default =
-            SettingItem::<Msg>::new("x").field(SettingField::switch(true, Msg::Bool).default_value(true));
+        let with_default = SettingItem::<Msg>::new("x")
+            .field(SettingField::switch(true, Msg::Bool).default_value(true));
         assert!(with_default.is_resettable());
         assert!(!with_default.is_dirty());
 
-        let changed =
-            SettingItem::<Msg>::new("x").field(SettingField::switch(false, Msg::Bool).default_value(true));
+        let changed = SettingItem::<Msg>::new("x")
+            .field(SettingField::switch(false, Msg::Bool).default_value(true));
         assert!(changed.is_resettable());
         assert!(changed.is_dirty(), "a changed field makes its item dirty");
 

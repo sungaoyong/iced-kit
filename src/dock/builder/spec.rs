@@ -344,10 +344,7 @@ pub(crate) fn validate_area<K>(area: &LayoutArea<K>) -> crate::dock::Result {
 }
 
 /// Gather a tree's panel ids into `seen`, rejecting one already there.
-fn collect_panel_ids<K>(
-    tree: &LayoutTree<K>,
-    seen: &mut HashSet<String>,
-) -> crate::dock::Result {
+fn collect_panel_ids<K>(tree: &LayoutTree<K>, seen: &mut HashSet<String>) -> crate::dock::Result {
     match tree {
         LayoutTree::Tabs(node) => {
             for def in &node.panels {

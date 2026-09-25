@@ -8,8 +8,8 @@ pub use crate::dock::builder::compile::{
 };
 pub use crate::dock::builder::DockIndex;
 pub use crate::dock::factory::Factory;
-pub use crate::dock::model::{
-    CLOSED_BOTTOM_STRIP, Dock, DockPlacement, DockRegion, DockRegions, PANEL_MIN_SIZE,
-};
 pub use crate::dock::manager::{DockManager, DragSession, DropZone, TabBarTarget};
+pub use crate::dock::model::{
+    Dock, DockPlacement, DockRegion, DockRegions, CLOSED_BOTTOM_STRIP, PANEL_MIN_SIZE,
+};
 pub use crate::dock::widget::{dispatch_action, finish_drag, DockAction, TabAction};

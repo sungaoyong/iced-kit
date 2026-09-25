@@ -105,14 +105,17 @@ pub fn glyph(name: IconName) -> char {
 
 #[cfg(test)]
 mod tests {
-    use super::{FONT_FAMILY, IconName, LUCIDE_FONT_BYTES, font, glyph, load};
+    use super::{font, glyph, load, IconName, FONT_FAMILY, LUCIDE_FONT_BYTES};
 
     #[test]
     fn the_bundled_font_is_a_real_truetype_file() {
         // Guards against a dependency change that swaps the font for a stub:
         // every sfnt file starts with these four bytes.
         assert_eq!(&LUCIDE_FONT_BYTES[..4], &[0x00, 0x01, 0x00, 0x00]);
-        assert!(LUCIDE_FONT_BYTES.len() > 100_000, "the icon font looks empty");
+        assert!(
+            LUCIDE_FONT_BYTES.len() > 100_000,
+            "the icon font looks empty"
+        );
     }
 
     #[test]

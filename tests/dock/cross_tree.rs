@@ -35,7 +35,11 @@ fn state() -> DockWidgetState<u32> {
             240.0,
             tabs([panel_def("files", 2), panel_def("search", 3)]).active("files"),
         )
-        .dock(DockPlacement::Bottom, 180.0, tabs([panel_def("terminal", 4)])),
+        .dock(
+            DockPlacement::Bottom,
+            180.0,
+            tabs([panel_def("terminal", 4)]),
+        ),
     )
     .expect("the area is valid")
 }
@@ -126,7 +130,10 @@ fn a_dock_panel_dropped_on_a_centre_panes_edge_splits_it() {
     // the grey highlight the drop overlay draws. This is the drop that used to
     // detach the panel and then fail to place it.
     state.drop_targets.push((target, CENTER_PANE));
-    let drop_at = Point::new(CENTER_PANE.x + CENTER_PANE.width - 2.0, CENTER_PANE.center_y());
+    let drop_at = Point::new(
+        CENTER_PANE.x + CENTER_PANE.width - 2.0,
+        CENTER_PANE.center_y(),
+    );
     start_drag(&mut state, "files");
 
     assert!(
@@ -194,14 +201,13 @@ fn an_edge_split_from_a_dock_keeps_both_trees_well_formed() {
 
 #[test]
 fn dragging_a_docks_last_panel_out_collapses_its_group() {
-    let mut state = DockWidgetState::from_area(
-        LayoutArea::new(tabs([panel_def("editor", 0)])).dock(
+    let mut state =
+        DockWidgetState::from_area(LayoutArea::new(tabs([panel_def("editor", 0)])).dock(
             DockPlacement::Left,
             240.0,
             tabs([panel_def("files", 2)]),
-        ),
-    )
-    .expect("valid");
+        ))
+        .expect("valid");
 
     let target = pane_of(&state, "editor").expect("the editor pane");
     state.drop_targets.push((target, CENTER_PANE));
@@ -292,18 +298,23 @@ fn a_dock_panel_that_refuses_zoom_is_refused() {
 /// panel again restores the dock at the size the user dragged.
 #[test]
 fn hiding_a_docks_every_panel_frees_its_extent() {
-    let mut state = DockWidgetState::from_area(
-        LayoutArea::new(tabs([panel_def("editor", 0)])).dock(
+    let mut state =
+        DockWidgetState::from_area(LayoutArea::new(tabs([panel_def("editor", 0)])).dock(
             DockPlacement::Left,
             240.0,
             tabs([panel_def("files", 2)]),
-        ),
-    )
-    .expect("valid");
+        ))
+        .expect("valid");
 
     // The area lays out from `region_rects`, which consults this predicate.
     assert!(
-        !state.region_is_empty(&state.regions.region(DockPlacement::Left).expect("dock").tree),
+        !state.region_is_empty(
+            &state
+                .regions
+                .region(DockPlacement::Left)
+                .expect("dock")
+                .tree
+        ),
         "the dock starts with something to draw"
     );
 
@@ -362,7 +373,10 @@ fn hiding_one_pane_of_a_split_frees_its_slot() {
     let files_still_there = state
         .pane(files_pane)
         .is_some_and(|p| p.tabs.contains(&files));
-    assert!(files_still_there, "hiding keeps the panel's slot in the pane");
+    assert!(
+        files_still_there,
+        "hiding keeps the panel's slot in the pane"
+    );
 
     // The pane's drawn set is empty, which is what the widget asks.
     assert!(
@@ -394,7 +408,12 @@ fn closing_a_panel_by_its_node_closes_the_right_one() {
 #[test]
 fn closing_the_last_panel_of_a_dock_leaves_no_hollow_group() {
     let mut state = state();
-    let terminal = state.index.panels.get("terminal").copied().expect("indexed");
+    let terminal = state
+        .index
+        .panels
+        .get("terminal")
+        .copied()
+        .expect("indexed");
 
     assert!(state.close_panel(terminal));
 
@@ -402,7 +421,10 @@ fn closing_the_last_panel_of_a_dock_leaves_no_hollow_group() {
         .regions
         .region(DockPlacement::Bottom)
         .expect("the dock");
-    assert!(hollow_panes(&bottom.tree).is_empty(), "the emptied group is collapsed away");
+    assert!(
+        hollow_panes(&bottom.tree).is_empty(),
+        "the emptied group is collapsed away"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +436,10 @@ fn the_menu_close_action_closes_the_displayed_panel() {
     let mut state = state();
     let files = state.index.panels.get("files").copied().expect("indexed");
 
-    let changed = dispatch_action(&mut state, DockAction::Tab(TabAction::Close { panel: files }));
+    let changed = dispatch_action(
+        &mut state,
+        DockAction::Tab(TabAction::Close { panel: files }),
+    );
     assert!(changed, "a real panel id closes");
     assert!(pane_of(&state, "files").is_none());
 }

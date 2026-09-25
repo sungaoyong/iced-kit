@@ -270,8 +270,7 @@ impl<'a, Message: Clone + 'a> SettingField<'a, Message> {
             value: SettingValue::Choice(selected.clone()),
             default: None,
             render: Box::new(move |disabled, size| {
-                let labels: Vec<String> =
-                    options.iter().map(|(_, label)| label.clone()).collect();
+                let labels: Vec<String> = options.iter().map(|(_, label)| label.clone()).collect();
                 let keys: Vec<String> = options.iter().map(|(key, _)| key.clone()).collect();
 
                 let current_label = selected.as_ref().and_then(|current| {
@@ -318,9 +317,7 @@ impl<'a, Message: Clone + 'a> SettingField<'a, Message> {
     /// The renderer is told whether the field is disabled, so a custom control
     /// can honor it. iced has no generic way to make an arbitrary element inert,
     /// so unlike the built-in kinds this cannot do it for you.
-    pub fn custom(
-        render: impl Fn(bool, Size) -> Element<'a, Message, Theme> + 'a,
-    ) -> Self {
+    pub fn custom(render: impl Fn(bool, Size) -> Element<'a, Message, Theme> + 'a) -> Self {
         Self {
             kind: SettingFieldKind::Custom,
             value: SettingValue::Custom,
@@ -440,7 +437,10 @@ mod tests {
     fn a_field_with_no_default_is_never_dirty_and_never_resettable() {
         let field = SettingField::switch(true, Msg::Bool);
 
-        assert!(!field.is_resettable(), "no default means nothing to reset to");
+        assert!(
+            !field.is_resettable(),
+            "no default means nothing to reset to"
+        );
         assert!(
             !field.is_dirty(),
             "a field with nothing to reset to must not offer a reset"

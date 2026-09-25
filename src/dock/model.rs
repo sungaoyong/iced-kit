@@ -9,5 +9,5 @@ pub use layout::*;
 pub use pane::*;
 pub use proportional::ProportionalGroup;
 pub use region::{
-    CLOSED_BOTTOM_STRIP, Dock, DockPlacement, DockRegion, DockRegions, PANEL_MIN_SIZE,
+    Dock, DockPlacement, DockRegion, DockRegions, CLOSED_BOTTOM_STRIP, PANEL_MIN_SIZE,
 };

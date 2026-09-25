@@ -46,7 +46,10 @@ pub(crate) fn item_matches<'a, Message: 'a>(item: &SettingItem<'a, Message>, que
 /// clearing the search has to restore exactly what the application declared,
 /// rather than hiding groups that happen to be empty.
 #[must_use]
-pub(crate) fn group_matches<'a, Message: 'a>(group: &SettingGroup<'a, Message>, query: &str) -> bool {
+pub(crate) fn group_matches<'a, Message: 'a>(
+    group: &SettingGroup<'a, Message>,
+    query: &str,
+) -> bool {
     query.is_empty() || group.items.iter().any(|item| item_matches(item, query))
 }
 
@@ -55,11 +58,7 @@ pub(crate) fn group_matches<'a, Message: 'a>(group: &SettingGroup<'a, Message>, 
 /// Like [`group_matches`], an empty query matches unconditionally.
 #[must_use]
 pub(crate) fn page_matches<'a, Message: 'a>(page: &SettingPage<'a, Message>, query: &str) -> bool {
-    query.is_empty()
-        || page
-            .groups
-            .iter()
-            .any(|group| group_matches(group, query))
+    query.is_empty() || page.groups.iter().any(|group| group_matches(group, query))
 }
 
 #[cfg(test)]
@@ -75,8 +74,7 @@ mod tests {
     }
 
     fn item(title: &str) -> SettingItem<'static, Msg> {
-        SettingItem::new(title.to_owned())
-            .field(SettingField::switch(true, Msg::Bool))
+        SettingItem::new(title.to_owned()).field(SettingField::switch(true, Msg::Bool))
     }
 
     #[test]

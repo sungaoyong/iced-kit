@@ -56,7 +56,13 @@ pub fn build_area<K: Copy>(area: &LayoutArea<K>) -> Result<(BuiltLayout<K>, Dock
         regions.insert_dock(spec.placement, DockRegion { tree, dock });
     }
 
-    Ok((BuiltLayout { layout: center, index }, regions))
+    Ok((
+        BuiltLayout {
+            layout: center,
+            index,
+        },
+        regions,
+    ))
 }
 
 fn compile_node<K: Copy>(
@@ -303,8 +309,5 @@ fn collect_panels<K>(layout: &Layout<K>, node: NodeId, found: &mut Vec<NodeId>) 
 /// Whether a pane would draw nothing — every tab hidden, or no tabs at all.
 #[must_use]
 pub fn pane_is_empty<K>(layout: &Layout<K>, pane: &Pane) -> bool {
-    !pane
-        .tabs
-        .iter()
-        .any(|&id| panel_is_visible(layout, id))
+    !pane.tabs.iter().any(|&id| panel_is_visible(layout, id))
 }

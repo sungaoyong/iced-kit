@@ -2,6 +2,7 @@
 
 use std::rc::Rc;
 
+use crate::widgets::overlay::menu as kit_menu;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
 use iced::advanced::renderer;
@@ -10,7 +11,6 @@ use iced::advanced::widget::{Operation, Widget};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse::{self, Cursor};
 use iced::widget::overlay::menu;
-use crate::widgets::overlay::menu as kit_menu;
 use iced::{Border, Element, Event, Length, Rectangle, Size, Vector};
 
 use crate::dock::model::{Axis, NodeId};

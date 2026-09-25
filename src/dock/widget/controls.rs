@@ -157,7 +157,10 @@ pub fn draw_control(
     } else {
         style.text_color
     };
-    let size = style.glyph_size.min(button.bounds.width).min(button.bounds.height);
+    let size = style
+        .glyph_size
+        .min(button.bounds.width)
+        .min(button.bounds.height);
     // The glyph is text in the icon font, so it recolors through the text
     // pipeline the way every other icon in the library does — the same path a
     // title bar's window controls take.
@@ -447,7 +450,11 @@ where
             .collect();
         if self.can_zoom {
             let ix = items.len();
-            items.push(menu::Item::command(if self.zoomed { "Restore" } else { "Maximize" }));
+            items.push(menu::Item::command(if self.zoomed {
+                "Restore"
+            } else {
+                "Maximize"
+            }));
             sources.push((vec![ix], MenuSource::Dock(DockAction::ToggleZoom { pane })));
         }
         if self.can_close {
@@ -499,7 +506,10 @@ where
         // one.
         state
             .metrics
-            .set(menu::Metrics::from(&<Theme as menu::Catalog>::style(theme, &state.class)));
+            .set(menu::Metrics::from(&<Theme as menu::Catalog>::style(
+                theme,
+                &state.class,
+            )));
         let mut bounds = state.button_bounds;
         let origin = layout.position();
         bounds.x += origin.x;
@@ -787,7 +797,13 @@ where
             self.icon,
         );
         let hovered = cursor.is_over(button.bounds);
-        draw_control(renderer, button, &style.control, hovered || self.active, false);
+        draw_control(
+            renderer,
+            button,
+            &style.control,
+            hovered || self.active,
+            false,
+        );
     }
 
     fn update(

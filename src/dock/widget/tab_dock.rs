@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::widgets::overlay::menu as kit_menu;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
 use iced::advanced::renderer;
@@ -13,7 +14,6 @@ use iced::mouse::{self, Cursor};
 use iced::time::Duration;
 use iced::touch;
 use iced::widget::overlay::menu;
-use crate::widgets::overlay::menu as kit_menu;
 use iced::widget::text::{LineHeight, Shaping};
 use iced::widget::{button, container, svg, text as iced_text};
 use iced::{Border, Element, Event, Length, Rectangle, Size, Vector};
@@ -22,10 +22,10 @@ use crate::dock::manager::{DockManager, DragSession, DropZone, TabBarTarget};
 use crate::dock::model::NodeId;
 use crate::dock::style::{self, Catalog, DockStyle};
 use crate::dock::widget::action::{DockAction, TabAction};
-use crate::dock::widget::{compose, controls};
 use crate::dock::widget::dock::TabBarScrollbarAttachment;
 use crate::dock::widget::state::DockWidgetState;
 use crate::dock::widget::tab_strip::{self, TabStrip};
+use crate::dock::widget::{compose, controls};
 
 fn drop_zone_rect(bounds: Rectangle, zone: DropZone, edge: f32) -> Rectangle {
     let w = bounds.width;
@@ -416,7 +416,6 @@ where
             tree.children.extend(self.leading.iter().map(Tree::new));
             tree.children.extend(self.trailing.iter().map(Tree::new));
         }
-
     }
 
     fn size(&self) -> Size<Length> {
@@ -458,7 +457,11 @@ where
         // A title bar is placed after the leading controls, because it holds the
         // panel's name and reads as belonging with them; a strip keeps the whole
         // width, with the controls drawn over the space it was told to leave.
-        let bar_x = if self.is_strip { inset } else { inset + leading_w };
+        let bar_x = if self.is_strip {
+            inset
+        } else {
+            inset + leading_w
+        };
         bar_node.move_to_mut((bar_x, inset));
 
         // A collapsed group is its bar and nothing else: the content is laid out
@@ -467,7 +470,11 @@ where
         // The panel's content is inset only when it asked to be: a panel that
         // draws its own edges — an editor, an image — wants the whole pane, and its
         // chrome already separates it from the bar.
-        let content_pad = if self.inner_padding { self.pane_padding } else { 0.0 };
+        let content_pad = if self.inner_padding {
+            self.pane_padding
+        } else {
+            0.0
+        };
         let content_h = if self.is_collapsed {
             0.0
         } else {
@@ -590,9 +597,10 @@ where
         let controls: Vec<&Element<'_, Message, Theme, Renderer>> =
             self.leading.iter().chain(self.trailing.iter()).collect();
         for (i, element) in controls.iter().enumerate() {
-            if let (Some(child_layout), Some(child_tree)) =
-                (layout.children().nth(FIRST_CONTROL + i), tree.children.get(FIRST_CONTROL + i))
-            {
+            if let (Some(child_layout), Some(child_tree)) = (
+                layout.children().nth(FIRST_CONTROL + i),
+                tree.children.get(FIRST_CONTROL + i),
+            ) {
                 compose::child_draw(
                     element,
                     child_tree,
@@ -760,7 +768,6 @@ where
                 if tab_strip::set_suppress_hover::<Theme>(&mut tree.children[0], suppress_hover) {
                     shell.request_redraw();
                 }
-
             }
 
             compose::child_update(
@@ -802,7 +809,8 @@ where
                     });
                     result.map_or((None, false), |(index, blocked)| (Some(index), blocked))
                 };
-                if tab_strip::set_insert_marker_index::<Theme>(&mut tree.children[0], marker_index) {
+                if tab_strip::set_insert_marker_index::<Theme>(&mut tree.children[0], marker_index)
+                {
                     shell.request_redraw();
                 }
                 if tab_strip::set_drag_blocked::<Theme>(&mut tree.children[0], marker_blocked) {
@@ -919,9 +927,10 @@ where
             ));
         }
         for (i, element) in self.leading.iter().chain(self.trailing.iter()).enumerate() {
-            if let (Some(child_layout), Some(child_tree)) =
-                (layout.children().nth(FIRST_CONTROL + i), tree.children.get(FIRST_CONTROL + i))
-            {
+            if let (Some(child_layout), Some(child_tree)) = (
+                layout.children().nth(FIRST_CONTROL + i),
+                tree.children.get(FIRST_CONTROL + i),
+            ) {
                 interaction = interaction.max(compose::child_mouse_interaction(
                     element,
                     child_tree,

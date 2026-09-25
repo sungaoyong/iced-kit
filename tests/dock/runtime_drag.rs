@@ -35,8 +35,8 @@ use iced::advanced::layout;
 use iced::advanced::widget::Tree;
 use iced::advanced::Shell;
 use iced::{Element, Event, Point, Rectangle, Size};
-use iced_kit::widgets::dock as dock_kit;
 use iced_kit::dock::{horizontal, panel, tabs, DockEvent, DockSession};
+use iced_kit::widgets::dock as dock_kit;
 use iced_kit::Theme;
 use iced_test::renderer::Renderer;
 
@@ -227,15 +227,11 @@ fn a_drag_survives_the_layout_pass_its_own_start_triggers() {
         start,
     );
     driver.event(
-        Event::Mouse(iced::mouse::Event::ButtonPressed(
-            iced::mouse::Button::Left,
-        )),
+        Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
         start,
     );
     driver.event(
-        Event::Mouse(iced::mouse::Event::CursorMoved {
-            position: halfway,
-        }),
+        Event::Mouse(iced::mouse::Event::CursorMoved { position: halfway }),
         halfway,
     );
     driver.event(

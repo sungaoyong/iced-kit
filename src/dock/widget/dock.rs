@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use crate::widgets::overlay::menu as kit_menu;
 use iced::advanced;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
@@ -14,15 +15,14 @@ use iced::advanced::{Clipboard, Shell};
 use iced::mouse::{self, Cursor};
 use iced::time::Duration;
 use iced::widget::overlay::menu;
-use crate::widgets::overlay::menu as kit_menu;
 use iced::widget::text::{LineHeight, Shaping};
 use iced::widget::{self, button, container, svg, text as iced_text};
 use iced::{Background, Element, Event, Length, Rectangle, Size, Vector};
 
 use crate::dock::model::{Axis, Layout as ModelLayout, NodeId, NodeKind, Pane};
+use crate::dock::panel::PanelPresentation;
 use crate::dock::style::{Catalog, DockStyle, PaneContent, StyleFn};
 use crate::dock::widget::action::DockAction;
-use crate::dock::panel::PanelPresentation;
 use crate::dock::widget::area::DockArea;
 use crate::dock::widget::controls as controls_mod;
 use crate::dock::widget::event::{action_to_event, DockEvent};
@@ -73,7 +73,8 @@ where
 pub struct Dock<'a, K, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
+    Renderer:
+        advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     content: Box<dyn Fn(K) -> PaneContent<'a, Message, Theme, Renderer> + 'a>,
     modified: Option<ModifiedFn<'a, K>>,
@@ -287,12 +288,15 @@ where
         dispatch_action(&mut state, action);
         let event = match event {
             DockEvent::LayoutChanged => match (dock_placement, pane_for_zoom) {
-                (Some(placement), _) => state.regions.dock(placement).map_or(event, |dock| {
-                    DockEvent::DockToggled {
-                        placement,
-                        open: dock.is_open(),
-                    }
-                }),
+                (Some(placement), _) => {
+                    state
+                        .regions
+                        .dock(placement)
+                        .map_or(event, |dock| DockEvent::DockToggled {
+                            placement,
+                            open: dock.is_open(),
+                        })
+                }
                 (None, Some(pane)) => DockEvent::ZoomChanged {
                     zoomed: state.is_zoomed(pane),
                     panel: state
@@ -487,11 +491,9 @@ where
             };
             // A panel that is the only one in the only group cannot be dragged out:
             // there would be nothing left to show, and no way to put it back.
-            let alone = holder.borrow().layout.root_child().is_none() || self.is_only_group(pane_id);
-            let draggable = tabs
-                .first()
-                .is_some_and(|tab| tab.can_drag)
-                && !alone;
+            let alone =
+                holder.borrow().layout.root_child().is_none() || self.is_only_group(pane_id);
+            let draggable = tabs.first().is_some_and(|tab| tab.can_drag) && !alone;
             crate::dock::widget::title_drag::TitleDrag::new(
                 pane_id,
                 displayed,
@@ -679,10 +681,7 @@ where
     ) -> bool {
         use crate::dock::model::DockPlacement;
         let tree = match placement {
-            DockPlacement::Bottom => state
-                .regions
-                .region(DockPlacement::Bottom)
-                .map(|r| &r.tree),
+            DockPlacement::Bottom => state.regions.region(DockPlacement::Bottom).map(|r| &r.tree),
             DockPlacement::Left | DockPlacement::Right | DockPlacement::Center => {
                 Some(&state.layout)
             }
@@ -717,7 +716,9 @@ where
             // chrome carries nothing that acts on the hidden panel.
             return controls;
         }
-        let active = self.active_of(tabs).and_then(|id| tabs.iter().find(|tab| tab.id == id));
+        let active = self
+            .active_of(tabs)
+            .and_then(|id| tabs.iter().find(|tab| tab.id == id));
         let can_zoom = active.is_some_and(|tab| tab.can_zoom);
         let zoomed = holder.borrow().regions.zoomed().is_some();
         let control = self.presentation.zoom_control(key);
@@ -766,7 +767,10 @@ where
                     // Unique per pane: iced keys element state by id, so a shared
                     // literal would collapse two groups' menus into one and make
                     // only one of them reachable.
-                    iced::advanced::widget::Id::from(format!("dock-panel-menu:{}", pane_id.as_u64())),
+                    iced::advanced::widget::Id::from(format!(
+                        "dock-panel-menu:{}",
+                        pane_id.as_u64()
+                    )),
                     pane_id,
                     // The panel the entry acts on is the one displayed, not the
                     // pane itself: `Close` names a *panel* node, and a pane id
@@ -950,7 +954,8 @@ type TooltipFn<'a, K> = Box<dyn Fn(K) -> Option<String> + 'a>;
 pub struct DockBuilder<'a, K, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
+    Renderer:
+        advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     content: Option<ContentFn<'a, K, Message, Theme, Renderer>>,
     modified: Option<ModifiedFn<'a, K>>,
@@ -1007,7 +1012,8 @@ where
 impl<K, Message, Theme, Renderer> Default for DockBuilder<'_, K, Message, Theme, Renderer>
 where
     Theme: Catalog,
-    Renderer: advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
+    Renderer:
+        advanced::Renderer + advanced::text::Renderer<Font = iced::Font> + advanced::svg::Renderer,
 {
     fn default() -> Self {
         Self {
@@ -1705,7 +1711,6 @@ where
             dock_style.background.color,
         );
 
-
         let Some(child_layout) = layout.children().next() else {
             return;
         };
@@ -1721,7 +1726,6 @@ where
             cursor,
             viewport,
         );
-
     }
 
     fn update(

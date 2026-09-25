@@ -348,11 +348,8 @@ impl<K> DockRegions<K> {
         let Some(node) = self.zoomed else {
             return;
         };
-        let reachable = is_reachable(center, node)
-            || self
-                .docks
-                .values()
-                .any(|r| is_reachable(&r.tree, node));
+        let reachable =
+            is_reachable(center, node) || self.docks.values().any(|r| is_reachable(&r.tree, node));
         if !reachable {
             self.zoomed = None;
         }
@@ -386,18 +383,18 @@ fn is_reachable<K>(layout: &Layout<K>, node: NodeId) -> bool {
             return true;
         }
         match layout.kind(current) {
-            Some(super::NodeKind::Pane(pane)) => pane
-                .tabs
-                .iter()
-                .any(|&tab| walk(layout, tab, target)),
-            Some(super::NodeKind::Proportional(pg)) => pg
-                .children
-                .iter()
-                .any(|&child| walk(layout, child, target)),
+            Some(super::NodeKind::Pane(pane)) => {
+                pane.tabs.iter().any(|&tab| walk(layout, tab, target))
+            }
+            Some(super::NodeKind::Proportional(pg)) => {
+                pg.children.iter().any(|&child| walk(layout, child, target))
+            }
             Some(super::NodeKind::Root(_) | super::NodeKind::Panel(_)) | None => false,
         }
     }
-    layout.root_child().is_some_and(|root| walk(layout, root, node))
+    layout
+        .root_child()
+        .is_some_and(|root| walk(layout, root, node))
 }
 
 /// A [`DockRegions`] carrying only the open flag and size, for tests and for
@@ -513,7 +510,10 @@ mod tests {
 
         let mut incoming: DockRegions<()> = DockRegions::new();
         incoming.insert_dock(DockPlacement::Left, DockRegion::new(Dock::new(320.0)));
-        incoming.dock_mut(DockPlacement::Left).unwrap().set_open(false);
+        incoming
+            .dock_mut(DockPlacement::Left)
+            .unwrap()
+            .set_open(false);
 
         regions.adopt_dock_state(&incoming);
         assert_eq!(regions.dock(DockPlacement::Left).unwrap().size(), 320.0);
