@@ -1,4 +1,11 @@
 //! Selects (dropdowns).
+//!
+//! A [`select`] is the zero-cost dropdown: a themed `pick_list` whose menu
+//! iced draws and hosts itself, so a caller needs no open flag, no anchor and
+//! no panel. It has no search and no multi-select — that is the combobox's
+//! job. [`searchable_select`] and [`searchable_select_panel`] are thin aliases
+//! over that combobox, kept here so the two capability levels read as one
+//! family; the trigger styles are the same either way.
 
 use crate::theme::{Size, Theme};
 use iced::widget::{pick_list as iced_pick_list, pick_list::Handle};
@@ -41,17 +48,36 @@ where
 {
     let size = Size::Md;
 
+    // The caret is the icon font's chevron at the combobox trigger's icon
+    // size, and the insets are the field insets those triggers use — a
+    // select and a combobox side by side should read as one system. The
+    // font has to be registered before the glyph can draw.
+    crate::icons::load();
+
     iced_pick_list(options, selected, on_selected)
         .text_size(size.text().size)
+        // A pick_list's height is its text line, which reads shorter than
+        // every other form control beside it. The line box carries the
+        // control's height token instead — the same trick the combobox
+        // trigger's label uses, and pick_list centers the value in it.
+        .text_line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
+            size.height(),
+        )))
         .padding(Padding {
             top: 0.0,
-            right: 8.0,
+            right: size.input_padding(),
             bottom: 0.0,
-            left: size.padding(),
+            left: size.input_padding(),
         })
-        .handle(Handle::Arrow {
-            size: Some(iced::Pixels(14.0)),
-        })
+        .handle(Handle::Static(iced_pick_list::Icon {
+            font: crate::icons::font(),
+            code_point: crate::icons::glyph(crate::icons::IconName::ChevronDown),
+            size: Some(iced::Pixels(Size::Sm.icon_size())),
+            line_height: iced::widget::text::LineHeight::Absolute(iced::Pixels(
+                Size::Sm.icon_size(),
+            )),
+            shaping: iced::widget::text::Shaping::Basic,
+        }))
 }
 
 /// Builds a full-width themed select, for use in a form column.

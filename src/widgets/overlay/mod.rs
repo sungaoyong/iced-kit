@@ -24,6 +24,7 @@
 //! # }
 //! ```
 
+mod claim;
 pub mod dialog;
 pub mod drawer;
 pub mod dropdown;
@@ -32,6 +33,7 @@ pub mod menu;
 pub mod popover;
 pub mod toast;
 pub mod tooltip;
+pub mod trigger;
 
 use crate::theme::Theme;
 use iced::widget::{container, stack, Space, Stack};
@@ -49,13 +51,15 @@ pub use drawer::{
 pub use dropdown::{Dropdown, DropdownAlign, MenuItem};
 pub use enter::EnterFrom;
 pub use menu::OpenFlag;
-pub use popover::{ContextMenu, Popover, PopoverPlacement};
+pub use popover::{popover_dismiss_area, ContextMenu, Popover, PopoverPlacement};
 pub use toast::{Toast, ToastKind, ToastPlacement, Toasts};
 pub use tooltip::{
     tooltip, tooltip_at, tooltip_at_with_shortcut, tooltip_bubble, tooltip_bubble_with_shortcut,
     tooltip_with_shortcut, TooltipPosition,
 };
+pub use trigger::{trigger, Trigger};
 
+pub(crate) use claim::ClaimPress;
 pub(crate) use enter::Enter;
 
 /// A downward chevron, for the trigger of a menu.

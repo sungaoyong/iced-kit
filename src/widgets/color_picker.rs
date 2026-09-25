@@ -8,7 +8,10 @@
 //! the same division of labour as every other overlay in this crate,
 //! [`color_picker`] builds the trigger — a swatch showing the current color —
 //! and [`ColorPickerPanel`] builds the choosing surface, which the application
-//! positions and draws through [`Layer`](crate::widgets::overlay::Layer).
+//! positions and draws through [`Layer`](crate::widgets::overlay::Layer). The
+//! anchor comes from
+//! [`trigger`](crate::widgets::overlay::trigger), which publishes the pressed
+//! trigger's window-space rectangle ahead of the toggle message.
 //!
 //! # Color space
 //!
@@ -421,6 +424,7 @@ impl<'a, Message: Clone + 'a> ColorPickerPanel<'a, Message> {
                 hue: hsv.hue,
                 saturation: hsv.saturation,
                 value: hsv.value,
+                on_change: on_change.clone(),
             })
             .width(Length::Fill)
             .height(Length::Fixed(width * 0.6)),
@@ -533,14 +537,50 @@ pub fn color_picker_panel<'a, Message: Clone + 'a>(color: Color) -> ColorPickerP
 }
 
 /// The saturation/value square for one hue.
-struct SvSquare {
+struct SvSquare<'a, Message> {
     hue: f32,
     saturation: f32,
     value: f32,
+    on_change: Option<std::rc::Rc<dyn Fn(Color) -> Message + 'a>>,
 }
 
-impl<Message> canvas::Program<Message, Theme> for SvSquare {
+impl<Message: Clone> canvas::Program<Message, Theme> for SvSquare<'_, Message> {
     type State = ();
+
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        event: &iced::Event,
+        bounds: Rectangle,
+        cursor: iced::mouse::Cursor,
+    ) -> Option<canvas::Action<Message>> {
+        let report = self.on_change.as_ref()?;
+
+        // The square works like the strip below it: a press picks where the
+        // marker goes, and a drag follows the hand. The action captures, or a
+        // press on the square would also reach whatever layer sits beneath the
+        // panel — a dismiss catcher, say, which would close the picker the
+        // moment it was used.
+        let interacting = matches!(
+            event,
+            iced::Event::Mouse(
+                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)
+                    | iced::mouse::Event::CursorMoved { .. }
+            )
+        );
+        if !interacting {
+            return None;
+        }
+
+        let position = cursor.position_over(bounds)?;
+        let next = Hsv::new(
+            self.hue,
+            position.x / bounds.width,
+            1.0 - position.y / bounds.height,
+        );
+
+        Some(canvas::Action::publish(report(next.to_color())).and_capture())
+    }
 
     fn draw(
         &self,
@@ -633,7 +673,7 @@ impl<Message: Clone> canvas::Program<Message, Theme> for HueStrip<'_, Message> {
         let mut next = Hsv::new(self.hue, self.saturation, self.value);
         next.hue = fraction * 360.0;
 
-        Some(canvas::Action::publish(report(next.to_color())))
+        Some(canvas::Action::publish(report(next.to_color())).and_capture())
     }
 
     fn draw(

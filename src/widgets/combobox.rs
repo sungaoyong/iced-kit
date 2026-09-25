@@ -13,6 +13,12 @@
 //!   [`Layer`](crate::widgets::overlay::Layer), because iced has no
 //!   window-level z-order and no widget can place a popup over its neighbours.
 //!
+//! The application learns where to put the panel from
+//! [`trigger`](crate::widgets::overlay::trigger), which wraps the trigger and
+//! publishes the trigger's window-space rectangle the moment a press lands on
+//! it — before the toggle message, so the panel opens anchored to the press
+//! that opened it.
+//!
 //! Filtering is a plain function of the query, so a caller can match on more
 //! than the label — an id, an alias, a secondary line.
 //!
@@ -359,11 +365,13 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
         content = content.push(caret);
 
         let mut trigger = button(content)
+            // The trigger shows the current value, so it insets like a field
+            // rather than like a button — the same inset a select uses.
             .padding(Padding {
                 top: 0.0,
-                right: 8.0,
+                right: Size::Md.input_padding(),
                 bottom: 0.0,
-                left: Size::Md.padding(),
+                left: Size::Md.input_padding(),
             })
             .height(Length::Fixed(height))
             .width(if fill { Length::Fill } else { Length::Shrink })
@@ -373,16 +381,24 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
 
         // A searchable trigger is a field the user types in, so the query is
         // drawn by a text input rather than as the button's label. The panel
-        // then carries no search field of its own: the query lives here.
+        // then carries no search field of its own: the query lives here. The
+        // field goes in bare: the button owns the border, and a framed field
+        // inside it would read as a box nested in a box.
         if let Some(on_query) = on_query {
             let field = crate::widgets::input::text_input::<Message>(
                 &placeholder,
                 query.as_deref().unwrap_or_default(),
             )
             .on_input(on_query)
-            .width(Length::Fill);
+            .into_control();
 
-            let mut content = row![].spacing(8).align_y(Alignment::Center);
+            // The row fills the button's content box: the bare field is only
+            // one text line tall, and a shrink-wrapping row would pin the
+            // caret to the top of the control instead of centering it.
+            let mut content = row![]
+                .spacing(8)
+                .align_y(Alignment::Center)
+                .height(Length::Fill);
             content = content.push(field);
             content = content.push(
                 crate::widgets::Icon::new(if open {
@@ -396,9 +412,9 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
             let searchable = button(content)
                 .padding(Padding {
                     top: 0.0,
-                    right: 8.0,
+                    right: Size::Md.input_padding(),
                     bottom: 0.0,
-                    left: 8.0,
+                    left: Size::Md.input_padding(),
                 })
                 .height(Length::Fixed(height))
                 .width(if fill { Length::Fill } else { Length::Shrink })

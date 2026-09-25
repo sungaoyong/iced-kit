@@ -328,7 +328,11 @@ impl<'a, Message: Clone + 'a> Modal<'a, Message> {
         let surface = if draggable {
             Element::new(super::drag::DragSurface::new(surface))
         } else {
-            surface
+            // An inert card — a heading, a paragraph, whitespace — lets a
+            // press fall through to the backdrop, which would dismiss the
+            // dialog the reader was merely clicking into. The card claims
+            // the presses that land on it instead.
+            Element::new(crate::widgets::overlay::ClaimPress::new(surface))
         };
 
         modal_layer(surface, dismissible.then_some(on_dismiss))

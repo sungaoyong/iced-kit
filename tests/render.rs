@@ -2453,6 +2453,18 @@ fn combobox_states_render() {
             .fill(true)
             .into();
 
+    // The searchable trigger is a field inside the button, so its snapshot
+    // pins the frame: the button owns the border, and the field sits in it
+    // bare rather than drawing a box of its own.
+    let searchable: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&options, Some(1), "Choose a country")
+            .query("Gr")
+            .on_query(|_| Message::Noop)
+            .open(true)
+            .on_toggle(Message::Noop)
+            .fill(true)
+            .into();
+
     let panel: Element<'_, Message, Theme> =
         combobox_panel(&options, &selected, "gr", |_| Message::Noop)
             .on_query(|_| Message::Noop)
@@ -2460,7 +2472,58 @@ fn combobox_states_render() {
 
     assert_renders(
         "combobox",
-        column![empty, chosen, open, panel].spacing(16),
+        column![empty, chosen, open, searchable, panel].spacing(16),
+        false,
+    );
+}
+
+/// A select beside the combobox triggers it should read as a family with.
+///
+/// The select is the zero-cost dropdown and the combobox the searchable one;
+/// their triggers must look like the same control at two capability levels —
+/// surface fill, one border, a chevron — or the selection page reads as two
+/// unrelated widgets.
+#[test]
+fn select_and_combobox_render() {
+    use iced_kit::widgets::{combobox, select, select_fill, ComboBoxOption};
+
+    let combo_options = vec![
+        ComboBoxOption::new(0usize, "Free"),
+        ComboBoxOption::new(1, "Pro"),
+        ComboBoxOption::new(2, "Team"),
+    ];
+
+    let chosen: Element<'_, Message, Theme> =
+        select(vec!["Free", "Pro", "Team"], Some("Pro"), |_| Message::Noop)
+            .placeholder("Choose a plan")
+            .into();
+
+    let placeholder: Element<'_, Message, Theme> =
+        select(Vec::<&str>::new(), None::<&str>, |_| Message::Noop)
+            .placeholder("Choose a plan")
+            .into();
+
+    let filled: Element<'_, Message, Theme> =
+        select_fill(vec!["Free", "Pro", "Team"], Some("Pro"), |_| Message::Noop)
+            .placeholder("Choose a plan")
+            .into();
+
+    let combo: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&combo_options, Some(1), "Choose a plan")
+            .on_toggle(Message::Noop)
+            .fill(true)
+            .into();
+
+    let combo_open: Element<'_, Message, Theme> =
+        combobox::<usize, Message>(&combo_options, Some(1), "Choose a plan")
+            .open(true)
+            .on_toggle(Message::Noop)
+            .fill(true)
+            .into();
+
+    assert_renders(
+        "select",
+        column![chosen, placeholder, filled, combo, combo_open].spacing(16),
         false,
     );
 }
@@ -2497,9 +2560,17 @@ fn calendar_and_date_field_render() {
         .fill(true)
         .into();
 
+    // The editable field nests a bare text input inside the framed button;
+    // this state pins that the field draws no border of its own.
+    let editable: Element<'_, Message, Theme> = date_picker::<Message>("Pick a date", "2024-02-14")
+        .on_input(|_| Message::Noop)
+        .on_toggle(Message::Noop)
+        .fill(true)
+        .into();
+
     assert_renders(
         "calendar",
-        column![one, column![empty, filled].spacing(8), ranged].spacing(20),
+        column![one, column![empty, filled, editable].spacing(8), ranged].spacing(20),
         false,
     );
 }

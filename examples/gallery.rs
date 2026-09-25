@@ -2,8 +2,8 @@
 //!
 //! Run with `cargo run --example gallery`.
 
-use iced::widget::{column, container, row, scrollable, text};
-use iced::{Alignment, Color, Element, Length, Task};
+use iced::widget::{column, container, row, scrollable, stack, text};
+use iced::{Alignment, Color, Element, Length, Padding, Task};
 use iced_kit::icons::IconName;
 use iced_kit::motion::Presence;
 use iced_kit::prelude::*;
@@ -33,6 +33,9 @@ fn main() -> iced::Result {
         .theme(App::theme)
         .run()
 }
+
+/// The gap between a hosted panel and the trigger it dropped from.
+const PANEL_GAP: f32 = 8.0;
 
 /// The Markdown document shown in the gallery.
 const SAMPLE_DOCUMENT: &str = "# Markdown
@@ -171,12 +174,13 @@ struct App {
     country_options: Vec<iced_kit::widgets::ComboBoxOption<usize>>,
     /// Which page the demo pane shows.
     selected: Section,
-    /// The split components' open flags. Each reports an intent and the
-    /// gallery hosts its panel, the same division of labour as every
-    /// overlay in the crate.
-    combo_open: bool,
-    date_open: bool,
-    color_open: bool,
+    /// The split components' open panel, and the window-space rectangle of
+    /// the trigger that opened it. Each component reports an intent and the
+    /// gallery hosts its panel, the same division of labour as every overlay
+    /// in the crate; the anchor comes from `trigger`, which reports where the
+    /// pressed trigger sits.
+    open_panel: Option<PanelKind>,
+    panel_anchor: Option<iced::Rectangle>,
     /// The combobox's query, carried by its trigger's text field.
     combo_query: String,
     /// The countries the combobox shows as picked.
@@ -221,7 +225,13 @@ struct App {
     drawer_open: bool,
     /// Keeps the drawer mounted while its exit is drawn.
     drawer_presence: Presence,
-    menu_at: Option<(f32, f32)>,
+    /// The Overlays section's anchored demos: where the pressed trigger
+    /// sits, reported by `trigger`. The sidebar item's context menu keeps a
+    /// hand-placed point, because a sidebar item is not reachable from
+    /// outside the widget to be wrapped.
+    dropdown_anchor: Option<iced::Rectangle>,
+    menu_at: Option<iced::Rectangle>,
+    popover_anchor: Option<iced::Rectangle>,
     popover_open: bool,
     /// Scroll state for the virtualized list and table.
     list_state: VirtualListState,
@@ -254,6 +264,17 @@ struct App {
     settings_accent: String,
     settings_telemetry: bool,
     settings_launch_at_login: bool,
+}
+
+/// Which of the split components' panels is open.
+///
+/// One at a time: opening a panel closes whichever one was open, the way a
+/// popover family behaves — two floating surfaces at once reads as a fault.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PanelKind {
+    Combo,
+    Date,
+    Color,
 }
 
 /// A row of the sample data set.
@@ -300,6 +321,13 @@ enum Message {
     ToggleCombo,
     ToggleDatePicker,
     ToggleColorPicker,
+    /// Where a pressed trigger sits, published by `trigger` the moment a
+    /// press lands on it. It arrives ahead of the toggle message, so the
+    /// panel the toggle opens is anchored to the press that opened it.
+    PanelAnchor(iced::Rectangle),
+    /// A press outside an open panel: the popover closes instead of the
+    /// control that was clicked.
+    ClosePanel,
     /// The combobox's query, and the country picked from its panel.
     ComboQuery(String),
     CountryPicked(usize),
@@ -334,6 +362,10 @@ enum Message {
     ShowToast,
     DismissToast(usize),
     ToggleDropdown,
+    /// Where the Overlays section's pressed triggers sit.
+    DropdownAnchor(iced::Rectangle),
+    ContextMenuAnchor(iced::Rectangle),
+    PopoverAnchor(iced::Rectangle),
     GroupSelected(Vec<usize>),
     ToggleSplitMenu,
     TogglesChanged(Vec<bool>),
@@ -359,7 +391,10 @@ enum Message {
     OtpChanged(String),
     ListPicked(usize),
     ToggleDrawer,
-    OpenContextMenu,
+    /// The drawer's backdrop was pressed. It is deliberately not the toggle:
+    /// a press that lands while the drawer's exit is still being drawn must
+    /// not flip the drawer back open.
+    DrawerDismissed,
     CloseContextMenu,
     TogglePopover,
     Scrolled(VirtualListState),
@@ -400,9 +435,8 @@ impl Default for App {
                 iced_kit::widgets::ComboBoxOption::new(2, "Japan").disabled(true),
             ],
             selected: Section::Buttons,
-            combo_open: false,
-            date_open: false,
-            color_open: false,
+            open_panel: None,
+            panel_anchor: None,
             combo_query: String::new(),
             picked_countries: vec![2],
             picked_date: "2024-02-14".to_owned(),
@@ -442,6 +476,8 @@ impl Default for App {
             drawer_open: false,
             drawer_presence: Presence::new(),
             menu_at: None,
+            dropdown_anchor: None,
+            popover_anchor: None,
             popover_open: false,
             list_state: VirtualListState::new(),
             table_state: TableState::new(),
@@ -515,19 +551,37 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Noop => {}
-            Message::SectionPicked(section) => self.selected = section,
-            Message::ToggleCombo => self.combo_open = !self.combo_open,
-            Message::ToggleDatePicker => self.date_open = !self.date_open,
-            Message::ToggleColorPicker => self.color_open = !self.color_open,
+            Message::SectionPicked(section) => {
+                self.selected = section;
+                // A panel belongs to the page that opened it.
+                self.open_panel = None;
+            }
+            // The anchor message precedes the toggle in the same batch, so a
+            // panel opening always reads the bounds of the press that opened
+            // it, and one closing wastes the update.
+            Message::PanelAnchor(anchor) => self.panel_anchor = Some(anchor),
+            Message::ToggleCombo => {
+                self.open_panel =
+                    (self.open_panel != Some(PanelKind::Combo)).then_some(PanelKind::Combo);
+            }
+            Message::ToggleDatePicker => {
+                self.open_panel =
+                    (self.open_panel != Some(PanelKind::Date)).then_some(PanelKind::Date);
+            }
+            Message::ToggleColorPicker => {
+                self.open_panel =
+                    (self.open_panel != Some(PanelKind::Color)).then_some(PanelKind::Color);
+            }
+            Message::ClosePanel => self.open_panel = None,
             Message::ComboQuery(query) => self.combo_query = query,
             Message::CountryPicked(value) => {
                 self.picked_countries = vec![value];
-                self.combo_open = false;
+                self.open_panel = None;
             }
             Message::DateText(text) => self.picked_date = text,
             Message::DatePicked(date) => {
                 self.picked_date = date.to_string();
-                self.date_open = false;
+                self.open_panel = None;
             }
             Message::ColorChanged(color) => self.picked_color = color,
             Message::ToggleTheme => self.dark = !self.dark,
@@ -653,7 +707,21 @@ impl App {
                 self.drawer_presence
                     .show(self.drawer_open, std::time::Instant::now());
             }
-            Message::OpenContextMenu => self.menu_at = Some((120.0, 320.0)),
+            Message::DrawerDismissed => {
+                // Only a drawer that is open can be dismissed. A press that
+                // lands while its exit is still being drawn would otherwise
+                // re-open it — two clicks in quick succession, and the drawer
+                // looks like it refuses to close.
+                if self.drawer_open {
+                    self.drawer_open = false;
+                    self.drawer_presence.show(false, std::time::Instant::now());
+                }
+            }
+            // The anchor arrives first in the same batch as the toggle, so an
+            // opening press always carries where it happened.
+            Message::DropdownAnchor(anchor) => self.dropdown_anchor = Some(anchor),
+            Message::ContextMenuAnchor(anchor) => self.menu_at = Some(anchor),
+            Message::PopoverAnchor(anchor) => self.popover_anchor = Some(anchor),
             Message::CloseContextMenu => {
                 self.menu_at = None;
                 self.sidebar_menu_at = None;
@@ -767,76 +835,99 @@ impl App {
 
         // The split components' panels live here rather than inside their
         // triggers: iced has no window-level z-order, so the application
-        // positions and hosts them. Each anchors under the demo pane's
-        // trigger row, which for a demo reads as attached.
+        // positions and hosts them. The anchor is the pressed trigger's own
+        // rectangle, reported by `trigger`, so each panel drops just below
+        // the control that opened it. An open panel is wrapped with a
+        // dismiss catcher under it, so a press anywhere else closes the
+        // popover instead of reaching the page beneath.
         if self.selected == Section::NewComponents {
-            const PANEL_ANCHOR: (f32, f32) = (260.0, 150.0);
+            if let Some(anchor) = self.panel_anchor {
+                match self.open_panel {
+                    Some(PanelKind::Combo) => {
+                        open = open.dropdown(anchored_panel(
+                            combobox_panel(
+                                &self.country_options,
+                                &self.picked_countries,
+                                &self.combo_query,
+                                Message::CountryPicked,
+                            )
+                            .width(260.0)
+                            .max_height(200.0)
+                            .into(),
+                            anchor,
+                            Message::ClosePanel,
+                        ));
+                    }
 
-            if self.combo_open {
-                open = open.dropdown(
-                    combobox_panel(
-                        &self.country_options,
-                        &self.picked_countries,
-                        &self.combo_query,
-                        Message::CountryPicked,
-                    )
-                    .width(260.0)
-                    .max_height(200.0),
-                );
-            }
+                    Some(PanelKind::Date) => {
+                        let month = iced_kit::widgets::date::parse(&self.picked_date)
+                            .unwrap_or_else(|| {
+                                iced_kit::widgets::date::Date::from_ymd(2024, 2, 14).unwrap()
+                            })
+                            .first_of_month();
+                        let selected = iced_kit::widgets::date::parse(&self.picked_date);
 
-            if self.date_open {
-                let month = iced_kit::widgets::date::parse(&self.picked_date)
-                    .unwrap_or_else(|| {
-                        iced_kit::widgets::date::Date::from_ymd(2024, 2, 14).unwrap()
-                    })
-                    .first_of_month();
-                let selected = iced_kit::widgets::date::parse(&self.picked_date);
+                        let card = container(
+                            calendar::<Message>(month, selected)
+                                .on_select(Message::DatePicked)
+                                .number_of_months(1),
+                        )
+                        .padding(8)
+                        .class(Box::new(|theme: &Theme| container::Style {
+                            background: Some(iced::Background::Color(theme.colors().surface)),
+                            border: iced::Border {
+                                color: theme.colors().border,
+                                width: 1.0,
+                                radius: f32::from(theme.radius().md).into(),
+                            },
+                            ..container::Style::default()
+                        }) as container::StyleFn<'_, Theme>);
 
-                let card = container(
-                    calendar::<Message>(month, selected)
-                        .on_select(Message::DatePicked)
-                        .number_of_months(1),
-                )
-                .padding(8)
-                .class(Box::new(|theme: &Theme| container::Style {
-                    background: Some(iced::Background::Color(theme.colors().surface)),
-                    border: iced::Border {
-                        color: theme.colors().border,
-                        width: 1.0,
-                        radius: f32::from(theme.radius().md).into(),
-                    },
-                    ..container::Style::default()
-                }) as container::StyleFn<'_, Theme>);
+                        // The calendar brings its own card, so it goes through
+                        // `Popover`, which styles for it; it is still placed
+                        // from the trigger's rectangle, and still dismissed on
+                        // a press outside it.
+                        open = open.dropdown(stack![
+                            popover_dismiss_area(Message::ClosePanel),
+                            Popover::new(card, (anchor.x, anchor.y + anchor.height + PANEL_GAP),)
+                                .placement(PopoverPlacement::BottomStart)
+                        ]);
+                    }
 
-                open = open.dropdown(
-                    Popover::new(card, PANEL_ANCHOR).placement(PopoverPlacement::BottomStart),
-                );
-            }
+                    Some(PanelKind::Color) => {
+                        open = open.dropdown(anchored_panel(
+                            color_picker_panel::<Message>(self.picked_color)
+                                .on_change(Message::ColorChanged)
+                                .width(240.0)
+                                .into(),
+                            anchor,
+                            Message::ClosePanel,
+                        ));
+                    }
 
-            if self.color_open {
-                open = open.dropdown(
-                    color_picker_panel::<Message>(self.picked_color)
-                        .on_change(Message::ColorChanged)
-                        .width(240.0),
-                );
+                    None => {}
+                }
             }
         }
 
         if self.dropdown_open {
-            open = open.dropdown(
-                Dropdown::new(vec![
-                    MenuItem::new("Duplicate", Message::PickedFromMenu("Duplicated"))
-                        .shortcut("Ctrl+D"),
-                    MenuItem::new("Rename", Message::PickedFromMenu("Renamed")).shortcut("F2"),
-                    MenuItem::new("Archive", Message::PickedFromMenu("Archived")).enabled(false),
-                    MenuItem::new("Delete", Message::PickedFromMenu("Deleted")).destructive(true),
-                ])
-                .anchor(620.0, 250.0),
-            );
+            if let Some(anchor) = self.dropdown_anchor {
+                open = open.dropdown(
+                    Dropdown::new(vec![
+                        MenuItem::new("Duplicate", Message::PickedFromMenu("Duplicated"))
+                            .shortcut("Ctrl+D"),
+                        MenuItem::new("Rename", Message::PickedFromMenu("Renamed")).shortcut("F2"),
+                        MenuItem::new("Archive", Message::PickedFromMenu("Archived"))
+                            .enabled(false),
+                        MenuItem::new("Delete", Message::PickedFromMenu("Deleted"))
+                            .destructive(true),
+                    ])
+                    .anchor(anchor.x, anchor.y + anchor.height + PANEL_GAP),
+                );
+            }
         }
 
-        if let Some(at) = self.menu_at {
+        if let Some(anchor) = self.menu_at {
             open = open.dropdown(ContextMenu::new(
                 vec![
                     MenuItem::new("Cut", Message::CloseContextMenu).shortcut("Ctrl+X"),
@@ -844,7 +935,7 @@ impl App {
                     MenuItem::new("Archive", Message::CloseContextMenu).enabled(false),
                     MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
                 ],
-                at,
+                (anchor.x, anchor.y + anchor.height + PANEL_GAP),
             ));
         }
 
@@ -862,18 +953,20 @@ impl App {
         }
 
         if self.popover_open {
-            open = open.dropdown(Popover::new(
-                column![
-                    heading("Quick settings", Heading::H4),
-                    paragraph("Adjust how the gallery behaves."),
-                    button("Close")
-                        .secondary()
-                        .size(Size::Sm)
-                        .on_press(Message::TogglePopover),
-                ]
-                .spacing(12),
-                (420.0, 240.0),
-            ));
+            if let Some(anchor) = self.popover_anchor {
+                open = open.dropdown(Popover::new(
+                    column![
+                        heading("Quick settings", Heading::H4),
+                        paragraph("Adjust how the gallery behaves."),
+                        button("Close")
+                            .secondary()
+                            .size(Size::Sm)
+                            .on_press(Message::TogglePopover),
+                    ]
+                    .spacing(12),
+                    (anchor.x, anchor.y + anchor.height + PANEL_GAP),
+                ));
+            }
         }
 
         // The drawer is kept mounted while it leaves, so its exit is drawn. The
@@ -890,7 +983,7 @@ impl App {
                 )
                 .side(DrawerSide::Right)
                 .presence(&self.drawer_presence)
-                .on_dismiss(Message::ToggleDrawer),
+                .on_dismiss(Message::DrawerDismissed),
             );
         }
 
@@ -968,7 +1061,6 @@ impl App {
         } else {
             Theme::light()
         };
-        let primary = theme.colors().primary;
 
         row![
             column![
@@ -984,7 +1076,14 @@ impl App {
                 .on_press(Message::ToggleTheme),
         ]
         .align_y(Alignment::Center)
-        .push(container(label("●").color(primary)).padding(8))
+        // The rail and the demo pane both inset themselves; the header spans
+        // the window, so it carries its own margin to line up with them.
+        .padding(Padding {
+            top: 16.0,
+            right: 24.0,
+            bottom: 16.0,
+            left: 24.0,
+        })
         .into()
     }
 
@@ -1284,28 +1383,39 @@ impl App {
             column![
                 row![
                     // Each trigger only reports intent; the open panel is
-                    // hosted further down, in the layer.
-                    combobox::<usize, Message>(
-                        &self.country_options,
-                        self.picked_countries.first().copied(),
-                        "Country",
-                    )
-                    .query(&self.combo_query)
-                    .on_query(Message::ComboQuery)
-                    .open(self.combo_open)
-                    .on_toggle(Message::ToggleCombo)
-                    .fill(true),
-                    date_picker::<Message>("Pick a date", &self.picked_date)
-                        .open(self.date_open)
-                        .on_input(Message::DateText)
-                        .on_toggle(Message::ToggleDatePicker)
+                    // hosted further down, in the layer. `trigger` wraps the
+                    // intent with the one thing the panel also needs: where
+                    // the pressed trigger sits.
+                    trigger(
+                        combobox::<usize, Message>(
+                            &self.country_options,
+                            self.picked_countries.first().copied(),
+                            "Country",
+                        )
+                        .query(&self.combo_query)
+                        .on_query(Message::ComboQuery)
+                        .open(self.open_panel == Some(PanelKind::Combo))
+                        .on_toggle(Message::ToggleCombo)
                         .fill(true),
+                        Message::PanelAnchor,
+                    ),
+                    trigger(
+                        date_picker::<Message>("Pick a date", &self.picked_date)
+                            .open(self.open_panel == Some(PanelKind::Date))
+                            .on_input(Message::DateText)
+                            .on_toggle(Message::ToggleDatePicker)
+                            .fill(true),
+                        Message::PanelAnchor,
+                    ),
                 ]
                 .spacing(16),
                 row![
-                    color_picker::<Message>(self.picked_color)
-                        .open(self.color_open)
-                        .on_toggle(Message::ToggleColorPicker),
+                    trigger(
+                        color_picker::<Message>(self.picked_color)
+                            .open(self.open_panel == Some(PanelKind::Color))
+                            .on_toggle(Message::ToggleColorPicker),
+                        Message::PanelAnchor,
+                    ),
                     rating::<Message>(4).on_select(|_| Message::Noop),
                     clipboard_button::<Message>("cargo test")
                         .label("Copy")
@@ -1607,15 +1717,22 @@ impl App {
                     button("Show toast")
                         .secondary()
                         .on_press(Message::ShowToast),
-                    button("Dropdown")
-                        .secondary()
-                        .on_press(Message::ToggleDropdown),
-                    button("Context menu")
-                        .secondary()
-                        .on_press(Message::OpenContextMenu),
-                    button("Popover")
-                        .secondary()
-                        .on_press(Message::TogglePopover),
+                    trigger(
+                        button("Dropdown")
+                            .secondary()
+                            .on_press(Message::ToggleDropdown),
+                        Message::DropdownAnchor,
+                    ),
+                    trigger(
+                        button("Context menu").secondary().on_press(Message::Noop),
+                        Message::ContextMenuAnchor,
+                    ),
+                    trigger(
+                        button("Popover")
+                            .secondary()
+                            .on_press(Message::TogglePopover),
+                        Message::PopoverAnchor,
+                    ),
                     tooltip(
                         button("Hover me").ghost().on_press(Message::Save),
                         "A tooltip appears after a short delay".to_owned(),
@@ -2380,6 +2497,34 @@ impl App {
             .width(Length::Fill)
             .into()
     }
+}
+
+/// Hosts a panel just below the trigger's rectangle, over a full-area
+/// dismiss catcher.
+///
+/// The catcher is the layer under the panel: a press that misses the panel
+/// closes the popover instead of reaching the page beneath it, and the stack
+/// hands a press that lands on the panel to the panel alone.
+fn anchored_panel<'a, Message: Clone + 'a>(
+    panel: Element<'a, Message, Theme>,
+    anchor: iced::Rectangle,
+    dismiss: Message,
+) -> Element<'a, Message, Theme> {
+    stack![
+        popover_dismiss_area(dismiss),
+        container(panel)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Alignment::Start)
+            .align_y(Alignment::Start)
+            .padding(Padding {
+                top: (anchor.y + anchor.height + PANEL_GAP).max(0.0),
+                right: 0.0,
+                bottom: 0.0,
+                left: anchor.x.max(0.0),
+            })
+    ]
+    .into()
 }
 
 /// The file tree the new-components demo shows.

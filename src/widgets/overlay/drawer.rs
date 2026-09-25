@@ -167,7 +167,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             );
         }
 
-        let mut panel = container(content)
+        let panel = container(content)
             .padding(Padding::new(24.0))
             .class(Box::new(|theme: &Theme| {
                 let colors = theme.colors();
@@ -187,11 +187,18 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
 
         // The panel stretches across its cross axis so it reads as an edge
         // panel rather than a floating card.
-        panel = if side.is_horizontal() {
+        let panel = if side.is_horizontal() {
             panel.width(Length::Fill).height(Length::Fixed(extent))
         } else {
             panel.width(Length::Fixed(extent)).height(Length::Fill)
         };
+
+        // The panel claims the presses that land on it. Its blank half is
+        // inert, and an inert surface lets a press fall through the stack to
+        // the backdrop — which would dismiss a drawer the reader was merely
+        // resting the hand on, and re-open it with the next such click.
+        let panel: Element<'a, Message, Theme> =
+            crate::widgets::overlay::ClaimPress::new(panel).into();
 
         let (align_x, align_y) = match side {
             DrawerSide::Left => (Alignment::Start, Alignment::Start),

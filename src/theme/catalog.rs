@@ -1548,20 +1548,25 @@ impl pick_list::Catalog for Theme {
             let colors = theme.colors();
             let radius = f32::from(theme.radius().md);
 
-            let (border_color, width) = match status {
-                pick_list::Status::Opened { .. } => (colors.ring, 2.0),
-                pick_list::Status::Hovered => (shade(colors.input, -0.15), 1.0),
-                pick_list::Status::Active => (colors.input, 1.0),
+            // The same signals the combobox trigger reads: at rest a surface
+            // fill with an input border; hovered or open, the accent wash;
+            // open, the border turns primary. A select and a combobox side by
+            // side are the same control at two capability levels, and they
+            // should read as one system.
+            let (background, border_color) = match status {
+                pick_list::Status::Opened { .. } => (colors.accent, colors.primary),
+                pick_list::Status::Hovered => (colors.accent, colors.border),
+                pick_list::Status::Active => (colors.surface, colors.border),
             };
 
             pick_list::Style {
                 text_color: colors.foreground,
                 placeholder_color: colors.muted_foreground,
-                handle_color: colors.muted_foreground,
-                background: Background::Color(colors.background),
+                handle_color: colors.foreground,
+                background: Background::Color(background),
                 border: Border {
                     color: border_color,
-                    width,
+                    width: 1.0,
                     radius: radius.into(),
                 },
             }

@@ -124,7 +124,9 @@ that stops below the window's title bar), `Toast`/`Toasts`, `Dropdown`/`MenuItem
 `ContextMenu`, `Popover`, `HoverCard` (opens on hover), `tooltip` (optionally
 naming a keyboard shortcut). A dialog body can also be assembled by hand from
 `DialogHeader`, `dialog_title`, `dialog_description`, `DialogContent` and
-`DialogFooter`, and a status strip from `status_bar`
+`DialogFooter`, and a status strip from `status_bar`. `trigger` wraps any
+trigger so the application can learn where the pressed trigger sits — the
+anchor a hosted panel needs, reported ahead of the toggle message
 
 **Motion** — surfaces animate as they arrive: a drawer slides in from its edge, a
 dialog rises, a dropdown drops, a toast comes in from the corner it sits in. The
@@ -311,6 +313,13 @@ fn view(&self) -> Element<'_, Message, Theme> {
 The application owns the state of each overlay; `Layer` only decides how open
 ones are painted. A modal's backdrop dims the page and dismisses on click, and
 a `Modal` can be made non-dismissible for a dialog that must be answered.
+
+An anchor like the `x, y` above has to come from somewhere, and iced has no
+API that tells a widget where it sits. `trigger` fills that in: it wraps any
+trigger and publishes the trigger's window-space `Rectangle` the moment a
+press lands inside it — before the toggle message, so a panel opens anchored
+to the press that opened it. The gallery's combobox, date picker and color
+picker panels are hosted exactly this way.
 
 `Modal` carries the common case: a title, an optional line of description under
 it, and action buttons. `AlertDialog` is the same surface with the defaults an

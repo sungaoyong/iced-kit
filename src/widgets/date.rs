@@ -675,6 +675,9 @@ fn day_cell_style(
 /// pieces: this builds the field, and the application draws a [`Calendar`]
 /// through [`Layer`](crate::widgets::overlay::Layer) when the field is open.
 /// The application also owns the calendar's month, because that is view state.
+/// Where the calendar goes comes from
+/// [`trigger`](crate::widgets::overlay::trigger), which wraps the field and
+/// reports its window-space rectangle ahead of the toggle message.
 ///
 /// ```
 /// # use iced_kit::widgets::{date_picker, date::{Date, Weekday}};
@@ -758,12 +761,20 @@ impl<'a, Message: Clone + 'a> DatePicker<'a, Message> {
     pub fn into_element(self) -> Element<'a, Message, Theme> {
         let height = Size::Md.height();
 
-        let mut content = row![].spacing(8).align_y(Alignment::Center);
+        // The row fills the button's content box: the bare field is only one
+        // text line tall, and a shrink-wrapping row would pin the trailing
+        // icon to the top of the control instead of centering it.
+        let mut content = row![]
+            .spacing(8)
+            .align_y(Alignment::Center)
+            .height(Length::Fill);
 
+        // The editable field goes in bare: the button owns the border, and a
+        // framed field inside it would read as a box nested in a box.
         let field: Element<'a, Message, Theme> = if let Some(on_input) = self.on_input {
             crate::widgets::input::text_input::<Message>(&self.placeholder, &self.text)
                 .on_input(on_input)
-                .into()
+                .into_control()
         } else {
             {
                 let style = Size::Md.text();
@@ -808,9 +819,9 @@ impl<'a, Message: Clone + 'a> DatePicker<'a, Message> {
         let mut trigger = button(content)
             .padding(Padding {
                 top: 0.0,
-                right: 8.0,
+                right: Size::Md.input_padding(),
                 bottom: 0.0,
-                left: Size::Md.padding(),
+                left: Size::Md.input_padding(),
             })
             .height(Length::Fixed(height))
             .width(if self.fill {

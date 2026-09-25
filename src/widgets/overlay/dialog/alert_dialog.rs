@@ -353,7 +353,10 @@ impl<'a, Message: Clone + 'a> AlertDialog<'a, Message> {
         let card = if draggable {
             Element::new(super::drag::DragSurface::new(card))
         } else {
-            card
+            // The same claim a non-draggable modal gets: an inert card lets a
+            // press fall through to the backdrop, which would dismiss the
+            // alert the reader was merely clicking into.
+            Element::new(crate::widgets::overlay::ClaimPress::new(card))
         };
 
         alert_layer(card, dismissible.then_some(on_dismiss).flatten())
