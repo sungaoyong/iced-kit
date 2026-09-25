@@ -147,3 +147,68 @@ fn a_press_on_a_modal_card_does_not_dismiss() {
         "a press on the card must stay: got {messages:?}"
     );
 }
+
+// The dismissal catcher a hosted menu is laid over: a press beside the menu
+// closes it instead of reaching the page beneath.
+
+/// A menu over a full-area catcher, the way the gallery hosts one.
+fn dropdown_with_catcher<'a>() -> Element<'a, Message, Theme> {
+    use iced::widget::stack;
+    use iced_kit::widgets::overlay::{popover_dismiss_area, Dropdown, MenuItem};
+
+    stack![
+        popover_dismiss_area(Message::Dismiss),
+        Dropdown::new(vec![
+            MenuItem::new("Duplicate", Message::Dismiss).shortcut("Ctrl+D")
+        ])
+        .anchor(500.0, 200.0)
+    ]
+    .into()
+}
+
+#[test]
+fn a_press_outside_a_dropdown_closes_it() {
+    // The menu sits at the top-right anchor; the far left is outside it.
+    let messages = messages_after_click(dropdown_with_catcher(), Point::new(80.0, 500.0));
+
+    assert_eq!(
+        messages,
+        vec![Message::Dismiss],
+        "a press outside the menu should close it"
+    );
+}
+
+#[test]
+fn a_press_on_a_dropdown_menu_does_not_close_it() {
+    // The menu's own rows start at the anchor; a row is inside the menu.
+    let messages = messages_after_click(dropdown_with_catcher(), Point::new(540.0, 215.0));
+
+    assert_eq!(
+        messages,
+        vec![Message::Dismiss],
+        "the press lands on the row, which answers for itself"
+    );
+}
+
+#[test]
+fn a_press_outside_a_context_menu_closes_it() {
+    use iced::widget::stack;
+    use iced_kit::widgets::overlay::{popover_dismiss_area, ContextMenu, MenuItem};
+
+    let menu = stack![
+        popover_dismiss_area(Message::Dismiss),
+        ContextMenu::new(
+            vec![MenuItem::new("Cut", Message::Dismiss).shortcut("Ctrl+X")],
+            (500.0, 200.0),
+        ),
+    ]
+    .into();
+
+    let messages = messages_after_click(menu, Point::new(80.0, 500.0));
+
+    assert_eq!(
+        messages,
+        vec![Message::Dismiss],
+        "a press outside the menu should close it"
+    );
+}

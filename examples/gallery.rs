@@ -365,6 +365,9 @@ enum Message {
     ShowToast,
     DismissToast(usize),
     ToggleDropdown,
+    /// The dropdown menu's catcher was pressed: a click outside the menu
+    /// closes it instead of reaching the page beneath.
+    CloseDropdown,
     /// Where the Overlays section's pressed triggers sit.
     DropdownAnchor(iced::Rectangle),
     ContextMenuAnchor(iced::Rectangle),
@@ -654,6 +657,7 @@ impl App {
                 }
             }
             Message::ToggleDropdown => self.dropdown_open = !self.dropdown_open,
+            Message::CloseDropdown => self.dropdown_open = false,
             Message::GroupSelected(selection) => self.group_selection = selection,
             Message::ToggleSplitMenu => {
                 self.saved = Some("Split menu toggled");
@@ -929,7 +933,10 @@ impl App {
 
         if self.dropdown_open {
             if let Some(anchor) = self.dropdown_anchor {
-                open = open.dropdown(
+                // The catcher under the menu is what makes a press outside it
+                // close the menu instead of reaching the page beneath.
+                open = open.dropdown(stack![
+                    popover_dismiss_area(Message::CloseDropdown),
                     Dropdown::new(vec![
                         MenuItem::new("Duplicate", Message::PickedFromMenu("Duplicated"))
                             .shortcut("Ctrl+D"),
@@ -940,49 +947,58 @@ impl App {
                             .destructive(true),
                     ])
                     .anchor(anchor.x, anchor.y + anchor.height + PANEL_GAP),
-                );
+                ]);
             }
         }
 
         if let Some(anchor) = self.menu_at {
-            open = open.dropdown(ContextMenu::new(
-                vec![
-                    MenuItem::new("Cut", Message::CloseContextMenu).shortcut("Ctrl+X"),
-                    MenuItem::new("Copy", Message::CloseContextMenu).shortcut("Ctrl+C"),
-                    MenuItem::new("Archive", Message::CloseContextMenu).enabled(false),
-                    MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
-                ],
-                (anchor.x, anchor.y + anchor.height + PANEL_GAP),
-            ));
+            open = open.dropdown(stack![
+                popover_dismiss_area(Message::CloseContextMenu),
+                ContextMenu::new(
+                    vec![
+                        MenuItem::new("Cut", Message::CloseContextMenu).shortcut("Ctrl+X"),
+                        MenuItem::new("Copy", Message::CloseContextMenu).shortcut("Ctrl+C"),
+                        MenuItem::new("Archive", Message::CloseContextMenu).enabled(false),
+                        MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
+                    ],
+                    (anchor.x, anchor.y + anchor.height + PANEL_GAP),
+                ),
+            ]);
         }
 
         // The sidebar item's right-click intent lands here: the menu's items
         // and its placement are the application's, not the sidebar's.
         if let Some(at) = self.sidebar_menu_at {
-            open = open.dropdown(ContextMenu::new(
-                vec![
-                    MenuItem::new("Open", Message::CloseContextMenu),
-                    MenuItem::new("Rename", Message::CloseContextMenu).shortcut("F2"),
-                    MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
-                ],
-                at,
-            ));
+            open = open.dropdown(stack![
+                popover_dismiss_area(Message::CloseContextMenu),
+                ContextMenu::new(
+                    vec![
+                        MenuItem::new("Open", Message::CloseContextMenu),
+                        MenuItem::new("Rename", Message::CloseContextMenu).shortcut("F2"),
+                        MenuItem::new("Delete", Message::CloseContextMenu).destructive(true),
+                    ],
+                    at,
+                ),
+            ]);
         }
 
         if self.popover_open {
             if let Some(anchor) = self.popover_anchor {
-                open = open.dropdown(Popover::new(
-                    column![
-                        heading("Quick settings", Heading::H4),
-                        paragraph("Adjust how the gallery behaves."),
-                        button("Close")
-                            .secondary()
-                            .size(Size::Sm)
-                            .on_press(Message::TogglePopover),
-                    ]
-                    .spacing(12),
-                    (anchor.x, anchor.y + anchor.height + PANEL_GAP),
-                ));
+                open = open.dropdown(stack![
+                    popover_dismiss_area(Message::TogglePopover),
+                    Popover::new(
+                        column![
+                            heading("Quick settings", Heading::H4),
+                            paragraph("Adjust how the gallery behaves."),
+                            button("Close")
+                                .secondary()
+                                .size(Size::Sm)
+                                .on_press(Message::TogglePopover),
+                        ]
+                        .spacing(12),
+                        (anchor.x, anchor.y + anchor.height + PANEL_GAP),
+                    ),
+                ]);
             }
         }
 

@@ -674,11 +674,18 @@ sheet("通知", body).side(DrawerSide::Bottom)
 
 ### Dropdown / ContextMenu / Popover
 
+菜单与气泡本身不带"点外关闭"——应用托管它们时，垫一层
+[`popover_dismiss_area`](crate::widgets::overlay::popover_dismiss_area)（全屏透明捕捉层，
+位于菜单之下）：点外面发布关闭消息并拦下这次点击，点菜单内的条目则由条目自己应答。
+
 ```rust
-use iced_kit::widgets::overlay::{Dropdown, ContextMenu, Popover, PopoverPlacement};
+use iced::widget::stack;
+use iced_kit::widgets::overlay::{Dropdown, ContextMenu, Popover, PopoverPlacement,
+                                popover_dismiss_area};
 
 // 菜单：锚点常来自 trigger 或 ContextMenu 的右键位置
-open = open.dropdown(
+open = open.dropdown(stack![
+    popover_dismiss_area(Message::CloseMenu),       // 点外面 → 关闭
     Dropdown::new(vec![
         MenuItem::new("复制", Message::Copy).shortcut("Ctrl+C").icon("⧉"),
         MenuItem::new("删除", Message::Delete).destructive(true),
@@ -686,20 +693,22 @@ open = open.dropdown(
     ])
     .anchor(point.x, point.y)
     .align(DropdownAlign::End),   // 贴右缘时向内展开
-);
+]);
 
-// 右键菜单
-open = open.dropdown(ContextMenu::new(items, (x, y)));
+// 右键菜单：同样垫一层
+open = open.dropdown(stack![
+    popover_dismiss_area(Message::CloseMenu),
+    ContextMenu::new(items, (x, y)),
+]);
 
 // 气泡卡片：任意内容，四向放置
-open = open.dropdown(
+open = open.dropdown(stack![
+    popover_dismiss_area(Message::ClosePopover),
     Popover::new(column![heading("快捷设置", Heading::H4), body].spacing(12), (x, y))
         .placement(PopoverPlacement::BottomStart)
         .width(280.0),
-);
+]);
 ```
-
-`popover_dismiss_area(message)` 是点外关闭用的全屏透明捕捉层，垫在面板下方即可。
 
 ### tooltip 与 kbd
 
