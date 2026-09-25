@@ -7,18 +7,18 @@ use iced::advanced::{layout, mouse, renderer, Clipboard, Shell};
 use iced::{Background, Border, Color, Element, Event, Length, Rectangle, Size};
 use std::borrow::Cow;
 
-/// How long one breath of the skeleton's pulse takes, in seconds.
+/// How long one sweep of the highlight takes, in seconds.
 ///
 /// Slow enough to read as waiting rather than as activity: a skeleton stands in
-/// for content that has not arrived, and a brisk pulse would compete with the
+/// for content that has not arrived, and a brisk sweep would compete with the
 /// spinner the application shows for work that is actually happening.
-const PULSE_PERIOD: f32 = 1.6;
+const SWEEP_PERIOD: f32 = 1.6;
 
-/// The dimmest the pulse takes the surface.
-const PULSE_MIN: f32 = 0.45;
+/// How wide the sweeping highlight is, as a fraction of the block.
+const SWEEP_SPREAD: f32 = 0.4;
 
-/// The brightest the pulse takes it, which is the theme's own muted color.
-const PULSE_MAX: f32 = 1.0;
+/// The highlight's alpha over the muted surface.
+const SWEEP_ALPHA: f32 = 0.55;
 
 /// The shape of a skeleton block.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -38,9 +38,10 @@ pub enum SkeletonShape {
 /// not; it is deliberately not interactive and not focusable, so assistive
 /// technology skips it.
 ///
-/// Its surface pulses slowly while it is on screen, which is what distinguishes
-/// a placeholder from content that happens to be grey. The pulse stops when the
-/// application has asked for reduced motion, leaving a flat surface.
+/// A light sweeps across its surface while it is on screen, which is what
+/// distinguishes a placeholder from content that happens to be grey. The sweep
+/// stops when the application has asked for reduced motion, leaving a flat
+/// surface.
 ///
 /// ```
 /// # use iced_kit::widgets::{skeleton, SkeletonShape};
@@ -105,14 +106,14 @@ impl Shimmer {
         }
     }
 
-    /// The alpha multiplier the pulse is at, given the clock's phase.
-    fn pulse(phase: f32) -> f32 {
-        let turns = (phase / PULSE_PERIOD).fract();
-        // A raised sine, so the surface spends equal time brightening and
-        // dimming and there is no seam where the cycle restarts.
-        let wave = (turns * std::f32::consts::TAU).sin() * 0.5 + 0.5;
-
-        PULSE_MIN + (PULSE_MAX - PULSE_MIN) * wave
+    /// Where the highlight's leading edge sits at the clock's phase, as a
+    /// fraction of the distance it travels.
+    ///
+    /// The band starts fully off one edge and ends fully off the other, so a
+    /// sweep has no pause at either end — the same motion the shimmer family
+    /// makes, which is what keeps the two reading as one system.
+    fn sweep_progress(phase: f32) -> f32 {
+        phase.rem_euclid(SWEEP_PERIOD) / SWEEP_PERIOD
     }
 }
 
@@ -152,7 +153,7 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        // Each redraw advances the pulse and asks for the next frame, which is
+        // Each redraw advances the sweep and asks for the next frame, which is
         // what animates the surface without the application owning a timer. A
         // reduced-motion application gets the flat surface and, because no
         // frame is requested, no redraw loop either.
@@ -183,11 +184,6 @@ where
         }
 
         let muted = theme.colors().muted;
-        let alpha = if crate::motion::reduce_motion() {
-            1.0
-        } else {
-            Self::pulse(tree.state.downcast_ref::<Clock>().phase())
-        };
 
         renderer.fill_quad(
             renderer::Quad {
@@ -200,11 +196,45 @@ where
                 shadow: iced::Shadow::default(),
                 snap: true,
             },
-            Background::Color(Color {
-                a: muted.a * alpha,
-                ..muted
-            }),
+            Background::Color(muted),
         );
+
+        // The highlight is a translucent band of the surface color sweeping
+        // across the block — the same motion the shimmer family makes. It is
+        // clipped to the block, so it never strays past a rounded corner into
+        // the neighbours a list of placeholders sits among.
+        if crate::motion::reduce_motion() || bounds.width <= 0.0 {
+            return;
+        }
+
+        let clock = tree.state.downcast_ref::<Clock>();
+        let spread = (bounds.width * SWEEP_SPREAD).max(24.0);
+        let travel = bounds.width + spread;
+        let x = bounds.x - spread + travel * Self::sweep_progress(clock.phase());
+
+        renderer.with_layer(bounds, |renderer| {
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds: Rectangle {
+                        x,
+                        y: bounds.y,
+                        width: spread,
+                        height: bounds.height,
+                    },
+                    border: Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: self.radius.into(),
+                    },
+                    shadow: iced::Shadow::default(),
+                    snap: false,
+                },
+                Background::Color(Color {
+                    a: SWEEP_ALPHA,
+                    ..theme.colors().surface
+                }),
+            );
+        });
     }
 }
 
@@ -292,30 +322,31 @@ pub fn placeholder_caption<'a>(caption: impl Into<Cow<'a, str>>) -> Cow<'a, str>
 mod tests {
     use super::{
         skeleton, skeleton_list_item, skeleton_table, Shimmer, SkeletonRow, SkeletonShape,
+        SWEEP_PERIOD,
     };
     use crate::theme::Theme;
 
-    /// The pulse must stay within its documented range, or a skeleton would
-    /// either vanish or flare brighter than the content it stands in for.
+    /// The sweep's position must stay a fraction, or a highlight would be laid
+    /// out somewhere the block is not.
     #[test]
-    fn the_pulse_stays_within_its_range() {
+    fn the_sweep_stays_within_its_track() {
         for step in 0..=1000 {
             let phase = step as f32 * 0.01;
-            let pulse = Shimmer::pulse(phase);
+            let progress = Shimmer::sweep_progress(phase);
 
             assert!(
-                (super::PULSE_MIN..=super::PULSE_MAX).contains(&pulse),
-                "a pulse of {pulse} at phase {phase} left its range"
+                (0.0..1.0).contains(&progress),
+                "a progress of {progress} at phase {phase} left the track"
             );
         }
     }
 
-    /// The pulse must actually move, or the skeleton is back to being static —
+    /// The sweep must actually move, or the skeleton is back to being static —
     /// which is the state this replaced.
     #[test]
-    fn the_pulse_moves() {
+    fn the_sweep_moves() {
         let samples: Vec<f32> = (0..40)
-            .map(|step| Shimmer::pulse(step as f32 * 0.1))
+            .map(|step| Shimmer::sweep_progress(step as f32 * 0.1))
             .collect();
 
         let lowest = samples.iter().copied().fold(f32::INFINITY, f32::min);
@@ -323,15 +354,16 @@ mod tests {
 
         assert!(
             highest - lowest > 0.2,
-            "the pulse barely moved: {lowest} to {highest}"
+            "the sweep barely moved: {lowest} to {highest}"
         );
     }
 
-    /// It must be periodic, so the surface does not jump when a cycle restarts.
+    /// It must be periodic, so the highlight does not jump when a cycle
+    /// restarts.
     #[test]
-    fn the_pulse_repeats_without_a_seam() {
-        let start = Shimmer::pulse(0.0);
-        let after_a_period = Shimmer::pulse(super::PULSE_PERIOD);
+    fn the_sweep_repeats_without_a_seam() {
+        let start = Shimmer::sweep_progress(0.0);
+        let after_a_period = Shimmer::sweep_progress(SWEEP_PERIOD);
 
         assert!(
             (start - after_a_period).abs() < 1e-4,
