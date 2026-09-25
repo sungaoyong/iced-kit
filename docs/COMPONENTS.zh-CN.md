@@ -656,7 +656,10 @@ open = open.drawer(
         .header(drawer_header("详情", Message::DrawerDismissed))
         .side(DrawerSide::Right)      // Left / Right / Bottom
         .presence(&self.drawer_presence)
-        .on_dismiss(Message::DrawerDismissed),
+        .on_dismiss(Message::DrawerDismissed)
+        // 离场画完的那一帧发布：处理它不需要改任何状态——围绕这条消息的
+        // view 重建才会把 drawer（连同遮罩）从屏幕上移走
+        .on_closed(Message::DrawerExitDrawn),
 );
 
 // sheet：从窗口边缘滑入、止步于标题栏之下的轻量面板
@@ -665,6 +668,9 @@ sheet("通知", body).side(DrawerSide::Bottom)
 
 关闭途径有两处：点 ✕（或应用放进 header/footer 的任何按钮），以及点 drawer 之外的背板。
 面板自身的空白处不会误关——那是有意的行为，所以**一定要提供 header 里的关闭钮**。
+
+**遮罩为什么会残留**：drawer 滑出结束后，把它从 view 里移走是一次 view 变更，而 view
+只在消息前后重建。`on_closed` 就是那一帧的信号——收到后什么都不用做，重建即完成移除。
 
 ### Dropdown / ContextMenu / Popover
 

@@ -398,6 +398,10 @@ enum Message {
     /// a press that lands while the drawer's exit is still being drawn must
     /// not flip the drawer back open.
     DrawerDismissed,
+    /// The drawer's exit has finished drawing. The message itself does
+    /// nothing; the view rebuild around it is what removes the drawer — and
+    /// its backdrop — from the screen.
+    DrawerExitDrawn,
     CloseContextMenu,
     TogglePopover,
     Scrolled(VirtualListState),
@@ -553,7 +557,10 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Noop => {}
+            // DrawerExitDrawn is here on purpose: its body does nothing, and
+            // the view rebuild around any message is what drops the drawer
+            // — exit already drawn — from the screen.
+            Message::Noop | Message::DrawerExitDrawn => {}
             Message::SectionPicked(section) => {
                 self.selected = section;
                 // A panel belongs to the page that opened it.
@@ -998,7 +1005,8 @@ impl App {
                 .header(overlay::drawer_header("Details", Message::DrawerDismissed))
                 .side(DrawerSide::Right)
                 .presence(&self.drawer_presence)
-                .on_dismiss(Message::DrawerDismissed),
+                .on_dismiss(Message::DrawerDismissed)
+                .on_closed(Message::DrawerExitDrawn),
             );
         }
 

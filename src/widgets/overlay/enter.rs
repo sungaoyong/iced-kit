@@ -71,6 +71,10 @@ struct EnterState {
     travelled: f32,
     /// The frame the transition started on, which only the first redraw sets.
     started_at: Option<Instant>,
+    /// Whether the previous frame was mid-exit. The frame the exit finishes is
+    /// the frame the application has to hear about: that is when it may stop
+    /// drawing the surface, and dropping it needs a rebuilt view.
+    exiting: bool,
 }
 
 impl EnterState {
@@ -81,6 +85,7 @@ impl EnterState {
             progress: Progress::new(true),
             travelled: 1.0,
             started_at: None,
+            exiting: false,
         }
     }
 
@@ -125,10 +130,19 @@ pub(crate) struct Enter<'a, Message, Renderer = iced::Renderer> {
     animate: bool,
     /// The application's presence, when this surface also has to animate as it
     /// leaves. Its progress drives the travel instead of the local clock.
-    presence: Option<crate::motion::Presence>,
+    ///
+    /// It is borrowed, never copied: the application's `show(false)` has to
+    /// reach the surface, or an exit would read as a freeze — the surface
+    /// animating to where the last state it saw told it to be.
+    presence: Option<&'a crate::motion::Presence>,
+    /// The message published on the frame the exit finishes drawing. The
+    /// application needs it because dropping a surface is a view change, and a
+    /// view only rebuilds on a message — without this, the last frame of an
+    /// exit would sit on screen until the next click.
+    on_exit_finished: Option<Message>,
 }
 
-impl<'a, Message, Renderer> Enter<'a, Message, Renderer> {
+impl<'a, Message: Clone, Renderer> Enter<'a, Message, Renderer> {
     /// Wraps `content` in an enter transition.
     pub(crate) fn new(
         content: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -141,7 +155,15 @@ impl<'a, Message, Renderer> Enter<'a, Message, Renderer> {
             duration: DURATION_NORMAL,
             animate: true,
             presence: None,
+            on_exit_finished: None,
         }
+    }
+
+    /// Publishes `message` on the frame the exit finishes drawing, so the
+    /// application can stop supplying the surface and rebuild its view.
+    pub(crate) fn on_exit_finished(mut self, message: Message) -> Self {
+        self.on_exit_finished = Some(message);
+        self
     }
 
     /// Drives the travel from the application's presence rather than locally, so
@@ -150,8 +172,8 @@ impl<'a, Message, Renderer> Enter<'a, Message, Renderer> {
     /// The application keeps calling this while
     /// [`Presence::should_render`](crate::motion::Presence::should_render) is
     /// true, and stops once the exit has been drawn.
-    pub(crate) fn presence(mut self, presence: &crate::motion::Presence) -> Self {
-        self.presence = Some(presence.clone());
+    pub(crate) fn presence(mut self, presence: &'a crate::motion::Presence) -> Self {
+        self.presence = Some(presence);
         self
     }
 
@@ -242,7 +264,17 @@ where
                 state.travelled = presence.progress(*now);
 
                 if presence.is_animating(*now) {
+                    state.exiting = true;
                     shell.request_redraw();
+                } else if state.exiting {
+                    // The frame the exit completes. The application has to
+                    // hear it: dropping the surface is a view change, and a
+                    // view rebuilds only around a message.
+                    state.exiting = false;
+
+                    if let Some(message) = &self.on_exit_finished {
+                        shell.publish(message.clone());
+                    }
                 }
             } else if self.animate && !crate::motion::reduce_motion() {
                 // The first frame is the surface's appearance, so it is also the

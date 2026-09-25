@@ -293,7 +293,7 @@ fn a_presence_keeps_a_leaving_surface_mounted() {
     use iced_kit::motion::Presence;
 
     let now = std::time::Instant::now();
-    let mut presence = Presence::visible();
+    let presence = Presence::visible();
 
     presence.dismiss(now);
 

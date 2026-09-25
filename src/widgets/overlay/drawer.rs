@@ -11,13 +11,6 @@ use crate::widgets::{button as kit_button, Button};
 use iced::widget::{column, container, row, text, MouseArea, Space};
 use iced::{Alignment, Element, Length, Padding};
 
-/// The furthest a drawer slides as it arrives, in logical pixels.
-///
-/// A drawer wider than this still travels this far: the motion is meant to read
-/// as the panel entering, and a full-width slide would take longer to complete
-/// than the transition does, so it would appear to stop short and then snap.
-const DRAWER_TRAVEL: f32 = 96.0;
-
 /// Which edge a drawer slides in from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DrawerSide {
@@ -71,8 +64,15 @@ pub struct Drawer<'a, Message> {
     side: DrawerSide,
     size: DrawerSize,
     on_dismiss: Option<Message>,
+    /// Published on the frame the exit finishes drawing: the application's
+    /// cue to stop supplying the drawer, which is a view change and only
+    /// happens around a message.
+    on_closed: Option<Message>,
     footer: Option<Element<'a, Message, Theme>>,
-    presence: Option<crate::motion::Presence>,
+    /// Borrowed, not copied: the drawer has to see the application's
+    /// `show(false)` the moment it happens, or its exit would freeze in place
+    /// and the panel would only leave on the next click.
+    presence: Option<&'a crate::motion::Presence>,
     top_inset: f32,
 }
 
@@ -86,6 +86,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             side: DrawerSide::default(),
             size: DrawerSize::default(),
             on_dismiss: None,
+            on_closed: None,
             footer: None,
             presence: None,
             top_inset: 0.0,
@@ -130,8 +131,19 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
     /// supplying the drawer while it reports
     /// [`should_render`](crate::motion::Presence::should_render); the exit is
     /// drawn from that.
-    pub fn presence(mut self, presence: &crate::motion::Presence) -> Self {
-        self.presence = Some(presence.clone());
+    pub fn presence(mut self, presence: &'a crate::motion::Presence) -> Self {
+        self.presence = Some(presence);
+        self
+    }
+
+    /// Publishes `message` on the frame the exit finishes drawing.
+    ///
+    /// Dropping the drawer from the view is a view change, and a view rebuilds
+    /// only around a message: without this, the last frame of an exit — the
+    /// backdrop alone, the panel already gone — would sit on screen until the
+    /// next click. Handle it by doing nothing; the rebuild is the work.
+    pub fn on_closed(mut self, message: Message) -> Self {
+        self.on_closed = Some(message);
         self
     }
 
@@ -160,6 +172,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             side,
             size,
             on_dismiss,
+            on_closed,
             footer,
             presence,
             top_inset,
@@ -259,13 +272,23 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
         };
 
         let surface = Enter::new(positioned, from)
-            .distance(extent.min(DRAWER_TRAVEL))
+            // The full extent: the panel slides all the way in and, on its
+            // exit, all the way back out. A clamped travel would stop short
+            // and then snap away when the application stops drawing it.
+            .distance(extent)
             .duration(DURATION_SLOW);
 
         // With a presence the surface also slides back out, since the presence
         // knows how far through its exit it is.
         let surface = match &presence {
-            Some(presence) => surface.presence(presence),
+            Some(presence) => {
+                let surface = surface.presence(presence);
+
+                match on_closed {
+                    Some(message) => surface.on_exit_finished(message),
+                    None => surface,
+                }
+            }
             None => surface,
         };
 

@@ -46,6 +46,8 @@
 //! application. So the application keeps the content and asks this whether it is
 //! still needed.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use crate::motion::{Progress, DURATION_NORMAL};
@@ -56,12 +58,9 @@ use crate::motion::{Progress, DURATION_NORMAL};
 /// has already been read, so waiting for it is waiting for nothing.
 pub const DURATION_EXIT: Duration = Duration::from_millis(140);
 
-/// Tracks whether something should still be drawn as it leaves.
-///
-/// The application owns this value, hands it the current time when the surface
-/// opens or closes, and asks it whether to keep rendering.
+/// The state a [`Presence`] shares between its handles.
 #[derive(Debug, Clone)]
-pub struct Presence {
+struct Inner {
     progress: Progress,
     /// Whether the surface is showing.
     showing: bool,
@@ -69,13 +68,32 @@ pub struct Presence {
     duration: Duration,
 }
 
+/// Tracks whether something should still be drawn as it leaves.
+///
+/// The application owns this value, hands it the current time when the surface
+/// opens or closes, and asks it whether to keep rendering.
+///
+/// # Why it is a shared handle
+///
+/// A surface animating out reads the same presence the application writes:
+/// `Presence` is cheap to clone, and every clone is the same handle. A widget
+/// that was handed a copy therefore sees a `show(false)` the moment it
+/// happens — with detached copies, the surface would animate to wherever the
+/// state it last saw told it to go, and an exit would read as a freeze.
+#[derive(Debug, Clone)]
+pub struct Presence {
+    inner: Rc<RefCell<Inner>>,
+}
+
 impl Presence {
     /// Creates a presence that is hidden and not animating.
     pub fn new() -> Self {
         Self {
-            progress: Progress::new(false),
-            showing: false,
-            duration: DURATION_NORMAL,
+            inner: Rc::new(RefCell::new(Inner {
+                progress: Progress::new(false),
+                showing: false,
+                duration: DURATION_NORMAL,
+            })),
         }
     }
 
@@ -83,17 +101,19 @@ impl Presence {
     /// when the application starts.
     pub fn visible() -> Self {
         Self {
-            progress: Progress::new(true),
-            showing: true,
-            duration: DURATION_NORMAL,
+            inner: Rc::new(RefCell::new(Inner {
+                progress: Progress::new(true),
+                showing: true,
+                duration: DURATION_NORMAL,
+            })),
         }
     }
 
     /// Sets how long the transition takes.
     #[must_use]
-    pub fn duration(mut self, duration: Duration) -> Self {
-        self.duration = duration;
-        self
+    pub fn duration(&self, duration: Duration) -> Self {
+        self.inner.borrow_mut().duration = duration;
+        self.clone()
     }
 
     /// Shows the surface, or starts it leaving.
@@ -101,8 +121,10 @@ impl Presence {
     /// Call this from the application's update when the surface is opened or
     /// closed. Calling it with the state it already has changes nothing, so it
     /// is safe to call on every frame.
-    pub fn show(&mut self, showing: bool, at: Instant) {
-        if self.showing == showing {
+    pub fn show(&self, showing: bool, at: Instant) {
+        let mut inner = self.inner.borrow_mut();
+
+        if inner.showing == showing {
             return;
         }
 
@@ -111,10 +133,10 @@ impl Presence {
         // restarts from a standstill, which is correct here: an exit that has
         // been replaced by an entrance should begin its arrival from nothing
         // rather than carry the momentum of the exit it interrupted.
-        self.progress = Progress::with_timing(
-            self.showing,
+        inner.progress = Progress::with_timing(
+            inner.showing,
             if showing {
-                self.duration
+                inner.duration
             } else {
                 DURATION_EXIT
             },
@@ -124,15 +146,15 @@ impl Presence {
                 crate::motion::ease_exit
             },
         );
-        self.progress.set_target(showing, at);
-        self.showing = showing;
+        inner.progress.set_target(showing, at);
+        inner.showing = showing;
     }
 
     /// Starts the surface leaving.
     ///
     /// This is the same as [`Self::show`] with `false`, and reads better at a
     /// dismissal site.
-    pub fn dismiss(&mut self, at: Instant) {
+    pub fn dismiss(&self, at: Instant) {
         self.show(false, at);
     }
 
@@ -140,7 +162,7 @@ impl Presence {
     /// arriving.
     #[must_use]
     pub fn is_visible(&self) -> bool {
-        self.showing
+        self.inner.borrow().showing
     }
 
     /// Returns whether the surface should be drawn this frame.
@@ -154,7 +176,8 @@ impl Presence {
     /// them.
     #[must_use]
     pub fn should_render(&self) -> bool {
-        self.showing || self.progress.is_animating(Instant::now())
+        let inner = self.inner.borrow();
+        inner.showing || inner.progress.is_animating(Instant::now())
     }
 
     /// Returns how far the surface has arrived, from `0.0` to `1.0`.
@@ -164,13 +187,13 @@ impl Presence {
     /// present.
     #[must_use]
     pub fn progress(&self, at: Instant) -> f32 {
-        self.progress.value(at)
+        self.inner.borrow().progress.value(at)
     }
 
     /// Returns whether a transition is running.
     #[must_use]
     pub fn is_animating(&self, at: Instant) -> bool {
-        self.progress.is_animating(at)
+        self.inner.borrow().progress.is_animating(at)
     }
 }
 
@@ -210,7 +233,7 @@ mod tests {
     /// point of the type: the application has already closed it by then.
     #[test]
     fn a_leaving_surface_is_still_drawn() {
-        let mut presence = Presence::visible();
+        let presence = Presence::visible();
         let now = std::time::Instant::now();
 
         presence.dismiss(now);
@@ -226,7 +249,7 @@ mod tests {
     /// application would render it forever.
     #[test]
     fn a_finished_exit_stops_being_drawn() {
-        let mut presence = Presence::visible();
+        let presence = Presence::visible();
         let now = std::time::Instant::now();
 
         presence.dismiss(now);
@@ -244,7 +267,7 @@ mod tests {
     /// surface can scale its offset and alpha by it.
     #[test]
     fn the_progress_falls_as_the_surface_leaves() {
-        let mut presence = Presence::visible();
+        let presence = Presence::visible();
         let now = std::time::Instant::now();
 
         presence.dismiss(now);
@@ -265,7 +288,7 @@ mod tests {
     /// or a redraw would re-trigger the animation every frame.
     #[test]
     fn showing_an_already_visible_surface_changes_nothing() {
-        let mut presence = Presence::visible();
+        let presence = Presence::visible();
         let now = std::time::Instant::now();
 
         presence.show(true, now);
@@ -278,7 +301,7 @@ mod tests {
     /// A dismissal is just a hide, so it must say so.
     #[test]
     fn dismissing_hides_the_surface() {
-        let mut presence = Presence::visible();
+        let presence = Presence::visible();
         presence.dismiss(std::time::Instant::now());
 
         assert!(!presence.is_visible());

@@ -35,6 +35,18 @@ fn click(simulator: &mut Simulator<'static, Message, Theme>, at: Point) {
     let _ = simulator.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
 }
 
+/// Drives the redraw loop with real-clock frames, the way a live window
+/// produces them, so any entrance the surface is running finishes before the
+/// press lands — the way a real user meets a settled surface.
+fn settle(simulator: &mut Simulator<'static, Message, Theme>) {
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(16));
+        let _ = simulator.simulate([Event::Window(iced::window::Event::RedrawRequested(
+            std::time::Instant::now(),
+        ))]);
+    }
+}
+
 fn messages_after_click(element: Element<'static, Message, Theme>, at: Point) -> Vec<Message> {
     let mut simulator =
         Simulator::with_size(iced::Settings::default(), Size::new(900.0, 600.0), element);
@@ -42,6 +54,8 @@ fn messages_after_click(element: Element<'static, Message, Theme>, at: Point) ->
     simulator
         .snapshot(&Theme::light())
         .expect("the overlay should render");
+
+    settle(&mut simulator);
 
     click(&mut simulator, at);
 

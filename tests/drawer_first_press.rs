@@ -48,7 +48,7 @@ fn click(simulator: &mut Simulator<'static, Message, Theme>, at: Point) {
 fn the_first_backdrop_press_dismisses_an_open_drawer() {
     iced_kit::motion::set_reduce_motion(true);
 
-    let mut presence = Presence::new();
+    let presence = Presence::new();
     presence.show(true, std::time::Instant::now());
     let presence: &'static Presence = Box::leak(Box::new(presence));
 
