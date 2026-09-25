@@ -3,7 +3,7 @@
 //! Run with `cargo run --example gallery`.
 
 use iced::widget::{column, container, row, scrollable, text};
-use iced::{Alignment, Element, Length, Task};
+use iced::{Alignment, Color, Element, Length, Task};
 use iced_kit::icons::IconName;
 use iced_kit::motion::Presence;
 use iced_kit::prelude::*;
@@ -73,6 +73,77 @@ fn format_client(size: u64) -> String {
     format!("{} on disk", format_bytes(size))
 }
 
+/// A page of the gallery, shown one at a time in the demo pane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Section {
+    Buttons,
+    Form,
+    FormLayout,
+    NewComponents,
+    Chat,
+    InputGroups,
+    Selection,
+    Display,
+    Feedback,
+    Overlays,
+    Tabs,
+    Navigation,
+    Carousel,
+    Data,
+    Settings,
+    GroupBoxes,
+    Sidebar,
+    Shell,
+}
+
+impl Section {
+    /// Every page, in the order the nav lists them.
+    const ALL: &'static [Section] = &[
+        Section::Buttons,
+        Section::Form,
+        Section::FormLayout,
+        Section::NewComponents,
+        Section::Chat,
+        Section::InputGroups,
+        Section::Selection,
+        Section::Display,
+        Section::Feedback,
+        Section::Overlays,
+        Section::Tabs,
+        Section::Navigation,
+        Section::Carousel,
+        Section::Data,
+        Section::Settings,
+        Section::GroupBoxes,
+        Section::Sidebar,
+        Section::Shell,
+    ];
+
+    /// The name the nav shows.
+    fn label(self) -> &'static str {
+        match self {
+            Section::Buttons => "Buttons",
+            Section::Form => "Form fields",
+            Section::FormLayout => "Form layout",
+            Section::NewComponents => "Combos, dates & color",
+            Section::Chat => "Chat",
+            Section::InputGroups => "Input groups",
+            Section::Selection => "Selection",
+            Section::Display => "Display",
+            Section::Feedback => "Feedback",
+            Section::Overlays => "Overlays",
+            Section::Tabs => "Tabs & carousel",
+            Section::Navigation => "Navigation & data",
+            Section::Carousel => "Carousel",
+            Section::Data => "Data",
+            Section::Settings => "Settings",
+            Section::GroupBoxes => "Group boxes",
+            Section::Sidebar => "Sidebar",
+            Section::Shell => "Shell",
+        }
+    }
+}
+
 /// The state of the gallery.
 ///
 /// An example naturally tracks several independent toggles at once, which is
@@ -98,6 +169,22 @@ struct App {
     file_items: Vec<iced_kit::widgets::TreeItem>,
     /// The combobox demo's options, kept for the same reason.
     country_options: Vec<iced_kit::widgets::ComboBoxOption<usize>>,
+    /// Which page the demo pane shows.
+    selected: Section,
+    /// The split components' open flags. Each reports an intent and the
+    /// gallery hosts its panel, the same division of labour as every
+    /// overlay in the crate.
+    combo_open: bool,
+    date_open: bool,
+    color_open: bool,
+    /// The combobox's query, carried by its trigger's text field.
+    combo_query: String,
+    /// The countries the combobox shows as picked.
+    picked_countries: Vec<usize>,
+    /// The date the picker's field shows, as typed or picked.
+    picked_date: String,
+    /// The color the picker's swatch shows.
+    picked_color: Color,
     /// The chat demo's transcript and its scroll state, both caller-owned.
     chat: MessageScrollerState,
     chat_lines: Vec<String>,
@@ -204,9 +291,23 @@ impl std::fmt::Display for Plan {
 #[derive(Debug, Clone)]
 enum Message {
     ToggleTheme,
-    /// A press the demo does not act on: the new-components section shows what
-    /// these controls look like rather than wiring every one to state.
+    /// A press the demo does not act on: some sections show what controls
+    /// look like rather than wiring every one to state.
     Noop,
+    /// The demo pane's page selection.
+    SectionPicked(Section),
+    /// The split components' open intents.
+    ToggleCombo,
+    ToggleDatePicker,
+    ToggleColorPicker,
+    /// The combobox's query, and the country picked from its panel.
+    ComboQuery(String),
+    CountryPicked(usize),
+    /// The date field's text, and a date picked from the calendar.
+    DateText(String),
+    DatePicked(iced_kit::widgets::date::Date),
+    /// The color picker's swatch, changed from its panel.
+    ColorChanged(Color),
     NameChanged(String),
     EmailChanged(String),
     PasswordChanged(String),
@@ -298,6 +399,14 @@ impl Default for App {
                 iced_kit::widgets::ComboBoxOption::new(1, "Ghana"),
                 iced_kit::widgets::ComboBoxOption::new(2, "Japan").disabled(true),
             ],
+            selected: Section::Buttons,
+            combo_open: false,
+            date_open: false,
+            color_open: false,
+            combo_query: String::new(),
+            picked_countries: vec![2],
+            picked_date: "2024-02-14".to_owned(),
+            picked_color: Color::from_rgb8(0x33, 0x66, 0x99),
             file_tree: {
                 let mut tree = iced_kit::widgets::Tree::new().items(file_tree_items());
                 tree.expand_all();
@@ -406,6 +515,21 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Noop => {}
+            Message::SectionPicked(section) => self.selected = section,
+            Message::ToggleCombo => self.combo_open = !self.combo_open,
+            Message::ToggleDatePicker => self.date_open = !self.date_open,
+            Message::ToggleColorPicker => self.color_open = !self.color_open,
+            Message::ComboQuery(query) => self.combo_query = query,
+            Message::CountryPicked(value) => {
+                self.picked_countries = vec![value];
+                self.combo_open = false;
+            }
+            Message::DateText(text) => self.picked_date = text,
+            Message::DatePicked(date) => {
+                self.picked_date = date.to_string();
+                self.date_open = false;
+            }
+            Message::ColorChanged(color) => self.picked_color = color,
             Message::ToggleTheme => self.dark = !self.dark,
             Message::NameChanged(value) => self.name = value,
             Message::EmailChanged(value) => self.email = value,
@@ -559,38 +683,145 @@ impl App {
         Task::none()
     }
 
-    fn view(&self) -> Element<'_, Message, Theme> {
-        let content = column![
-            self.header(),
-            self.buttons_section(),
-            self.form_section(),
-            self.form_layout_section(),
-            self.new_components_section(),
-            self.chat_section(),
-            self.input_group_section(),
-            self.selection_section(),
-            self.display_section(),
-            self.feedback_section(),
-            self.overlay_section(),
-            self.tabs_section(),
-            self.navigation_section(),
-            self.carousel_section(),
-            self.data_section(),
-            self.settings_section(),
-            Self::group_box_section(),
-            self.sidebar_section(),
-            self.shell_section(),
-        ]
-        .spacing(24)
-        .padding(24);
+    /// The left-hand rail: one row per page, the current one marked.
+    fn nav(&self) -> Element<'_, Message, Theme> {
+        let items = Section::ALL
+            .iter()
+            .map(|section| ListItem::new(section.label()))
+            .collect();
 
-        let page = container(scrollable(content))
+        let selected = Section::ALL
+            .iter()
+            .position(|section| *section == self.selected);
+
+        container(
+            column![
+                heading("Components", Heading::H4),
+                list(items, selected, |index| {
+                    Message::SectionPicked(Section::ALL[index.min(Section::ALL.len() - 1)])
+                }),
+            ]
+            .spacing(8),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(12)
+        .class(Box::new(|theme: &Theme| container::Style {
+            background: Some(iced::Background::Color(theme.colors().muted)),
+            border: iced::Border::default(),
+            ..container::Style::default()
+        }) as container::StyleFn<'_, Theme>)
+        .into()
+    }
+
+    /// The page the demo pane shows.
+    fn selected_section(&self) -> Element<'_, Message, Theme> {
+        match self.selected {
+            Section::Buttons => self.buttons_section(),
+            Section::Form => self.form_section(),
+            Section::FormLayout => self.form_layout_section(),
+            Section::NewComponents => self.new_components_section(),
+            Section::Chat => self.chat_section(),
+            Section::InputGroups => self.input_group_section(),
+            Section::Selection => self.selection_section(),
+            Section::Display => self.display_section(),
+            Section::Feedback => self.feedback_section(),
+            Section::Overlays => self.overlay_section(),
+            Section::Tabs => self.tabs_section(),
+            Section::Navigation => self.navigation_section(),
+            Section::Carousel => self.carousel_section(),
+            Section::Data => self.data_section(),
+            Section::Settings => self.settings_section(),
+            Section::GroupBoxes => Self::group_box_section(),
+            Section::Sidebar => self.sidebar_section(),
+            Section::Shell => self.shell_section(),
+        }
+    }
+
+    fn view(&self) -> Element<'_, Message, Theme> {
+        let page = container(
+            column![
+                self.header(),
+                row![
+                    // The nav is a fixed rail; the pane takes the rest and
+                    // scrolls its own page, so a long demo never pushes the
+                    // nav off the side.
+                    container(self.nav()).width(Length::Fixed(220.0)),
+                    container(scrollable(self.selected_section()))
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .padding(24),
+                ]
+                .width(Length::Fill)
+                .height(Length::Fill),
+            ]
             .width(Length::Fill)
-            .height(Length::Fill);
+            .height(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill);
 
         // Every overlay is assembled in one place, in paint order: dropdowns
         // under the modal, toasts on top.
         let mut open = Layer::new();
+
+        // The split components' panels live here rather than inside their
+        // triggers: iced has no window-level z-order, so the application
+        // positions and hosts them. Each anchors under the demo pane's
+        // trigger row, which for a demo reads as attached.
+        if self.selected == Section::NewComponents {
+            const PANEL_ANCHOR: (f32, f32) = (260.0, 150.0);
+
+            if self.combo_open {
+                open = open.dropdown(
+                    combobox_panel(
+                        &self.country_options,
+                        &self.picked_countries,
+                        &self.combo_query,
+                        Message::CountryPicked,
+                    )
+                    .width(260.0)
+                    .max_height(200.0),
+                );
+            }
+
+            if self.date_open {
+                let month = iced_kit::widgets::date::parse(&self.picked_date)
+                    .unwrap_or_else(|| {
+                        iced_kit::widgets::date::Date::from_ymd(2024, 2, 14).unwrap()
+                    })
+                    .first_of_month();
+                let selected = iced_kit::widgets::date::parse(&self.picked_date);
+
+                let card = container(
+                    calendar::<Message>(month, selected)
+                        .on_select(Message::DatePicked)
+                        .number_of_months(1),
+                )
+                .padding(8)
+                .class(Box::new(|theme: &Theme| container::Style {
+                    background: Some(iced::Background::Color(theme.colors().surface)),
+                    border: iced::Border {
+                        color: theme.colors().border,
+                        width: 1.0,
+                        radius: f32::from(theme.radius().md).into(),
+                    },
+                    ..container::Style::default()
+                }) as container::StyleFn<'_, Theme>);
+
+                open = open.dropdown(
+                    Popover::new(card, PANEL_ANCHOR).placement(PopoverPlacement::BottomStart),
+                );
+            }
+
+            if self.color_open {
+                open = open.dropdown(
+                    color_picker_panel::<Message>(self.picked_color)
+                        .on_change(Message::ColorChanged)
+                        .width(240.0),
+                );
+            }
+        }
 
         if self.dropdown_open {
             open = open.dropdown(
@@ -1052,17 +1283,29 @@ impl App {
             "New components",
             column![
                 row![
-                    combobox::<usize, Message>(&self.country_options, Some(2), "Country")
-                        .clearable(Message::Noop)
-                        .on_toggle(Message::ToggleDropdown)
+                    // Each trigger only reports intent; the open panel is
+                    // hosted further down, in the layer.
+                    combobox::<usize, Message>(
+                        &self.country_options,
+                        self.picked_countries.first().copied(),
+                        "Country",
+                    )
+                    .query(&self.combo_query)
+                    .on_query(Message::ComboQuery)
+                    .open(self.combo_open)
+                    .on_toggle(Message::ToggleCombo)
+                    .fill(true),
+                    date_picker::<Message>("Pick a date", &self.picked_date)
+                        .open(self.date_open)
+                        .on_input(Message::DateText)
+                        .on_toggle(Message::ToggleDatePicker)
                         .fill(true),
-                    date_picker::<Message>("Pick a date", "2024-02-14")
-                        .fill(true)
-                        .on_toggle(Message::ToggleDropdown),
                 ]
                 .spacing(16),
                 row![
-                    color_picker::<Message>(iced::Color::from_rgb8(0x33, 0x66, 0x99)),
+                    color_picker::<Message>(self.picked_color)
+                        .open(self.color_open)
+                        .on_toggle(Message::ToggleColorPicker),
                     rating::<Message>(4).on_select(|_| Message::Noop),
                     clipboard_button::<Message>("cargo test")
                         .label("Copy")
