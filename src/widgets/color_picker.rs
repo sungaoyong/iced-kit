@@ -536,6 +536,37 @@ pub fn color_picker_panel<'a, Message: Clone + 'a>(color: Color) -> ColorPickerP
     ColorPickerPanel::new(color)
 }
 
+/// Reports the color at a point of the saturation/value square, the action
+/// capturing so a press on the panel never reaches a layer beneath it.
+fn pick<'a, Message: Clone>(
+    report: &(dyn Fn(Color) -> Message + 'a),
+    hue: f32,
+    position: Point,
+    bounds: Rectangle,
+) -> canvas::Action<Message> {
+    let saturation = (position.x - bounds.x) / bounds.width;
+    let value = 1.0 - (position.y - bounds.y) / bounds.height;
+    let next = Hsv::new(hue, saturation, value);
+
+    canvas::Action::publish(report(next.to_color())).and_capture()
+}
+
+/// Reports the color at a hue along the strip, the action capturing for the
+/// same reason the square's pick does.
+fn set_hue<'a, Message: Clone>(
+    report: &(dyn Fn(Color) -> Message + 'a),
+    saturation: f32,
+    value: f32,
+    x: f32,
+    bounds: Rectangle,
+) -> canvas::Action<Message> {
+    let fraction = ((x - bounds.x) / bounds.width).clamp(0.0, 1.0);
+    let mut next = Hsv::new(fraction * 360.0, saturation, value);
+    next.hue = fraction * 360.0;
+
+    canvas::Action::publish(report(next.to_color())).and_capture()
+}
+
 /// The saturation/value square for one hue.
 struct SvSquare<'a, Message> {
     hue: f32,
@@ -544,42 +575,56 @@ struct SvSquare<'a, Message> {
     on_change: Option<std::rc::Rc<dyn Fn(Color) -> Message + 'a>>,
 }
 
+/// Whether a picking surface is being dragged.
+///
+/// The state lives in the canvas's own tree slot, so it survives the panel
+/// being rebuilt around it — which happens on every color it reports.
+#[derive(Debug, Default, Clone, Copy)]
+struct Picking {
+    active: bool,
+}
+
 impl<Message: Clone> canvas::Program<Message, Theme> for SvSquare<'_, Message> {
-    type State = ();
+    type State = Picking;
 
     fn update(
         &self,
-        _state: &mut Self::State,
+        state: &mut Self::State,
         event: &iced::Event,
         bounds: Rectangle,
         cursor: iced::mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         let report = self.on_change.as_ref()?;
 
-        // The square works like the strip below it: a press picks where the
-        // marker goes, and a drag follows the hand. The action captures, or a
-        // press on the square would also reach whatever layer sits beneath the
-        // panel — a dismiss catcher, say, which would close the picker the
-        // moment it was used.
-        let interacting = matches!(
-            event,
-            iced::Event::Mouse(
-                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)
-                    | iced::mouse::Event::CursorMoved { .. }
-            )
-        );
-        if !interacting {
-            return None;
+        // The pick is anchored by a press and follows the pointer until it is
+        // released, even when the pointer strays past the edge: a surface this
+        // small with a drag that freezes at its border would read as broken.
+        // The reported position is clamped to the bounds, so the marker sits
+        // at the edge rather than somewhere meaningless.
+        match event {
+            iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) => {
+                let position = cursor.position_over(bounds)?;
+                state.active = true;
+                Some(pick(&**report, self.hue, position, bounds))
+            }
+            iced::Event::Mouse(iced::mouse::Event::CursorMoved { .. }) if state.active => {
+                let position = cursor.position()?;
+                Some(pick(
+                    &**report,
+                    self.hue,
+                    Point::new(
+                        position.x.clamp(bounds.x, bounds.x + bounds.width),
+                        position.y.clamp(bounds.y, bounds.y + bounds.height),
+                    ),
+                    bounds,
+                ))
+            }
+            iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+                state.active = false;
+                None
+            }
+            _ => None,
         }
-
-        let position = cursor.position_over(bounds)?;
-        let next = Hsv::new(
-            self.hue,
-            position.x / bounds.width,
-            1.0 - position.y / bounds.height,
-        );
-
-        Some(canvas::Action::publish(report(next.to_color())).and_capture())
     }
 
     fn draw(
@@ -642,38 +687,48 @@ struct HueStrip<'a, Message> {
 }
 
 impl<Message: Clone> canvas::Program<Message, Theme> for HueStrip<'_, Message> {
-    type State = ();
+    type State = Picking;
 
     fn update(
         &self,
-        _state: &mut Self::State,
+        state: &mut Self::State,
         event: &iced::Event,
         bounds: Rectangle,
         cursor: iced::mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         let report = self.on_change.as_ref()?;
 
-        // The strip follows a press and a drag, which is what lets a hue be
-        // found by eye rather than by clicking and looking away.
-        let dragging = matches!(
-            event,
-            iced::Event::Mouse(
-                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)
-                    | iced::mouse::Event::CursorMoved { .. }
-            )
-        );
-
-        if !dragging {
-            return None;
+        // The strip is 14px tall: a drag that froze the moment the pointer
+        // left it would be unusable, so a held pick follows the pointer with
+        // the hue clamped to the strip's ends.
+        match event {
+            iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) => {
+                let position = cursor.position_over(bounds)?;
+                state.active = true;
+                Some(set_hue(
+                    &**report,
+                    self.saturation,
+                    self.value,
+                    position.x,
+                    bounds,
+                ))
+            }
+            iced::Event::Mouse(iced::mouse::Event::CursorMoved { .. }) if state.active => {
+                let position = cursor.position()?;
+                Some(set_hue(
+                    &**report,
+                    self.saturation,
+                    self.value,
+                    position.x.clamp(bounds.x, bounds.x + bounds.width),
+                    bounds,
+                ))
+            }
+            iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+                state.active = false;
+                None
+            }
+            _ => None,
         }
-
-        let position = cursor.position_over(bounds)?;
-        let fraction = (position.x / bounds.width).clamp(0.0, 1.0);
-
-        let mut next = Hsv::new(self.hue, self.saturation, self.value);
-        next.hue = fraction * 360.0;
-
-        Some(canvas::Action::publish(report(next.to_color())).and_capture())
     }
 
     fn draw(
