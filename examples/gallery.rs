@@ -317,6 +317,9 @@ enum Message {
     Noop,
     /// The demo pane's page selection.
     SectionPicked(Section),
+    /// The file tree's events: the gallery holds the tree's state, so the
+    /// disclosure and selection changes come back through here to be applied.
+    TreeEvent(iced_kit::widgets::TreeEvent),
     /// The split components' open intents.
     ToggleCombo,
     ToggleDatePicker,
@@ -556,6 +559,13 @@ impl App {
                 // A panel belongs to the page that opened it.
                 self.open_panel = None;
             }
+            Message::TreeEvent(event) => match event {
+                // The tree is the caller's: these are the state changes the
+                // component read back, applied here so the next frame draws
+                // them.
+                iced_kit::widgets::TreeEvent::Toggled(id, _) => self.file_tree.toggle(&id),
+                iced_kit::widgets::TreeEvent::Selected(id) => self.file_tree.select(Some(&id)),
+            },
             // The anchor message precedes the toggle in the same batch, so a
             // panel opening always reads the bounds of the press that opened
             // it, and one closing wastes the update.
@@ -1439,7 +1449,7 @@ impl App {
                 .layout(StepLayout::Horizontal)
                 .on_select(|_| Message::Noop),
                 tree::<Message>(&self.file_items, &self.file_tree)
-                    .on_event(|_| Message::Noop)
+                    .on_event(Message::TreeEvent)
                     .max_height(140.0),
                 description_list(vec![
                     Description::new("Version").value("0.1.0"),
