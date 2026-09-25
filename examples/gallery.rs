@@ -984,13 +984,18 @@ impl App {
         if self.drawer_open || self.drawer_presence.should_render() {
             open = open.drawer(
                 Drawer::new(
-                    "Details",
+                    "",
                     column![
                         paragraph("A drawer slides in from an edge and leaves the page visible."),
                         text_input::<Message>("Name", &self.name),
                     ]
                     .spacing(12),
                 )
+                // The header carries the close control. A drawer is only
+                // dismissable from the backdrop beside it — a press on the
+                // drawer itself stays with the drawer — so without a visible
+                // way out, closing took two clicks.
+                .header(overlay::drawer_header("Details", Message::DrawerDismissed))
                 .side(DrawerSide::Right)
                 .presence(&self.drawer_presence)
                 .on_dismiss(Message::DrawerDismissed),

@@ -66,6 +66,7 @@ impl DrawerSize {
 #[must_use = "a Drawer does nothing unless it is added to a Layer"]
 pub struct Drawer<'a, Message> {
     title: String,
+    header: Option<Element<'a, Message, Theme>>,
     body: Element<'a, Message, Theme>,
     side: DrawerSide,
     size: DrawerSize,
@@ -80,6 +81,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
     pub fn new(title: impl Into<String>, body: impl Into<Element<'a, Message, Theme>>) -> Self {
         Self {
             title: title.into(),
+            header: None,
             body: body.into(),
             side: DrawerSide::default(),
             size: DrawerSize::default(),
@@ -88,6 +90,18 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
             presence: None,
             top_inset: 0.0,
         }
+    }
+
+    /// Replaces the title with a header of the caller's, which is where a
+    /// close button belongs.
+    ///
+    /// The backdrop dismisses on a press beside the drawer, but a press on
+    /// the drawer itself stays with it — so a drawer that can only be closed
+    /// from the backdrop reads as needing two clicks. A header carrying
+    /// [`drawer_header`]'s close control is the one-click way out.
+    pub fn header(mut self, header: impl Into<Element<'a, Message, Theme>>) -> Self {
+        self.header = Some(header.into());
+        self
     }
 
     /// Sets which edge the drawer slides in from.
@@ -141,6 +155,7 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
     pub fn into_element(self) -> Element<'a, Message, Theme> {
         let Self {
             title,
+            header,
             body,
             side,
             size,
@@ -153,11 +168,18 @@ impl<'a, Message: Clone + 'a> Drawer<'a, Message> {
         let title_style = Size::Lg.text();
         let extent = size.extent();
 
-        let mut content = column![text(title)
-            .size(title_style.size)
-            .line_height(title_style.line_height())]
-        .spacing(16)
-        .push(body);
+        // A caller's header replaces the bare title: the header is where the
+        // close control goes, and a drawer without one is only closable from
+        // the backdrop beside it.
+        let title_row: Element<'a, Message, Theme> = match header {
+            Some(header) => header,
+            None => text(title)
+                .size(title_style.size)
+                .line_height(title_style.line_height())
+                .into(),
+        };
+
+        let mut content = column![title_row].spacing(16).push(body);
 
         if let Some(footer) = footer {
             content = content.push(
@@ -331,6 +353,18 @@ mod tests {
                     button("Cancel").ghost().on_press(Message::Close),
                     button("Save").primary().on_press(Message::Save),
                 ]))
+                .into_element();
+        drop(element);
+    }
+
+    /// A caller's header replaces the bare title — which is where the close
+    /// control lives, since a drawer is only dismissable from the backdrop
+    /// beside it.
+    #[test]
+    fn a_header_replaces_the_title() {
+        let element: iced::Element<'_, Message, Theme> =
+            Drawer::new("", iced::widget::text("Body"))
+                .header(drawer_header("Details", Message::Close))
                 .into_element();
         drop(element);
     }

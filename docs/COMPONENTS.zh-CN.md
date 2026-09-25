@@ -647,10 +647,13 @@ open = open.modal(
 ### Drawer / sheet / HoverCard
 
 ```rust
-use iced_kit::widgets::overlay::{Drawer, DrawerSide, sheet};
+use iced_kit::widgets::overlay::{drawer_header, Drawer, DrawerSide, sheet};
 
 open = open.drawer(
-    Drawer::new("详情", column![paragraph("…"), text_input::<Message>("名称", "")].spacing(12))
+    Drawer::new("", column![paragraph("…"), text_input::<Message>("名称", "")].spacing(12))
+        // 头部自带关闭按钮：drawer 上的按压不会漏给背板，没有可见的关闭
+        // 途径时只能点外面退出
+        .header(drawer_header("详情", Message::DrawerDismissed))
         .side(DrawerSide::Right)      // Left / Right / Bottom
         .presence(&self.drawer_presence)
         .on_dismiss(Message::DrawerDismissed),
@@ -660,7 +663,8 @@ open = open.drawer(
 sheet("通知", body).side(DrawerSide::Bottom)
 ```
 
-面板的空白区域不会把点击漏给背板——点面板不会误关，点背板才关闭。
+关闭途径有两处：点 ✕（或应用放进 header/footer 的任何按钮），以及点 drawer 之外的背板。
+面板自身的空白处不会误关——那是有意的行为，所以**一定要提供 header 里的关闭钮**。
 
 ### Dropdown / ContextMenu / Popover
 
