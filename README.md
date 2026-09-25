@@ -53,6 +53,9 @@ let theme = Theme::from_tokens(tokens);  // mode is inferred from the background
 
 ## Components
 
+> 中文使用文档（含浮层托管、`trigger` 锚点、`Presence` 离场等核心概念的讲解与逐组件
+> 示例）：[docs/COMPONENTS.zh-CN.md](docs/COMPONENTS.zh-CN.md)
+
 **Form** — `button`, `icon_button`, `ButtonGroup`, `DropdownButton`, `Toggle`,
 `ToggleGroup`, `text_input`, `password`, `text_area`, `input_group`, `select`,
 `searchable_select`, `combobox` (searchable, multi-select, with a filtered
