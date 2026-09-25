@@ -9,6 +9,103 @@ tree and iced's `Widget` layout/draw pipeline share no layer, so a gpui element
 cannot be drawn into an iced window. This crate instead **reimplements** the
 gpui-kit token model and component API on iced's own widget system.
 
+## Preview
+
+Every screenshot below is rendered offscreen by the test suite
+(`tests/render.rs`) from the same code an application would run, so it is the
+real component, not a mock-up.
+
+**Buttons & toggles**
+
+| Variants | Groups & split buttons | Toggle buttons |
+| --- | --- | --- |
+| ![Button variants](tests/snapshots/button_variants-wgpu.png) | ![Button groups](tests/snapshots/button_groups-wgpu.png) | ![Toggles](tests/snapshots/toggle_buttons-wgpu.png) |
+
+**Text inputs & pickers**
+
+| Fields | Input groups | Numbers & OTP | Passwords |
+| --- | --- | --- | --- |
+| ![Text fields](tests/snapshots/text_fields-wgpu.png) | ![Input groups](tests/snapshots/input_groups-wgpu.png) | ![Number and OTP](tests/snapshots/number_and_otp_fields-wgpu.png) | ![Passwords](tests/snapshots/password_fields-wgpu.png) |
+
+| Select | Combobox | Calendar | Color picker |
+| --- | --- | --- | --- |
+| ![Select](tests/snapshots/select-wgpu.png) | ![Combobox](tests/snapshots/combobox-wgpu.png) | ![Calendar](tests/snapshots/calendar-wgpu.png) | ![Color picker](tests/snapshots/color_picker-wgpu.png) |
+
+**Forms**
+
+| Vertical | Multi-column |
+| --- | --- |
+| ![Vertical form](tests/snapshots/form_vertical-wgpu.png) | ![Column form](tests/snapshots/form_columns-wgpu.png) |
+
+**Display**
+
+| Display | Group boxes | Tree |
+| --- | --- | --- |
+| ![Display](tests/snapshots/display-wgpu.png) | ![Group boxes](tests/snapshots/group_boxes-wgpu.png) | ![Tree](tests/snapshots/tree-wgpu.png) |
+
+**Feedback**
+
+| Feedback | Loading overlays |
+| --- | --- |
+| ![Feedback](tests/snapshots/feedback-wgpu.png) | ![Loading overlays](tests/snapshots/loading_overlays-wgpu.png) |
+
+**Data**
+
+| Virtual list | Data table |
+| --- | --- |
+| ![Virtual list](tests/snapshots/virtual_list-wgpu.png) | ![Data table](tests/snapshots/data_table-wgpu.png) |
+
+**Charts**
+
+| Line | Area | Bar | Pie |
+| --- | --- | --- | --- |
+| ![Line chart](tests/snapshots/line_chart-wgpu.png) | ![Area chart](tests/snapshots/area_chart-wgpu.png) | ![Bar chart](tests/snapshots/bar_chart-wgpu.png) | ![Pie chart](tests/snapshots/pie_chart-wgpu.png) |
+
+| Radar | Candlestick | Sankey |
+| --- | --- | --- |
+| ![Radar chart](tests/snapshots/radar_chart-wgpu.png) | ![Candlestick chart](tests/snapshots/candlestick_chart-wgpu.png) | ![Sankey chart](tests/snapshots/sankey_chart-wgpu.png) |
+
+**Chat**
+
+| Bubbles | Message rail | Attachments |
+| --- | --- | --- |
+| ![Chat bubbles](tests/snapshots/chat_bubbles-wgpu.png) | ![Message rail](tests/snapshots/chat_message_rail-wgpu.png) | ![Attachments](tests/snapshots/chat_attachments-wgpu.png) |
+
+**Navigation**
+
+| Tabs, accordions & more | Carousel | Sidebar |
+| --- | --- | --- |
+| ![Navigation](tests/snapshots/navigation-wgpu.png) | ![Carousel](tests/snapshots/carousel-wgpu.png) | ![Sidebar](tests/snapshots/sidebar-wgpu.png) |
+
+**Ribbon** — the same command band pinned to three densities, and `Auto`
+degrading a narrow row from the right:
+
+| Full | Compact | Collapsed | Auto (narrow) |
+| --- | --- | --- | --- |
+| ![Ribbon](tests/snapshots/ribbon-wgpu.png) | ![Ribbon compact](tests/snapshots/ribbon_compact-wgpu.png) | ![Ribbon collapsed](tests/snapshots/ribbon_collapsed-wgpu.png) | ![Ribbon auto narrow](tests/snapshots/ribbon_auto_narrow-wgpu.png) |
+
+**Overlays**
+
+| Modal | Drawer | Toasts | Dropdown |
+| --- | --- | --- | --- |
+| ![Modal](tests/snapshots/modal-wgpu.png) | ![Drawer](tests/snapshots/drawer-wgpu.png) | ![Toasts](tests/snapshots/toasts-wgpu.png) | ![Dropdown](tests/snapshots/dropdown-wgpu.png) |
+
+| Popover | Context menu | Alert dialog | Tooltip |
+| --- | --- | --- | --- |
+| ![Popover](tests/snapshots/popover-wgpu.png) | ![Context menu](tests/snapshots/context_menu-wgpu.png) | ![Alert dialog](tests/snapshots/alert_dialog-wgpu.png) | ![Tooltip](tests/snapshots/tooltip-wgpu.png) |
+
+**Shell & docking**
+
+| Dock layout | Resizable | Title bar |
+| --- | --- | --- |
+| ![Dock](tests/snapshots/dock-wgpu.png) | ![Resizable](tests/snapshots/resizable-wgpu.png) | ![Title bar](tests/snapshots/title_bar-wgpu.png) |
+
+**Settings, typography & icons**
+
+| Settings panel | Typography | Lucide icons |
+| --- | --- | --- |
+| ![Settings](tests/snapshots/settings_panel-wgpu.png) | ![Typography](tests/snapshots/typography-wgpu.png) | ![Icons](tests/snapshots/named_icons-wgpu.png) |
+
 ## How it works
 
 iced 0.14 widgets are generic over their theme type (`Button<'a, Message,
@@ -109,7 +206,9 @@ what is done), `app_menu_bar`, `pagination`, `carousel` (horizontal or
 vertical, with previous/next controls, a dot indicator, looping, arrow keys and
 drag-to-snap), `Sidebar` (a collapsible panel with a header, grouped menus and
 a footer; `Icon`, `Offcanvas` and `None` collapsing modes, an animated width
-transition, a draggable width, submenus, badges and collapsed-state tooltips)
+transition, a draggable width, submenus, badges and collapsed-state tooltips),
+and `Ribbon` (a tabbed command bar of grouped, multi-size tool buttons that
+degrades from the right as the window narrows — see [Ribbon](#ribbon))
 
 **Shell** — `TitleBar` (with window controls), `Resizable` (draggable split
 panes), and — behind the `dock` feature — a full docking layout with draggable
@@ -526,6 +625,55 @@ Three things differ from the reference, all for reasons iced makes unavoidable:
   window width with `Settings::stacked`, against
   `iced_kit::setting::STACKED_LAYOUT_MAX_WIDTH`.
 
+## Ribbon
+
+A ribbon is a command palette in two bands: a strip of tabs along the top, and
+beneath the active tab a row of *groups*, each a boxed cluster of tool buttons
+with a small label on its bottom edge. Tools come in a large (full-height,
+icon over label) and a small (single-row, icon only or icon beside label)
+footprint, and either can carry a ▾ that opens a dropdown of related commands.
+
+Like every iced-kit component, a ribbon is described entirely as data —
+`RibbonTab`s of `RibbonGroup`s of `RibbonItem`s wrapping `RibbonTool`s — and
+rebuilt every frame. Which tab is active and which dropdown is open live in a
+`RibbonState` the caller holds; the ribbon reports intent through `on_select`
+and `on_dropdown_toggle` and never mutates anything itself.
+
+```rust
+use iced_kit::widgets::ribbon::{
+    Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool,
+};
+
+fn view(state: &RibbonState) -> Element<'static, Message, Theme> {
+    Ribbon::new()
+        .tab(RibbonTab::new("Home").group(
+            RibbonGroup::new("Draw")
+                .item(RibbonItem::large(RibbonTool::new("／").label("Line")))
+                .item(RibbonItem::tool(RibbonTool::new("▢").label("Rectangle"))),
+        ))
+        .state(state)
+        .on_select(Message::Selected)
+        .into()
+}
+```
+
+Two things set it apart:
+
+- **Dropdowns are hosted, not painted.** iced has no window-level z-order, so a
+  ribbon draws no floating panel of its own. A ▾ reports the id it wants
+  opened; the application builds that panel and hosts it through
+  [`overlay::Layer`](#overlays), anchored with [`trigger`](#overlays) exactly as
+  it does for the combobox, date-picker and colour-picker panels. Each dropdown
+  button wraps itself in a `trigger` so the panel drops beneath the button that
+  opened it rather than the whole ribbon.
+- **The band degrades instead of overflowing.** When a tab's groups outrun the
+  width, they collapse *from the right*, one group at a time, down a ladder of
+  densities — full to compact icon columns, then to a title button, then to a
+  tight small-icon button — and the row's height shrinks with the shortest
+  visible group. That is `CollapseMode::Auto`, the default; pin every group to
+  one density instead with `Ribbon::collapse_mode(mode)`, and the active mode
+  rides along in `RibbonState` so a density picker can drive it from the app.
+
 ## Documentation
 
 - [`THEMING.md`](THEMING.md) — customizing the token set, per-widget overrides,
@@ -540,6 +688,9 @@ cargo run --example gallery
 
 # or start in dark mode
 GALLERY_DARK=1 cargo run --example gallery
+
+# the ribbon command bar on its own
+cargo run --example ribbon
 ```
 
 ## Docking (`dock` feature)

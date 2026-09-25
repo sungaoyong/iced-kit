@@ -8,6 +8,10 @@
 |:---:|:---:|
 | ![按钮变体](tests/snapshots/button_variants-wgpu.png) | ![深色模式](tests/snapshots/dark_mode-wgpu.png) |
 
+| 功能区 Ribbon（浅色） | 功能区 Ribbon（深色） |
+|:---:|:---:|
+| ![Ribbon](tests/snapshots/ribbon-wgpu.png) | ![Ribbon 深色](tests/snapshots/ribbon_dark-wgpu.png) |
+
 ## 核心理念
 
 iced 0.14 的组件通过泛型 `Theme` 类型进行主题化。iced-kit 自带完整的语义 Token 体系，并为上游组件实现了 `Catalog` trait —— 因此无论是 iced 原生组件还是 iced-kit 组件，都能保持一致的视觉风格。
@@ -35,7 +39,7 @@ fn main() -> iced::Result {
 
 ## 组件一览
 
-> 本项目提供 **100+ 个 UI 组件**，覆盖表单、显示、反馈、数据、图表、聊天、导航、浮层、Shell、设置、动效等全部场景。
+> 本项目提供 **100+ 个 UI 组件**，覆盖表单、显示、反馈、数据、图表、聊天、导航、功能区、浮层、Shell、设置、动效等全部场景。
 
 | 分类 | 数量 | 关键组件 |
 |------|:---:|----------|
@@ -46,7 +50,7 @@ fn main() -> iced::Result {
 | 数据展示 | 5 | VirtualList, DataTable, Markdown |
 | 图表 | 7 | LineChart, BarChart, PieChart, CandlestickChart, SankeyChart |
 | 聊天组件 | 6 | Bubble, Message, Attachment, MessageScroller |
-| 导航组件 | 8 | Tabs, Accordion, Sidebar, Carousel, Stepper |
+| 导航组件 | 9 | Tabs, Accordion, Sidebar, Carousel, Stepper, Ribbon |
 | 浮层与对话框 | 14 | Modal, Drawer, Toast, Dropdown, Popover, Tooltip |
 | Docking 停靠 | 3 | Dock, Resizable, TitleBar |
 | 设置面板 | 5 | Settings, SettingPage, SettingGroup, SettingItem, SettingField |
@@ -62,6 +66,14 @@ fn main() -> iced::Result {
 
 ![输入组](tests/snapshots/input_groups-wgpu.png)
 
+| 下拉选择 | 组合框 | 日历 | 颜色选择器 |
+|:---:|:---:|:---:|:---:|
+| ![选择器](tests/snapshots/select-wgpu.png) | ![组合框](tests/snapshots/combobox-wgpu.png) | ![日历](tests/snapshots/calendar-wgpu.png) | ![颜色选择器](tests/snapshots/color_picker-wgpu.png) |
+
+| 数字/OTP 输入 | 密码输入 | 文本域 |
+|:---:|:---:|:---:|
+| ![数字与OTP](tests/snapshots/number_and_otp_fields-wgpu.png) | ![密码](tests/snapshots/password_fields-wgpu.png) | ![文本字段](tests/snapshots/text_fields-wgpu.png) |
+
 ### 表单布局（2 个）
 
 `form`/`field` 将带标签的控件排列为表单：支持纵向或横向标签放置、`columns` 网格布局与 `col_span`/`col_start`/`col_end` 定位、`required` 标记、muted 描述行，以及底部操作区。
@@ -76,11 +88,17 @@ fn main() -> iced::Result {
 
 ![显示组件](tests/snapshots/display-wgpu.png)
 
+![分组框](tests/snapshots/group_boxes-wgpu.png)
+
+![树形控件](tests/snapshots/tree-wgpu.png)
+
 ### 反馈组件（7 个）
 
 Spinner（弧形和圆点）、环形进度、骨架屏、骨架列表项、骨架表格、折叠面板、Shimmer（文本/区块/任意元素，可配置扫过方向）。
 
 ![反馈组件](tests/snapshots/feedback-wgpu.png)
+
+![加载遮罩](tests/snapshots/loading_overlays-wgpu.png)
 
 ### 数据展示（5 个）
 
@@ -96,7 +114,13 @@ Spinner（弧形和圆点）、环形进度、骨架屏、骨架列表项、骨�
 
 ![折线/面积/柱状图](tests/snapshots/line_chart-wgpu.png)
 
+![面积图](tests/snapshots/area_chart-wgpu.png)
+
+![柱状图](tests/snapshots/bar_chart-wgpu.png)
+
 ![饼图](tests/snapshots/pie_chart-wgpu.png)
+
+![雷达图](tests/snapshots/radar_chart-wgpu.png)
 
 ![K线图](tests/snapshots/candlestick_chart-wgpu.png)
 
@@ -112,13 +136,45 @@ Spinner（弧形和圆点）、环形进度、骨架屏、骨架列表项、骨�
 
 ![附件](tests/snapshots/chat_attachments-wgpu.png)
 
-### 导航组件（8 个）
+### 导航组件（9 个）
 
-标签页（下划线/标签/轮廓/胶囊/分段五种风格，支持尺寸和图标插槽）、手风琴（多项展开/带边框/尺寸/图标）、面包屑、步骤条（水平/垂直，标记完成状态）、应用菜单栏、分页、轮播（水平/垂直，前后控制/圆点指示/循环/键盘/拖拽吸附）、侧边栏（可折叠面板，带头部/分组菜单/底部；三种折叠模式，动画宽度过渡，可拖拽调整宽度，子菜单，Badge，折叠态工具提示）。
+标签页（下划线/标签/轮廓/胶囊/分段五种风格，支持尺寸和图标插槽）、手风琴（多项展开/带边框/尺寸/图标）、面包屑、步骤条（水平/垂直，标记完成状态）、应用菜单栏、分页、轮播（水平/垂直，前后控制/圆点指示/循环/键盘/拖拽吸附）、侧边栏（可折叠面板，带头部/分组菜单/底部；三种折叠模式，动画宽度过渡，可拖拽调整宽度，子菜单，Badge，折叠态工具提示）、Ribbon 功能区（见下）。
 
 ![导航](tests/snapshots/navigation-wgpu.png)
 
 ![侧边栏](tests/snapshots/sidebar-wgpu.png)
+
+![轮播](tests/snapshots/carousel-wgpu.png)
+
+### 功能区 Ribbon
+
+Ribbon 是一个分带的命令工具栏：顶部一排标签页，标签页下方为若干**分组**，每组是带底部标签的一簇工具按钮。工具分为大号（整列高，图标在上、文字在下）与小号（单行，纯图标或图标加文字）两种足迹，两者都能带一个 ▾ 打开相关命令的下拉面板。
+
+Ribbon 完全由数据描述（`RibbonTab` → `RibbonGroup` → `RibbonItem` → `RibbonTool`），每帧重建；当前标签、打开的下拉等状态由调用方持有的 `RibbonState` 承载，组件只通过 `on_select`/`on_dropdown_toggle` 上报意图，自身不做任何修改。下拉面板不由 Ribbon 绘制，而是经 `overlay::trigger` 上报按钮自身矩形后由应用托管，与组合框/日期/颜色选择器面板同源。
+
+当分组宽度超出可用空间时，命令带会**从右向左逐级降级**：完整 → 紧凑图标列 → 标题按钮 → 紧凑小图标按钮，行高随之收缩（`CollapseMode::Auto`）；其余档位则把所有分组钉在同一密度。
+
+```rust
+use iced_kit::widgets::ribbon::{Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool};
+
+Ribbon::new()
+    .tab(RibbonTab::new("Home").group(
+        RibbonGroup::new("Draw")
+            .item(RibbonItem::large(RibbonTool::new("／").label("Line")))
+            .item(RibbonItem::tool(RibbonTool::new("▢").label("Rectangle"))),
+    ))
+    .state(&state)
+    .on_select(Message::Selected)
+    .into()
+```
+
+![Ribbon](tests/snapshots/ribbon-wgpu.png)
+
+![紧凑模式](tests/snapshots/ribbon_compact-wgpu.png)
+
+![折叠模式](tests/snapshots/ribbon_collapsed-wgpu.png)
+
+![自动降级（窄窗口）](tests/snapshots/ribbon_auto_narrow-wgpu.png)
 
 ### 浮层与对话框（14 个）
 
@@ -132,11 +188,19 @@ Modal、Dialog、AlertDialog、Drawer、Sheet（标题栏下方停驻）、Toast
 
 ![下拉菜单](tests/snapshots/dropdown-wgpu.png)
 
+| 弹出层 | 右键菜单 | 警告对话框 | 工具提示 |
+|:---:|:---:|:---:|:---:|
+| ![Popover](tests/snapshots/popover-wgpu.png) | ![右键菜单](tests/snapshots/context_menu-wgpu.png) | ![警告框](tests/snapshots/alert_dialog-wgpu.png) | ![工具提示](tests/snapshots/tooltip-wgpu.png) |
+
 ### Docking 停靠布局（`dock` feature，3 个）
 
 完整的可停靠布局系统：可拖拽标签、嵌套分割、拖放目标、可折叠边缘 Dock 和面板缩放。
 
 ![Dock 布局](tests/snapshots/dock-wgpu.png)
+
+![可调整分割](tests/snapshots/resizable-wgpu.png)
+
+![标题栏](tests/snapshots/title_bar-wgpu.png)
 
 ### 设置面板（5 个）
 
@@ -196,6 +260,9 @@ cargo run --example gallery
 
 # 深色模式启动
 GALLERY_DARK=1 cargo run --example gallery
+
+# Ribbon 功能区示例
+cargo run --example ribbon
 
 # Dock 布局示例
 cargo run --example dock --features dock

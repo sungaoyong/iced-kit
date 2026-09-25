@@ -37,6 +37,7 @@ pub mod plot;
 pub mod resizable;
 pub(crate) mod resize_edge;
 pub(crate) mod reveal;
+pub mod ribbon;
 pub mod select;
 pub mod sidebar;
 pub mod skeleton;
@@ -116,6 +117,9 @@ pub use overlay::{
     TooltipPosition, Trigger, SHEET_TOP_INSET,
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
+pub use ribbon::{
+    ribbon, CollapseMode, Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool,
+};
 pub use select::{searchable_select, searchable_select_panel, select, select_fill};
 pub use sidebar::{
     sidebar, Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,

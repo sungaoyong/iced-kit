@@ -90,6 +90,7 @@ enum Section {
     Feedback,
     Overlays,
     Tabs,
+    Ribbon,
     Navigation,
     Carousel,
     Data,
@@ -113,6 +114,7 @@ impl Section {
         Section::Feedback,
         Section::Overlays,
         Section::Tabs,
+        Section::Ribbon,
         Section::Navigation,
         Section::Carousel,
         Section::Data,
@@ -136,6 +138,7 @@ impl Section {
             Section::Feedback => "Feedback",
             Section::Overlays => "Overlays",
             Section::Tabs => "Tabs & carousel",
+            Section::Ribbon => "Ribbon",
             Section::Navigation => "Navigation & data",
             Section::Carousel => "Carousel",
             Section::Data => "Data",
@@ -174,6 +177,9 @@ struct App {
     country_options: Vec<iced_kit::widgets::ComboBoxOption<usize>>,
     /// Which page the demo pane shows.
     selected: Section,
+    /// The ribbon demo's view state and the anchor of its hosted dropdown.
+    ribbon: RibbonState,
+    ribbon_anchor: Option<iced::Rectangle>,
     /// The split components' open panel, and the window-space rectangle of
     /// the trigger that opened it. Each component reports an intent and the
     /// gallery hosts its panel, the same division of labour as every overlay
@@ -354,6 +360,13 @@ enum Message {
     VolumeChanged(f32),
     Advance,
     TabSelected(usize),
+    /// The ribbon demo's tab pick, its dropdown open intent, and the anchor
+    /// its trigger reports. A press outside the hosted panel closes it.
+    RibbonTabSelected(usize),
+    RibbonDropdown(String),
+    RibbonAnchor(iced::Rectangle),
+    RibbonCollapse(CollapseMode),
+    CloseRibbonPanel,
     Save,
     OpenModal,
     CloseModal,
@@ -445,6 +458,8 @@ impl Default for App {
                 iced_kit::widgets::ComboBoxOption::new(2, "Japan").disabled(true),
             ],
             selected: Section::Buttons,
+            ribbon: RibbonState::new(),
+            ribbon_anchor: None,
             open_panel: None,
             panel_anchor: None,
             combo_query: String::new(),
@@ -628,6 +643,11 @@ impl App {
                 self.progress = (self.progress + 0.1).min(1.0);
             }
             Message::TabSelected(index) => self.tab = index,
+            Message::RibbonAnchor(anchor) => self.ribbon_anchor = Some(anchor),
+            Message::RibbonTabSelected(index) => self.ribbon.select(index),
+            Message::RibbonDropdown(id) => self.ribbon.toggle_dropdown(&id),
+            Message::RibbonCollapse(mode) => self.ribbon.set_collapse_mode(mode),
+            Message::CloseRibbonPanel => self.ribbon.close_dropdown(),
             Message::Save => {
                 self.saved = Some(if self.dark {
                     "Saved (dark)"
@@ -817,6 +837,7 @@ impl App {
             Section::Feedback => self.feedback_section(),
             Section::Overlays => self.overlay_section(),
             Section::Tabs => self.tabs_section(),
+            Section::Ribbon => self.ribbon_section(),
             Section::Navigation => self.navigation_section(),
             Section::Carousel => self.carousel_section(),
             Section::Data => self.data_section(),
@@ -853,6 +874,21 @@ impl App {
         // Every overlay is assembled in one place, in paint order: dropdowns
         // under the modal, toasts on top.
         let mut open = Layer::new();
+
+        // The ribbon's open dropdown, hosted below the ribbon band the same
+        // way the split components' panels are: the trigger reports the
+        // anchor, the catcher closes it on an outside press.
+        if self.selected == Section::Ribbon {
+            if let (Some(anchor), Some(id)) =
+                (self.ribbon_anchor, self.ribbon.open_dropdown.as_deref())
+            {
+                open = open.dropdown(stack![
+                    popover_dismiss_area(Message::CloseRibbonPanel),
+                    Dropdown::new(ribbon_panel_items(id))
+                        .anchor(anchor.x, anchor.y + anchor.height + PANEL_GAP),
+                ]);
+            }
+        }
 
         // The split components' panels live here rather than inside their
         // triggers: iced has no window-level z-order, so the application
@@ -2527,6 +2563,44 @@ impl App {
         )
     }
 
+    fn ribbon_section(&self) -> Element<'_, Message, Theme> {
+        // The ribbon reports each pressed ▾'s own bounds through
+        // `on_dropdown_anchor`, so the panel the gallery hosts drops beneath the
+        // button that opened it, as for every other overlay.
+        let ribbon = Ribbon::new()
+            .tabs(ribbon_tabs())
+            .state(&self.ribbon)
+            .on_select(Message::RibbonTabSelected)
+            .on_dropdown_toggle(Message::RibbonDropdown)
+            .on_dropdown_anchor(Message::RibbonAnchor);
+
+        // A row pinning every group to one density. Auto degrades the row from
+        // the right as the pane narrows; the rest force a level to inspect.
+        let density = CollapseMode::ALL
+            .iter()
+            .fold(row![].spacing(6), |row, mode| {
+                let active = self.ribbon.collapse_mode == *mode;
+                let btn = button(mode.label());
+                let btn = if active { btn.primary() } else { btn.ghost() };
+                row.push(btn.on_press(Message::RibbonCollapse(*mode)))
+            });
+
+        Self::section(
+            "Ribbon",
+            column![
+                muted_text(
+                    "A tab strip over titled groups of large, small, dropdown and grid tools."
+                ),
+                divider(),
+                row![label("Density").size(13), density]
+                    .spacing(10)
+                    .align_y(Alignment::Center),
+                ribbon,
+            ]
+            .spacing(12),
+        )
+    }
+
     /// Wraps a section's content in a titled card.
     fn section<'a>(
         title: &'a str,
@@ -2591,4 +2665,82 @@ fn chat_lines() -> Vec<String> {
     .iter()
     .map(|line| (*line).to_owned())
     .collect()
+}
+
+/// The ribbon demo's tabs: a Home tab showing every item size, and a Modify
+/// tab showing a grid. All data, no behaviour — the gallery owns the state.
+fn ribbon_tabs() -> Vec<RibbonTab<Message>> {
+    let home = RibbonTab::new("Home")
+        .group(
+            RibbonGroup::new("Clipboard")
+                .item(RibbonItem::large_dropdown(
+                    "paste",
+                    IconName::ClipboardPaste,
+                    "Paste",
+                    vec![],
+                ))
+                .item(RibbonItem::tool(
+                    RibbonTool::named(IconName::Copy).label("Copy"),
+                ))
+                .item(RibbonItem::tool(
+                    RibbonTool::named(IconName::Scissors).label("Cut"),
+                )),
+        )
+        .group(
+            RibbonGroup::new("Draw")
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Spline)
+                        .label("Line")
+                        .selected(true),
+                ))
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Shapes).label("Shapes"),
+                ))
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Highlighter)
+                        .label("Sketch")
+                        .disabled(true),
+                )),
+        )
+        .group(
+            RibbonGroup::new("Styles")
+                .item(RibbonItem::labeled(
+                    RibbonTool::named(IconName::Bold).label("Bold"),
+                ))
+                .item(RibbonItem::labeled(
+                    RibbonTool::named(IconName::Italic).label("Italic"),
+                ))
+                .item(RibbonItem::dropdown("layers", IconName::Layers, vec![])),
+        );
+
+    let modify =
+        RibbonTab::new("Modify").group(RibbonGroup::new("Transform").item(RibbonItem::grid(vec![
+            vec![
+                RibbonTool::named(IconName::Move),
+                RibbonTool::named(IconName::Eraser),
+            ],
+            vec![
+                RibbonTool::named(IconName::Group),
+                RibbonTool::named(IconName::Pencil),
+            ],
+        ])));
+
+    vec![home, modify]
+}
+
+/// The floating panel the gallery hosts for the ribbon's open dropdown id.
+fn ribbon_panel_items(id: &str) -> Vec<MenuItem<'_, Message>> {
+    match id {
+        "paste" => vec![
+            MenuItem::new("Keep Source Formatting", Message::CloseRibbonPanel),
+            MenuItem::new("Merge Formatting", Message::CloseRibbonPanel),
+            MenuItem::new("Keep Text Only", Message::CloseRibbonPanel),
+        ],
+        "layers" => vec![
+            MenuItem::new("Bring to Front", Message::CloseRibbonPanel),
+            MenuItem::new("Send to Back", Message::CloseRibbonPanel),
+            MenuItem::new("Lock Layer", Message::CloseRibbonPanel).enabled(false),
+        ],
+        other => vec![MenuItem::new(other, Message::CloseRibbonPanel)],
+    }
 }

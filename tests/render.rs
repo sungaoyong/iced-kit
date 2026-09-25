@@ -28,10 +28,10 @@ use iced_kit::widgets::{
     group_button, heading, input_group, kbd, list, muted_text, number_input, otp_input, pagination,
     paragraph, password, progress, ring_progress, shortcut, sidebar, skeleton, skeleton_list_item,
     spinner_styled, tag, text_input, tooltip, AccordionSection, AddonAlignment, AvatarLabel,
-    CarouselAxis, CarouselState, Drawer, DrawerSide, Dropdown, Heading, ListItem, MenuItem, Modal,
-    Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
-    SidebarMenuItem, SidebarToggleButton, SkeletonShape, SpinnerStyle, TitleBar, Tone, VirtualList,
-    VirtualListState, WindowControl,
+    CarouselAxis, CarouselState, CollapseMode, Drawer, DrawerSide, Dropdown, Heading, ListItem,
+    MenuItem, Modal, Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader,
+    SidebarMenu, SidebarMenuItem, SidebarToggleButton, SkeletonShape, SpinnerStyle, TitleBar, Tone,
+    VirtualList, VirtualListState, WindowControl,
 };
 use iced_kit::{Size, Theme};
 
@@ -3170,6 +3170,119 @@ fn chat_markers_render() {
             shimmering,
         ]
         .spacing(12),
+        false,
+    );
+}
+
+/// A ribbon exercising every item size and a group title, so the snapshot
+/// proves large, small, dropdown, grid, selected and disabled all draw.
+fn ribbon_demo() -> Element<'static, Message, Theme> {
+    // Auto at a generous width: every group stays full-size.
+    ribbon_at(CollapseMode::Auto, 600.0)
+}
+
+/// Builds the demo ribbon at a given density `mode` and row `width`.
+///
+/// A forced `mode` pins every group to one density so each level is captured at
+/// a stable size; [`CollapseMode::Auto`] with a narrow `width` instead shows the
+/// row degrading groups from the right until they fit.
+fn ribbon_at(mode: CollapseMode, width: f32) -> Element<'static, Message, Theme> {
+    use iced_kit::icons::IconName;
+    use iced_kit::widgets::{Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool};
+
+    let home = RibbonTab::new("Home")
+        .group(
+            RibbonGroup::new("Clipboard")
+                .item(RibbonItem::large_dropdown(
+                    "paste",
+                    IconName::ClipboardPaste,
+                    "Paste",
+                    vec![],
+                ))
+                .item(RibbonItem::tool(
+                    RibbonTool::named(IconName::Copy).label("Copy"),
+                ))
+                .item(RibbonItem::tool(
+                    RibbonTool::named(IconName::Scissors).label("Cut"),
+                )),
+        )
+        .group(
+            RibbonGroup::new("Draw")
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Spline)
+                        .label("Line")
+                        .selected(true),
+                ))
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Shapes).label("Shapes"),
+                ))
+                .item(RibbonItem::large(
+                    RibbonTool::named(IconName::Highlighter)
+                        .label("Sketch")
+                        .disabled(true),
+                )),
+        )
+        .group(RibbonGroup::new("Transform").item(RibbonItem::grid(vec![
+            vec![
+                RibbonTool::named(IconName::Move),
+                RibbonTool::named(IconName::Eraser),
+            ],
+            vec![
+                RibbonTool::named(IconName::Group),
+                RibbonTool::named(IconName::Pencil),
+            ],
+        ])));
+
+    let modify = RibbonTab::new("Modify").group(
+        RibbonGroup::new("Styles")
+            .item(RibbonItem::labeled(
+                RibbonTool::named(IconName::Bold).label("Bold"),
+            ))
+            .item(RibbonItem::labeled(
+                RibbonTool::named(IconName::Italic).label("Italic"),
+            ))
+            .item(RibbonItem::dropdown("layers", IconName::Layers, vec![])),
+    );
+
+    let state = RibbonState {
+        collapse_mode: mode,
+        ..RibbonState::new()
+    };
+    Ribbon::new()
+        .tab(home)
+        .tab(modify)
+        .state(&state)
+        .on_select(|_| Message::Noop)
+        .on_dropdown_toggle(|_| Message::Noop)
+        .width(Length::Fixed(width))
+        .into()
+}
+
+#[test]
+fn ribbon_renders() {
+    assert_renders("ribbon", ribbon_demo(), false);
+    assert_renders("ribbon_dark", ribbon_demo(), true);
+}
+
+/// The density ladder: *compact* narrows each group to small icons while keeping
+/// its label, *collapsed* reduces each to a title button, and *Auto* at a width
+/// too small for the full row degrades groups from the right — the leftmost
+/// staying full while the rightmost fall back.
+#[test]
+fn ribbon_density_renders() {
+    assert_renders(
+        "ribbon_compact",
+        ribbon_at(CollapseMode::Compact, 600.0),
+        false,
+    );
+    assert_renders(
+        "ribbon_collapsed",
+        ribbon_at(CollapseMode::Collapsed, 600.0),
+        false,
+    );
+    assert_renders(
+        "ribbon_auto_narrow",
+        ribbon_at(CollapseMode::Auto, 180.0),
         false,
     );
 }
