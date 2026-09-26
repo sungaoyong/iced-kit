@@ -182,3 +182,26 @@ log-heading = 日志
 # 状态栏
 status-ready = 就绪
 status-page = 第 1 页，共 1 页  |  字数: 108  |  缩放: 100%
+
+# ── 日期 / 日历 ──────────────────────────────────────────────────────
+
+month-January = 一月
+month-February = 二月
+month-March = 三月
+month-April = 四月
+month-May = 五月
+month-June = 六月
+month-July = 七月
+month-August = 八月
+month-September = 九月
+month-October = 十月
+month-November = 十一月
+month-December = 十二月
+
+weekday-Mo = 一
+weekday-Tu = 二
+weekday-We = 三
+weekday-Th = 四
+weekday-Fr = 五
+weekday-Sa = 六
+weekday-Su = 日

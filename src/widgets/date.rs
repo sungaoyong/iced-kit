@@ -9,6 +9,7 @@
 
 use std::fmt;
 
+use crate::i18n::I18n;
 use crate::theme::{Size, Theme};
 use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Color, Element, Length, Padding};
@@ -403,12 +404,14 @@ impl DatePreset {
 /// selection, and decides what a picked date means.
 ///
 /// ```
+/// # use iced_kit::i18n::{FluentTranslator, I18n};
 /// # use iced_kit::widgets::{calendar, date::{Date, Weekday}};
 /// # use iced_kit::Theme;
 /// # use iced::Element;
 /// # #[derive(Clone, Debug)] enum Message { Picked(Date) }
 /// # fn view(today: Date, selected: Option<Date>) -> Element<'static, Message, Theme> {
-/// calendar(today, selected).on_select(Message::Picked).into()
+/// # let i18n = I18n::new(FluentTranslator::from_str("en", "").unwrap());
+/// calendar(today, selected, &i18n).on_select(Message::Picked).into()
 /// # }
 /// ```
 #[must_use = "a Calendar does nothing unless it is turned into an Element"]
@@ -419,11 +422,16 @@ pub struct Calendar<'a, Message> {
     first_day: Weekday,
     number_of_months: usize,
     on_select: Option<Box<dyn Fn(Date) -> Message + 'a>>,
+    i18n: &'a I18n<crate::i18n::FluentTranslator>,
 }
 
 impl<'a, Message: Clone + 'a> Calendar<'a, Message> {
     /// Creates a calendar showing `month`'s month.
-    pub fn new(month: Date, selected: Option<Date>) -> Self {
+    pub fn new(
+        month: Date,
+        selected: Option<Date>,
+        i18n: &'a I18n<crate::i18n::FluentTranslator>,
+    ) -> Self {
         Self {
             month: month.first_of_month(),
             selected,
@@ -431,6 +439,7 @@ impl<'a, Message: Clone + 'a> Calendar<'a, Message> {
             first_day: Weekday::Monday,
             number_of_months: 1,
             on_select: None,
+            i18n,
         }
     }
 
@@ -498,18 +507,27 @@ impl<'a, Message: Clone + 'a> Calendar<'a, Message> {
 
     /// Draws one month: its heading, the weekday header and its weeks.
     fn month_block(&self, month: Date) -> Element<'a, Message, Theme> {
+        let i18n = self.i18n;
         let heading_style = Size::Sm.text();
         let day_style = Size::Xs.text();
         let grid = month_grid(month.year(), month.month(), self.first_day);
 
         // The header row names the columns in the order they are drawn, so a
         // calendar whose week starts on Sunday does not mislabel every column.
+        // Translations fall back to English when a key is missing.
         let mut header = row![].spacing(2);
         for column in 0..7 {
             let weekday = Weekday::from_index(self.first_day.index() + column);
+            let key = format!("weekday-{}", weekday.short_name());
+            let translated = i18n.tr(&key);
+            let label = if translated == key {
+                weekday.short_name().to_owned()
+            } else {
+                translated
+            };
             header = header.push(
                 container(
-                    text(weekday.short_name())
+                    text(label)
                         .size(day_style.size)
                         .line_height(day_style.line_height()),
                 )
@@ -534,10 +552,17 @@ impl<'a, Message: Clone + 'a> Calendar<'a, Message> {
             body = body.push(row_widget);
         }
 
-        let month_label = MONTH_NAMES
-            .get(month.month().saturating_sub(1) as usize)
-            .copied()
-            .unwrap_or("");
+        let month_label = {
+            let index = month.month().saturating_sub(1) as usize;
+            let english = MONTH_NAMES.get(index).copied().unwrap_or("");
+            let key = format!("month-{english}");
+            let translated = i18n.tr(&key);
+            if translated == key {
+                english.to_owned()
+            } else {
+                translated
+            }
+        };
 
         column![
             text(format!("{month_label} {}", month.year()))
@@ -563,7 +588,8 @@ impl<'a, Message: Clone + 'a> Calendar<'a, Message> {
                     .line_height(line_height),
             )
             .width(Length::Fill)
-            .center_x(Length::Fill),
+            .center_x(Length::Fill)
+            .center_y(Length::Fill),
         )
         .padding(Padding {
             top: 0.0,
@@ -623,8 +649,9 @@ pub fn month_name(month: u32) -> &'static str {
 pub fn calendar<'a, Message: Clone + 'a>(
     month: Date,
     selected: Option<Date>,
+    i18n: &'a I18n<crate::i18n::FluentTranslator>,
 ) -> Calendar<'a, Message> {
-    Calendar::new(month, selected)
+    Calendar::new(month, selected, i18n)
 }
 
 /// The appearance of one day of a calendar.
@@ -1084,6 +1111,7 @@ mod tests {
 #[cfg(test)]
 mod widget_tests {
     use super::{calendar, date_picker, month_name, Date, DatePreset, Weekday};
+    use crate::i18n::{FluentTranslator, I18n};
     use crate::theme::Theme;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -1098,16 +1126,22 @@ mod widget_tests {
         Date::from_ymd(2024, 2, 29).expect("a real date")
     }
 
+    fn test_i18n() -> I18n<FluentTranslator> {
+        I18n::new(FluentTranslator::from_str("en", "").expect("empty ftl"))
+    }
+
     #[test]
     fn a_calendar_marks_the_selection_and_the_range() {
+        let i18n = test_i18n();
         let start = Date::from_ymd(2024, 2, 10).expect("a real date");
         let end = Date::from_ymd(2024, 2, 20).expect("a real date");
 
-        let plain: super::Calendar<'_, Message> = calendar(some_date(), Some(start));
+        let plain: super::Calendar<'_, Message> = calendar(some_date(), Some(start), &i18n);
         assert!(plain.is_selected(start));
         assert!(!plain.is_selected(end));
 
-        let ranged: super::Calendar<'_, Message> = calendar(some_date(), None).range((start, end));
+        let ranged: super::Calendar<'_, Message> =
+            calendar(some_date(), None, &i18n).range((start, end));
         assert!(ranged.is_selected(start), "the range includes its start");
         assert!(ranged.is_selected(end), "and its end");
         assert!(ranged.is_selected(Date::from_ymd(2024, 2, 15).unwrap()));
@@ -1116,34 +1150,37 @@ mod widget_tests {
 
     #[test]
     fn a_calendar_normalizes_a_reversed_range() {
+        let i18n = test_i18n();
         let start = Date::from_ymd(2024, 2, 20).expect("a real date");
         let end = Date::from_ymd(2024, 2, 10).expect("a real date");
 
         let calendar: super::Calendar<'_, Message> =
-            calendar(some_date(), None).range((start, end));
+            calendar(some_date(), None, &i18n).range((start, end));
         assert_eq!(calendar.range, Some((end, start)));
     }
 
     #[test]
     fn a_calendar_draws_the_months_it_was_asked_for() {
-        let one: super::Calendar<'_, Message> = calendar(some_date(), None);
+        let i18n = test_i18n();
+        let one: super::Calendar<'_, Message> = calendar(some_date(), None, &i18n);
         assert_eq!(one.months().len(), 1);
 
-        let three: super::Calendar<'_, Message> = calendar(some_date(), None).number_of_months(3);
+        let three: super::Calendar<'_, Message> =
+            calendar(some_date(), None, &i18n).number_of_months(3);
         assert_eq!(three.months().len(), 3);
         assert_eq!(three.months()[1], Date::from_ymd(2024, 3, 1).unwrap());
         assert_eq!(three.months()[2], Date::from_ymd(2024, 4, 1).unwrap());
 
         // A count outside the sensible range is clamped rather than drawn.
         assert_eq!(
-            calendar::<Message>(some_date(), None)
+            calendar::<Message>(some_date(), None, &i18n)
                 .number_of_months(0)
                 .months()
                 .len(),
             1
         );
         assert_eq!(
-            calendar::<Message>(some_date(), None)
+            calendar::<Message>(some_date(), None, &i18n)
                 .number_of_months(99)
                 .months()
                 .len(),
@@ -1153,20 +1190,22 @@ mod widget_tests {
 
     #[test]
     fn a_calendar_starts_its_month_on_the_first() {
+        let i18n = test_i18n();
         let mid_month = Date::from_ymd(2024, 2, 19).expect("a real date");
-        let calendar: super::Calendar<'_, Message> = calendar(mid_month, None);
+        let calendar: super::Calendar<'_, Message> = calendar(mid_month, None, &i18n);
 
         assert_eq!(calendar.month, Date::from_ymd(2024, 2, 1).unwrap());
     }
 
     #[test]
     fn calendars_render_in_every_form() {
+        let i18n = test_i18n();
         let elements: Vec<iced::Element<'_, Message, Theme>> = vec![
-            calendar::<Message>(some_date(), None).into(),
-            calendar::<Message>(some_date(), Some(some_date()))
+            calendar::<Message>(some_date(), None, &i18n).into(),
+            calendar::<Message>(some_date(), Some(some_date()), &i18n)
                 .on_select(Message::Picked)
                 .into(),
-            calendar::<Message>(some_date(), None)
+            calendar::<Message>(some_date(), None, &i18n)
                 .number_of_months(2)
                 .first_day_of_week(Weekday::Sunday)
                 .range((

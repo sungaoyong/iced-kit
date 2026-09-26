@@ -185,3 +185,26 @@ log-heading = Log
 # Status bar
 status-ready = Ready
 status-page = Page 1 of 1  |  Words: 108  |  Zoom: 100%
+
+# ── Date / calendar ──────────────────────────────────────────────────
+
+month-January = January
+month-February = February
+month-March = March
+month-April = April
+month-May = May
+month-June = June
+month-July = July
+month-August = August
+month-September = September
+month-October = October
+month-November = November
+month-December = December
+
+weekday-Mo = Mo
+weekday-Tu = Tu
+weekday-We = We
+weekday-Th = Th
+weekday-Fr = Fr
+weekday-Sa = Sa
+weekday-Su = Su

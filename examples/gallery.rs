@@ -4,6 +4,7 @@
 
 use iced::widget::{column, container, row, scrollable, stack, text};
 use iced::{Alignment, Color, Element, Length, Padding, Task};
+use iced_kit::i18n::{FluentTranslator, I18n};
 use iced_kit::icons::IconName;
 use iced_kit::motion::Presence;
 use iced_kit::prelude::*;
@@ -223,6 +224,8 @@ struct App {
     /// The carousel demo's selection, in both orientations.
     carousel: CarouselState,
     carousel_vertical: CarouselState,
+    /// The English translator for the calendar widget.
+    i18n: I18n<FluentTranslator>,
     /// A counter that only exists to give the spinner something to be busy with.
     busy: bool,
     port: f64,
@@ -526,6 +529,10 @@ impl Default for App {
             settings_accent: "blue".to_owned(),
             settings_telemetry: false,
             settings_launch_at_login: false,
+            i18n: I18n::new(
+                FluentTranslator::from_str("zh-CN", include_str!("../locales/zh-CN/main.ftl"))
+                    .expect("valid zh-CN ftl"),
+            ),
         }
     }
 }
@@ -803,7 +810,7 @@ impl App {
             .iter()
             .position(|section| *section == self.selected);
 
-        container(
+        container(scrollable(
             column![
                 heading("Components", Heading::H4),
                 list(items, selected, |index| {
@@ -811,7 +818,7 @@ impl App {
                 }),
             ]
             .spacing(8),
-        )
+        ))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(12)
@@ -925,7 +932,7 @@ impl App {
                         let selected = iced_kit::widgets::date::parse(&self.picked_date);
 
                         let card = container(
-                            calendar::<Message>(month, selected)
+                            calendar::<Message>(month, selected, &self.i18n)
                                 .on_select(Message::DatePicked)
                                 .number_of_months(1),
                         )
