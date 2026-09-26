@@ -2532,16 +2532,22 @@ fn select_and_combobox_render() {
 /// its empty and filled states.
 #[test]
 fn calendar_and_date_field_render() {
+    use iced_kit::i18n::{FluentTranslator, I18n};
     use iced_kit::widgets::{calendar, date_picker, Date, Weekday};
+
+    let i18n = I18n::new(
+        FluentTranslator::from_str("en", include_str!("../locales/en/main.ftl"))
+            .expect("valid en ftl"),
+    );
 
     let month = Date::from_ymd(2024, 2, 1).expect("a real date");
     let selected = Date::from_ymd(2024, 2, 14).expect("a real date");
 
-    let one: Element<'_, Message, Theme> = calendar::<Message>(month, Some(selected))
+    let one: Element<'_, Message, Theme> = calendar::<Message>(month, Some(selected), &i18n)
         .on_select(|_| Message::Noop)
         .into();
 
-    let ranged: Element<'_, Message, Theme> = calendar::<Message>(month, None)
+    let ranged: Element<'_, Message, Theme> = calendar::<Message>(month, None, &i18n)
         .number_of_months(2)
         .first_day_of_week(Weekday::Sunday)
         .range((
