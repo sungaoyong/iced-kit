@@ -176,6 +176,7 @@ pub struct ComboBox<'a, T, Message> {
     on_query: Option<OnQuery<'a, Message>>,
     multi: bool,
     fill: bool,
+    trigger_class: Option<std::sync::Arc<dyn Fn(&Theme, button::Status) -> button::Style + 'a>>,
     _lifetime: std::marker::PhantomData<&'a ()>,
 }
 
@@ -199,6 +200,7 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
             on_query: None,
             multi: false,
             fill: false,
+            trigger_class: None,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -289,6 +291,14 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
         filter_options(self.options, query, matches).len()
     }
 
+    /// Overrides the trigger's appearance, for a combobox embedded in a
+    /// tinted surface — a ribbon's title bar, say — where the default
+    /// page-field face would not fit.
+    pub fn class(mut self, class: impl Fn(&Theme, button::Status) -> button::Style + 'a) -> Self {
+        self.trigger_class = Some(std::sync::Arc::new(class));
+        self
+    }
+
     /// Turns the trigger into an [`Element`].
     pub fn into_element(self) -> Element<'a, Message, Theme> {
         let Self {
@@ -304,8 +314,15 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
             on_query,
             multi: _,
             fill,
+            trigger_class,
             _lifetime,
         } = self;
+
+        // Both trigger renderings — the plain one and the searchable one —
+        // consult this class, so the Arc is cloned into each closure rather
+        // than moved into the first.
+        let trigger_class_plain = trigger_class.clone();
+        let trigger_class_search = trigger_class;
 
         let text_style = Size::Md.text();
         let height = Size::Md.height();
@@ -327,15 +344,22 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
         // otherwise, and a caret at the trailing edge.
         let label_text = query.clone().unwrap_or(display);
 
+        // A custom trigger class also owns the label's color: the text leaves
+        // its color unset so it inherits the button's `text_color` — white on
+        // a ribbon's tinted bar, say — instead of fighting it with the
+        // page palette's roles.
+        let inherits_trigger_color = trigger_class_plain.is_some();
         let label: Element<'a, Message, Theme> = text(label_text)
             .size(text_style.size)
             .line_height(iced::Pixels(height.max(text_style.line_height)))
             .class(Box::new(move |theme: &Theme| text::Style {
-                color: Some(if is_placeholder {
-                    theme.colors().muted_foreground
+                color: if inherits_trigger_color {
+                    None
+                } else if is_placeholder {
+                    Some(theme.colors().muted_foreground)
                 } else {
-                    theme.colors().foreground
-                }),
+                    Some(theme.colors().foreground)
+                },
             }) as text::StyleFn<'a, Theme>)
             .into();
 
@@ -375,9 +399,12 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
             })
             .height(Length::Fixed(height))
             .width(if fill { Length::Fill } else { Length::Shrink })
-            .class(Box::new(move |theme: &Theme, status| {
-                combobox_trigger_style(theme, status, open)
-            }) as button::StyleFn<'a, Theme>);
+            .class(
+                Box::new(move |theme: &Theme, status| match &trigger_class_plain {
+                    Some(class) => class(theme, status),
+                    None => combobox_trigger_style(theme, status, open),
+                }) as button::StyleFn<'a, Theme>,
+            );
 
         // A searchable trigger is a field the user types in, so the query is
         // drawn by a text input rather than as the button's label. The panel
@@ -418,9 +445,12 @@ impl<'a, T: PartialEq + Clone + 'a, Message: Clone + 'a> ComboBox<'a, T, Message
                 })
                 .height(Length::Fixed(height))
                 .width(if fill { Length::Fill } else { Length::Shrink })
-                .class(Box::new(move |theme: &Theme, status| {
-                    combobox_trigger_style(theme, status, open)
-                }) as button::StyleFn<'a, Theme>);
+                .class(
+                    Box::new(move |theme: &Theme, status| match &trigger_class_search {
+                        Some(class) => class(theme, status),
+                        None => combobox_trigger_style(theme, status, open),
+                    }) as button::StyleFn<'a, Theme>,
+                );
 
             let searchable = match on_toggle.or(on_open) {
                 Some(message) => searchable.on_press(message),

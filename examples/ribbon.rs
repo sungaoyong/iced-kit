@@ -8,15 +8,19 @@
 //! panels. Nothing here is CAD-specific: the tools are named icons that send
 //! plain messages.
 //!
+//! This example demonstrates the four SARibbon-alignment features:
+//! minimized mode, quick access bar, galleries, and contextual tabs.
+//!
 //! Run with `cargo run --example ribbon`.
 
 use iced::widget::{column, container, row, stack, text};
-use iced::{Alignment, Element, Length, Rectangle, Task};
+use iced::{Alignment, Color, Element, Length, Rectangle, Task};
 use iced_kit::icons::IconName;
 use iced_kit::widgets::button;
 use iced_kit::widgets::overlay::{self, popover_dismiss_area, Dropdown, Layer, MenuItem};
 use iced_kit::widgets::ribbon::{
-    CollapseMode, Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool,
+    CollapseMode, QuickAccessBar, QuickAccessItem, Ribbon, RibbonGallery, RibbonGalleryItem,
+    RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTheme, RibbonTool,
 };
 use iced_kit::Theme;
 
@@ -47,6 +51,12 @@ enum Message {
     CollapseSet(CollapseMode),
     /// A tool or a panel item was activated.
     Ran(&'static str),
+    /// Toggle minimized mode.
+    ToggleMinimize,
+    /// Show or hide the contextual tab.
+    ToggleContextualTab,
+    /// A ribbon theme was picked from the selector.
+    ThemeSelected(RibbonTheme),
 }
 
 /// The example's state: the theme, the ribbon's own view state, the anchor the
@@ -96,6 +106,19 @@ impl App {
             Message::RibbonAnchored(rectangle) => self.anchor = Some(rectangle),
             Message::CloseDropdown => self.ribbon.close_dropdown(),
             Message::CollapseSet(mode) => self.ribbon.set_collapse_mode(mode),
+            Message::ToggleMinimize => self.ribbon.toggle_minimize(),
+            Message::ToggleContextualTab => {
+                if self.ribbon.is_contextual_tab_shown("Picture Tools") {
+                    self.ribbon.hide_contextual_tab("Picture Tools");
+                } else {
+                    self.ribbon
+                        .show_contextual_tab_color("Picture Tools", Color::from_rgb(0.2, 0.4, 0.8));
+                }
+            }
+            Message::ThemeSelected(theme) => {
+                self.ribbon.set_ribbon_theme(theme);
+                self.status = format!("Theme: {}", theme.label());
+            }
             Message::Ran(label) => {
                 self.status = format!("Ran “{label}”");
                 self.ribbon.close_dropdown();
@@ -155,9 +178,7 @@ impl App {
         container(text(&self.status).size(14)).into()
     }
 
-    /// A row of buttons pinning every group to one density. *Auto* lets the
-    /// ribbon degrade the row from the right as the window narrows; the rest
-    /// force a single level so each can be inspected at any width.
+    /// A row of buttons pinning every group to one density, plus a theme picker.
     fn mode_selector(&self) -> Element<'_, Message, Theme> {
         let buttons = CollapseMode::ALL
             .iter()
@@ -167,10 +188,40 @@ impl App {
                 let btn = if active { btn.primary() } else { btn.ghost() };
                 row.push(btn.on_press(Message::CollapseSet(*mode)))
             });
-        row![text("Density").size(13), buttons]
-            .spacing(10)
-            .align_y(Alignment::Center)
-            .into()
+
+        let theme_buttons = RibbonTheme::ALL
+            .iter()
+            .fold(row![].spacing(4), |row, theme| {
+                let active = self.ribbon.ribbon_theme == *theme;
+                let btn = button(theme.label()).size(iced_kit::Size::Xs);
+                let btn = if active { btn.primary() } else { btn.ghost() };
+                row.push(btn.on_press(Message::ThemeSelected(*theme)))
+            });
+
+        row![
+            text("Density").size(13),
+            buttons,
+            container(text("")).width(Length::Fill),
+            button(if self.ribbon.minimized {
+                "Expand"
+            } else {
+                "Minimize"
+            })
+            .secondary()
+            .on_press(Message::ToggleMinimize),
+            button(if self.ribbon.is_contextual_tab_shown("Picture Tools") {
+                "Hide contextual"
+            } else {
+                "Show contextual"
+            })
+            .secondary()
+            .on_press(Message::ToggleContextualTab),
+            text("Theme").size(13),
+            theme_buttons,
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .into()
     }
 
     /// The ribbon itself, rebuilt from data every frame.
@@ -183,11 +234,35 @@ impl App {
             .on_select(Message::TabSelected)
             .on_dropdown_toggle(Message::DropdownToggled)
             .on_dropdown_anchor(Message::RibbonAnchored)
+            .quick_access_bar(quick_access_bar())
     }
 }
 
+/// The quick access bar: save, undo, redo above the tab strip.
+fn quick_access_bar() -> QuickAccessBar<Message> {
+    QuickAccessBar::new()
+        .item(
+            QuickAccessItem::new(IconName::Save)
+                .label("Save")
+                .tooltip("Save the current document")
+                .on_press(Message::Ran("Save")),
+        )
+        .item(
+            QuickAccessItem::new(IconName::Undo2)
+                .label("Undo")
+                .tooltip("Undo the last action")
+                .on_press(Message::Ran("Undo")),
+        )
+        .item(
+            QuickAccessItem::new(IconName::Redo2)
+                .label("Redo")
+                .tooltip("Redo the last undone action")
+                .on_press(Message::Ran("Redo")),
+        )
+}
+
 /// The "Home" tab: a clipboard group with a large dropdown, a draw group of
-/// large tools, and a styles group of labelled small tools.
+/// large tools, a styles gallery, and a small tools group.
 fn home_tab() -> RibbonTab<Message> {
     RibbonTab::new("Home")
         .group(
@@ -230,7 +305,35 @@ fn home_tab() -> RibbonTab<Message> {
                 )),
         )
         .group(
-            RibbonGroup::new("Styles")
+            // An Office-style gallery: a labeled grid of style presets.
+            RibbonGroup::new("Styles").item(RibbonItem::gallery(
+                RibbonGallery::new("style-presets", "Presets")
+                    .item(
+                        RibbonGalleryItem::new(IconName::Palette)
+                            .label("Normal")
+                            .on_press(Message::Ran("Preset: Normal")),
+                    )
+                    .item(
+                        RibbonGalleryItem::new(IconName::Paintbrush)
+                            .label("Artistic")
+                            .on_press(Message::Ran("Preset: Artistic")),
+                    )
+                    .item(
+                        RibbonGalleryItem::new(IconName::Droplets)
+                            .label("Watercolor")
+                            .on_press(Message::Ran("Preset: Watercolor")),
+                    )
+                    .item(
+                        RibbonGalleryItem::new(IconName::PenTool)
+                            .label("Technical")
+                            .selected(true)
+                            .on_press(Message::Ran("Preset: Technical")),
+                    )
+                    .columns(4),
+            )),
+        )
+        .group(
+            RibbonGroup::new("Text")
                 .item(RibbonItem::labeled(
                     RibbonTool::named(IconName::Bold)
                         .label("Bold")

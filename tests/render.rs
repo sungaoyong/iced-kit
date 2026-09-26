@@ -3286,3 +3286,128 @@ fn ribbon_density_renders() {
         false,
     );
 }
+
+/// A ribbon with a quick access bar above the tab strip.
+#[test]
+fn ribbon_quick_access_bar_renders() {
+    use iced_kit::icons::IconName;
+    use iced_kit::widgets::{
+        QuickAccessBar, QuickAccessItem, Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab,
+        RibbonTool,
+    };
+
+    let tab = RibbonTab::new("Home").group(RibbonGroup::new("Draw").item(RibbonItem::large(
+        RibbonTool::named(IconName::Spline).label("Line"),
+    )));
+    let qab = QuickAccessBar::new()
+        .item(
+            QuickAccessItem::new(IconName::Save)
+                .label("Save")
+                .on_press(Message::Noop),
+        )
+        .item(QuickAccessItem::new(IconName::Undo2).on_press(Message::Noop))
+        .item(QuickAccessItem::new(IconName::Redo2).on_press(Message::Noop));
+
+    let state = RibbonState::new();
+    let element: Element<'static, Message, Theme> = Ribbon::new()
+        .tab(tab)
+        .state(&state)
+        .quick_access_bar(qab)
+        .on_select(|_| Message::Noop)
+        .into();
+
+    assert_renders("ribbon_qab", element, false);
+}
+
+/// A minimized ribbon: only the tab strip, no group band.
+#[test]
+fn ribbon_minimized_renders() {
+    use iced_kit::widgets::RibbonState;
+    let mut state = RibbonState::new();
+    state.set_minimize(true);
+    assert_renders("ribbon_minimized", ribbon_at_state(&state), false);
+}
+
+/// A ribbon with a contextual tab shown beside the regular tabs.
+#[test]
+fn ribbon_contextual_tab_renders() {
+    use iced::Color;
+    use iced_kit::widgets::RibbonState;
+    let mut state = RibbonState::new();
+    state.show_contextual_tab_color("Picture Tools", Color::from_rgb(0.2, 0.4, 0.8));
+    assert_renders("ribbon_contextual", ribbon_at_state(&state), false);
+}
+
+/// A ribbon with a gallery embedded in a group.
+#[test]
+fn ribbon_gallery_renders() {
+    use iced_kit::icons::IconName;
+    use iced_kit::widgets::{
+        Ribbon, RibbonGallery, RibbonGalleryItem, RibbonGroup, RibbonItem, RibbonState, RibbonTab,
+    };
+
+    let tab = RibbonTab::new("Home").group(
+        RibbonGroup::new("Styles").item(RibbonItem::gallery(
+            RibbonGallery::new("presets", "Presets")
+                .item(RibbonGalleryItem::new(IconName::Palette).label("Normal"))
+                .item(RibbonGalleryItem::new(IconName::Paintbrush).label("Artistic"))
+                .item(RibbonGalleryItem::new(IconName::Droplets).label("Watercolor"))
+                .item(RibbonGalleryItem::new(IconName::PenTool).label("Technical"))
+                .columns(4),
+        )),
+    );
+
+    let state = RibbonState::new();
+    let element: Element<'static, Message, Theme> = Ribbon::new()
+        .tab(tab)
+        .state(&state)
+        .on_select(|_| Message::Noop)
+        .on_dropdown_toggle(|_| Message::Noop)
+        .into();
+
+    assert_renders("ribbon_gallery", element, false);
+}
+
+/// A ribbon at the reference's loose two-row style: large items full-height,
+/// small items stacked two to a column.
+#[test]
+fn ribbon_two_row_renders() {
+    use iced_kit::widgets::{RibbonLayout, RibbonState};
+    let mut state = RibbonState::new();
+    state.set_layout(RibbonLayout::LooseTwoRow);
+    assert_renders("ribbon_two_row", ribbon_at_state(&state), false);
+}
+
+/// A ribbon at the reference's compact single-row style: every item reduced to
+/// its small face in one row, for the space-constrained case.
+#[test]
+fn ribbon_single_row_renders() {
+    use iced_kit::widgets::{RibbonLayout, RibbonState};
+    let mut state = RibbonState::new();
+    state.set_layout(RibbonLayout::CompactSingleRow);
+    assert_renders("ribbon_single_row", ribbon_at_state(&state), false);
+}
+
+/// A ribbon themed with the Office 2016 Dark style: dark group background with
+/// the blue accent.
+#[test]
+fn ribbon_theme_dark_renders() {
+    use iced_kit::widgets::{RibbonState, RibbonTheme};
+    let mut state = RibbonState::new();
+    state.set_ribbon_theme(RibbonTheme::Office2016Dark);
+    assert_renders("ribbon_theme_dark", ribbon_at_state(&state), false);
+}
+
+/// A ribbon themed with the Windows 7 style: the Aero blue/silver tones.
+#[test]
+fn ribbon_theme_windows7_renders() {
+    use iced_kit::widgets::{RibbonState, RibbonTheme};
+    let mut state = RibbonState::new();
+    state.set_ribbon_theme(RibbonTheme::Windows7);
+    assert_renders("ribbon_theme_windows7", ribbon_at_state(&state), false);
+}
+
+/// Builds the demo ribbon at a given state.
+fn ribbon_at_state(state: &iced_kit::widgets::RibbonState) -> Element<'static, Message, Theme> {
+    ribbon_at(state.collapse_mode, 600.0)
+}

@@ -633,11 +633,45 @@ with a small label on its bottom edge. Tools come in a large (full-height,
 icon over label) and a small (single-row, icon only or icon beside label)
 footprint, and either can carry a ▾ that opens a dropdown of related commands.
 
+Beyond the core tab/group/tool model, the ribbon carries a full set of
+SARibbon-style features:
+
+- **Ten built-in themes** — Office 2013, Office 2016 Blue/Green/Dark, Office
+  2021 Blue/Green/Dark, Windows 7, and two dark variants. Each defines its own
+  accent, tab bar, group background, button hover, and border colors, and is
+  switchable at runtime through `RibbonTheme`.
+- **Six panel layouts** — Loose/Compact × three-row/two-row/single-row, plus an
+  adaptive `Auto` mode. The layout is plain data in `RibbonState`, so a picker
+  can switch it live.
+- **Quick access bar** — a row of small icon buttons above the tab strip for
+  the most-used commands.
+- **Galleries** — Office-style labeled grids of visual items (style swatches,
+  chart previews) embedded in a group.
+- **Contextual tabs** — conditionally shown tabs with their own accent colors,
+  rendered beside the regular tabs.
+- **Minimized mode** — collapse the ribbon to just the tab strip.
+- **Dynamic categories** — add and remove tabs and panels at runtime from the
+  application.
+- **Split action buttons** — a button whose body runs an action while its ▾
+  opens a menu, the reference's action-menu button.
+
 Like every iced-kit component, a ribbon is described entirely as data —
 `RibbonTab`s of `RibbonGroup`s of `RibbonItem`s wrapping `RibbonTool`s — and
-rebuilt every frame. Which tab is active and which dropdown is open live in a
-`RibbonState` the caller holds; the ribbon reports intent through `on_select`
-and `on_dropdown_toggle` and never mutates anything itself.
+rebuilt every frame. Which tab is active, which dropdown is open, and the
+current theme and layout live in a `RibbonState` the caller holds; the ribbon
+reports intent through `on_select` and `on_dropdown_toggle` and never mutates
+anything itself.
+
+### Full-window demo
+
+The `main_window` example shows the ribbon in a complete SARibbon-style
+application — a tinted title bar hosting the application button, quick access
+bar, tabs, theme and layout pickers, and window controls; a central log area;
+and a status bar. Run it with `cargo run --example main_window`.
+
+![Main window demo](tests/snapshots/main_window.png)
+
+### Minimal example
 
 ```rust
 use iced_kit::widgets::ribbon::{

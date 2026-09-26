@@ -185,6 +185,28 @@ impl Tab {
     }
 }
 
+/// Custom colors for a tab strip, for a strip embedded in a tinted surface —
+/// a ribbon's title bar, say — where the global theme's colors do not apply.
+///
+/// Every field is optional; a `None` field falls back to the global theme, so
+/// a caller only overrides the roles it needs to recolour.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct TabStripColors {
+    /// Text color of an unselected tab.
+    pub text: Option<Color>,
+    /// Text color of the selected tab.
+    pub text_selected: Option<Color>,
+    /// Text color of a hovered, unselected tab.
+    pub text_hover: Option<Color>,
+    /// Background painted behind the selected tab in the [`Tab`] variant.
+    pub selected_background: Option<Color>,
+    /// Border color of the selected tab in the [`Tab`] variant.
+    pub selected_border: Option<Color>,
+    /// The sliding indicator's color (the [`Underline`](TabVariant::Underline)
+    /// variant only).
+    pub indicator: Option<Color>,
+}
+
 /// A tab strip under construction.
 ///
 /// [`tabs`] returns this, so the variant and size are set on the builder:
@@ -207,6 +229,7 @@ pub struct TabStrip<'a, Message> {
     on_select: Box<dyn Fn(usize) -> Message + 'a>,
     variant: TabVariant,
     size: Size,
+    colors: Option<TabStripColors>,
 }
 
 impl<'a, Message: Clone + 'a> TabStrip<'a, Message> {
@@ -219,6 +242,13 @@ impl<'a, Message: Clone + 'a> TabStrip<'a, Message> {
     /// Sets the size step, which scales the tab height, padding and text.
     pub fn size(mut self, size: Size) -> Self {
         self.size = size;
+        self
+    }
+
+    /// Overrides the strip's colors, for a strip embedded in a tinted surface
+    /// such as a ribbon's title bar.
+    pub fn colors(mut self, colors: TabStripColors) -> Self {
+        self.colors = Some(colors);
         self
     }
 
@@ -264,6 +294,7 @@ pub fn tabs<'a, Message: Clone + 'a>(
         on_select: Box::new(on_select),
         variant: TabVariant::default(),
         size: Size::Md,
+        colors: None,
     }
 }
 
@@ -277,6 +308,7 @@ fn build_strip<'a, Message: Clone + 'a>(
         on_select,
         variant,
         size,
+        colors,
     } = strip;
 
     let text_style = size.text();
@@ -346,6 +378,7 @@ fn build_strip<'a, Message: Clone + 'a>(
                     _ => 12.0,
                 };
 
+                let colors_for_tab = colors;
                 let mut widget = button(content)
                     .padding(Padding {
                         top: 0.0,
@@ -355,7 +388,7 @@ fn build_strip<'a, Message: Clone + 'a>(
                     })
                     .height(Length::Fixed(height))
                     .class(Box::new(move |theme: &Theme, status| {
-                        tab_style(theme, status, is_selected, variant, size)
+                        tab_style(theme, status, is_selected, variant, size, colors_for_tab)
                     }) as button::StyleFn<'a, Theme>);
 
                 if tab.enabled {
@@ -390,8 +423,9 @@ fn build_strip<'a, Message: Clone + 'a>(
     // A stale index selects nothing, so the indicator is simply absent rather
     // than pointing at a tab that is not there.
     let selected = (selected < count).then_some(selected);
+    let indicator_color = colors.and_then(|colors| colors.indicator);
 
-    TabStripWidget::new(strip, selected, INDICATOR_THICKNESS).into()
+    TabStripWidget::new(strip, selected, INDICATOR_THICKNESS, indicator_color).into()
 }
 
 /// The height of a tab at this variant and size.
@@ -428,6 +462,8 @@ struct TabStripWidget<'a, Message, Renderer = iced::Renderer> {
     /// The selected tab, or `None` when nothing is selected.
     selected: Option<usize>,
     thickness: f32,
+    /// The indicator's color, overriding the theme's primary.
+    indicator: Option<Color>,
 }
 
 impl<'a, Message, Renderer> TabStripWidget<'a, Message, Renderer> {
@@ -435,11 +471,13 @@ impl<'a, Message, Renderer> TabStripWidget<'a, Message, Renderer> {
         row: Element<'a, Message, Theme, Renderer>,
         selected: Option<usize>,
         thickness: f32,
+        indicator: Option<Color>,
     ) -> Self {
         Self {
             row,
             selected,
             thickness,
+            indicator,
         }
     }
 }
@@ -656,7 +694,7 @@ where
                 // pixel-snapping a moving quad makes it stutter.
                 snap: false,
             },
-            theme.colors().primary,
+            self.indicator.unwrap_or(theme.colors().primary),
         );
     }
 
@@ -704,17 +742,37 @@ fn selected_tab_bounds(layout: layout::Layout<'_>, selected: usize) -> Option<Re
 }
 
 /// The appearance of a single tab, for the variant it belongs to.
+///
+/// `colors` overrides the global theme's roles for a strip embedded in a
+/// tinted surface; `None` fields fall back to the theme.
 fn tab_style(
     theme: &Theme,
     status: button::Status,
     is_selected: bool,
     variant: TabVariant,
     size: Size,
+    colors: Option<TabStripColors>,
 ) -> button::Style {
-    let colors = theme.colors();
+    let theme_colors = theme.colors();
     let hovered =
         matches!(status, button::Status::Hovered) && !matches!(status, button::Status::Disabled);
     let disabled = matches!(status, button::Status::Disabled);
+
+    let muted = || {
+        colors
+            .and_then(|c| c.text)
+            .unwrap_or(theme_colors.muted_foreground)
+    };
+    let foreground = || {
+        colors
+            .and_then(|c| c.text_selected)
+            .unwrap_or(theme_colors.foreground)
+    };
+    let hover_text = || {
+        colors
+            .and_then(|c| c.text_hover)
+            .unwrap_or(theme_colors.foreground)
+    };
 
     let radius = variant.radius(theme);
 
@@ -723,7 +781,7 @@ fn tab_style(
     // Every other variant paints its own selection.
     let mut style = button::Style {
         background: None,
-        text_color: colors.muted_foreground,
+        text_color: muted(),
         border: iced::Border {
             color: Color::TRANSPARENT,
             width: 0.0,
@@ -735,8 +793,8 @@ fn tab_style(
 
     if disabled {
         style.text_color = Color {
-            a: colors.muted_foreground.a * 0.6,
-            ..colors.muted_foreground
+            a: muted().a * 0.6,
+            ..muted()
         };
         // A disabled tab must not highlight on hover, but its selection still
         // shows: it is where the strip is, not an affordance.
@@ -745,9 +803,11 @@ fn tab_style(
             TabVariant::Outline => {
                 style.border = iced::Border {
                     color: if is_selected {
-                        colors.primary
+                        colors
+                            .and_then(|c| c.selected_border)
+                            .unwrap_or(theme_colors.primary)
                     } else {
-                        colors.border
+                        theme_colors.border
                     },
                     width: 1.0,
                     radius: radius.into(),
@@ -755,13 +815,18 @@ fn tab_style(
             }
             TabVariant::Pill => {
                 if is_selected {
-                    style.background = Some(iced::Background::Color(fade(colors.primary, 0.5)));
-                    style.text_color = fade(colors.primary_foreground, 0.5);
+                    style.background = Some(iced::Background::Color(fade(
+                        colors
+                            .and_then(|c| c.selected_background)
+                            .unwrap_or(theme_colors.primary),
+                        0.5,
+                    )));
+                    style.text_color = fade(theme_colors.primary_foreground, 0.5);
                 }
             }
             TabVariant::Segmented => {
                 if is_selected {
-                    style.background = Some(iced::Background::Color(colors.background));
+                    style.background = Some(iced::Background::Color(theme_colors.background));
                 }
             }
         }
@@ -770,22 +835,20 @@ fn tab_style(
 
     match variant {
         TabVariant::Underline => {
-            style.text_color = if is_selected {
-                colors.foreground
-            } else {
-                colors.muted_foreground
-            };
+            style.text_color = if is_selected { foreground() } else { muted() };
         }
         TabVariant::Tab => {
-            style.text_color = if is_selected {
-                colors.foreground
-            } else {
-                colors.muted_foreground
-            };
+            style.text_color = if is_selected { foreground() } else { muted() };
             if is_selected {
-                style.background = Some(iced::Background::Color(colors.surface));
+                style.background = Some(iced::Background::Color(
+                    colors
+                        .and_then(|c| c.selected_background)
+                        .unwrap_or(theme_colors.surface),
+                ));
                 style.border = iced::Border {
-                    color: colors.border,
+                    color: colors
+                        .and_then(|c| c.selected_border)
+                        .unwrap_or(theme_colors.border),
                     // Only the top and sides are ruled, so the tab reads as
                     // joined to the page below it.
                     width: 1.0,
@@ -797,49 +860,53 @@ fn tab_style(
                     },
                 };
             } else if hovered {
-                style.text_color = colors.foreground;
+                style.text_color = hover_text();
             }
         }
         TabVariant::Outline => {
             style.text_color = if is_selected {
-                colors.primary
+                colors
+                    .and_then(|c| c.selected_border)
+                    .unwrap_or(theme_colors.primary)
             } else {
-                colors.muted_foreground
+                muted()
             };
             style.border = iced::Border {
                 color: if is_selected {
-                    colors.primary
+                    colors
+                        .and_then(|c| c.selected_border)
+                        .unwrap_or(theme_colors.primary)
                 } else {
-                    colors.border
+                    theme_colors.border
                 },
                 width: 1.0,
                 radius: radius.into(),
             };
             if hovered && !is_selected {
-                style.background = Some(iced::Background::Color(colors.accent));
+                style.background = Some(iced::Background::Color(theme_colors.accent));
             }
         }
         TabVariant::Pill => {
             if is_selected {
-                style.background = Some(iced::Background::Color(colors.primary));
-                style.text_color = colors.primary_foreground;
+                style.background = Some(iced::Background::Color(
+                    colors
+                        .and_then(|c| c.selected_background)
+                        .unwrap_or(theme_colors.primary),
+                ));
+                style.text_color = theme_colors.primary_foreground;
             } else {
-                style.text_color = colors.muted_foreground;
+                style.text_color = muted();
                 if hovered {
-                    style.background = Some(iced::Background::Color(colors.secondary));
-                    style.text_color = colors.secondary_foreground;
+                    style.background = Some(iced::Background::Color(theme_colors.secondary));
+                    style.text_color = theme_colors.secondary_foreground;
                 }
             }
         }
         TabVariant::Segmented => {
-            style.text_color = if is_selected {
-                colors.foreground
-            } else {
-                colors.muted_foreground
-            };
+            style.text_color = if is_selected { foreground() } else { muted() };
             if is_selected {
                 // The raised segment is the page color on the muted track.
-                style.background = Some(iced::Background::Color(colors.background));
+                style.background = Some(iced::Background::Color(theme_colors.background));
             }
         }
     }
@@ -926,6 +993,7 @@ mod tests {
             true,
             TabVariant::Underline,
             Size::Md,
+            None,
         );
         let unselected = super::tab_style(
             &theme,
@@ -933,6 +1001,7 @@ mod tests {
             false,
             TabVariant::Underline,
             Size::Md,
+            None,
         );
 
         assert_eq!(selected.text_color, theme.colors().foreground);
@@ -951,8 +1020,14 @@ mod tests {
 
         for is_selected in [true, false] {
             for status in [Status::Active, Status::Hovered, Status::Disabled] {
-                let style =
-                    super::tab_style(&theme, status, is_selected, TabVariant::Underline, Size::Md);
+                let style = super::tab_style(
+                    &theme,
+                    status,
+                    is_selected,
+                    TabVariant::Underline,
+                    Size::Md,
+                    None,
+                );
 
                 assert_eq!(
                     style.border.width, 0.0,
@@ -976,8 +1051,9 @@ mod tests {
             TabVariant::Tab,
         ] {
             let theme = Theme::light();
-            let selected = super::tab_style(&theme, Status::Active, true, variant, Size::Md);
-            let unselected = super::tab_style(&theme, Status::Active, false, variant, Size::Md);
+            let selected = super::tab_style(&theme, Status::Active, true, variant, Size::Md, None);
+            let unselected =
+                super::tab_style(&theme, Status::Active, false, variant, Size::Md, None);
 
             assert_ne!(
                 (

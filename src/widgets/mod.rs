@@ -118,7 +118,9 @@ pub use overlay::{
 };
 pub use resizable::{PaneGrid, Resizable, SplitAxis};
 pub use ribbon::{
-    ribbon, CollapseMode, Ribbon, RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool,
+    ribbon, CollapseMode, ContextualTab, QuickAccessBar, QuickAccessItem, Ribbon, RibbonGallery,
+    RibbonGalleryItem, RibbonGroup, RibbonItem, RibbonLayout, RibbonState, RibbonTab, RibbonTheme,
+    RibbonTool,
 };
 pub use select::{searchable_select, searchable_select_panel, select, select_fill};
 pub use sidebar::{
@@ -127,7 +129,7 @@ pub use sidebar::{
 };
 pub use skeleton::{skeleton, skeleton_list_item, skeleton_table, SkeletonShape};
 pub use spinner::{ring_progress, spinner, spinner_styled, SpinnerStyle};
-pub use tabs::{tabs, Tab, TabStrip, TabVariant};
+pub use tabs::{tabs, Tab, TabStrip, TabStripColors, TabVariant};
 pub use title_bar::{TitleBar, WindowControl};
 pub use toggle::{checkbox, radio, slider, switch};
 pub use tree::{tree, Tree, TreeEvent, TreeItem, TreeRow, TreeView};

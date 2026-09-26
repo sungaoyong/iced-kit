@@ -1,18 +1,35 @@
-//! Ribbon — a tabbed toolbar of grouped, multi-size tool buttons.
+//! Ribbon — a tabbed toolbar of grouped, multi-size tool buttons, aligned
+//! with the SARibbon feature set.
 //!
 //! A ribbon puts a command palette in two bands: a strip of tabs along the top,
 //! and beneath the active tab a row of *groups*, each a boxed cluster of tool
 //! buttons with a small label along the bottom edge. Tools come in a large
-//! (full-height, icon over label) and a small (single-row, icon only or icon
+//! (full-height, icon over label) and the small (single-row, icon only or icon
 //! beside label) footprint, and either can carry a ▾ that opens a dropdown of
 //! related commands.
+//!
+//! # SARibbon alignment
+//!
+//! Beyond the core tab/group/tool model, the ribbon includes four features
+//! ported from the reference SARibbon:
+//!
+//! - **Minimized mode**: the ribbon collapses to just the tab strip, toggled
+//!   from [`RibbonState::minimized`](model::RibbonState).
+//! - **Quick access bar**: a row of small icon buttons above the tab strip for
+//!   the most-used commands, built from [`QuickAccessBar`](model::QuickAccessBar).
+//! - **Galleries**: Office-style labeled grids of visual items embedded in a
+//!   group, built from [`RibbonGallery`](model::RibbonGallery).
+//! - **Contextual tabs**: conditionally visible tabs rendered to the right of
+//!   the regular tabs, distinguished by an accent color, managed through
+//!   [`RibbonState::contextual_tab`](model::RibbonState).
 //!
 //! # It is data, and the application owns the state
 //!
 //! A ribbon is described entirely as data — [`RibbonTab`]s of [`RibbonGroup`]s
 //! of [`RibbonItem`]s wrapping [`RibbonTool`]s — and rebuilt every frame, as
-//! every iced-kit component is. Which tab is active and which dropdown is open
-//! live in a [`RibbonState`] the caller holds; the ribbon reports intent through
+//! every iced-kit component is. Which tab is active, which dropdown is open,
+//! whether the ribbon is minimized, and which contextual tab is shown live in a
+//! [`RibbonState`] the caller holds; the ribbon reports intent through
 //! [`on_select`](Ribbon::on_select) and
 //! [`on_dropdown_toggle`](Ribbon::on_dropdown_toggle) and never mutates anything
 //! itself.
@@ -62,7 +79,13 @@ mod buttons;
 mod collapse;
 mod model;
 mod style;
+mod theme;
 
 pub use builder::{ribbon, Ribbon};
 pub use collapse::CollapseMode;
-pub use model::{RibbonGroup, RibbonItem, RibbonState, RibbonTab, RibbonTool};
+pub use model::RibbonLayout;
+pub use model::{
+    ContextualTab, QuickAccessBar, QuickAccessItem, RibbonGallery, RibbonGalleryItem, RibbonGroup,
+    RibbonItem, RibbonState, RibbonTab, RibbonTool,
+};
+pub use theme::RibbonTheme;

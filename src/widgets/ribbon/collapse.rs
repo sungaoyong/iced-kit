@@ -1,11 +1,16 @@
-//! Adaptive ribbon density.
+//! Adaptive ribbon density and the reference's six panel layouts.
 //!
-//! A ribbon lays its groups on one row. When they no longer all fit, the row
-//! degrades *from the right*, one group at a time: first a group shrinks to a
-//! compact column of small icons, then it collapses to a title button. If even
-//! the all-collapsed row overflows, every collapsed group drops to a tight
-//! small-icon button together, and the buttons are then squeezed. The row's
-//! height tracks the tallest group still shown, so it shrinks as the groups do.
+//! A ribbon lays its groups on one row. With [`RibbonLayout::Auto`], when the
+//! groups no longer all fit, the row degrades *from the right*, one group at a
+//! time: first a group shrinks to a compact column of small icons, then it
+//! collapses to a title button. If even the all-collapsed row overflows, every
+//! collapsed group drops to a tight small-icon button together, and the buttons
+//! are then squeezed. The row's height tracks the tallest group still shown, so
+//! it shrinks as the groups do.
+//!
+//! A fixed [`RibbonLayout`] — the reference's loose/compact × three/two/single
+//! row styles — pins every group to its own rendering instead, so a two-row or
+//! single-row group holds its shape rather than degrading.
 //!
 //! The decision is pure ([`decide_levels`]) and unit-tested; [`CollapseGroups`]
 //! is the thin iced widget that measures each group at all four densities, runs
@@ -16,6 +21,7 @@
 //! like every other ribbon dropdown, and the widget forwards its children's own
 //! overlays (tooltips) untouched.
 
+use super::model::RibbonLayout;
 use super::style::TOOL_BAR_H;
 use crate::theme::Theme;
 use iced::advanced::layout::{self, Layout};
@@ -66,16 +72,6 @@ impl CollapseMode {
             Self::Collapsed => "Collapsed",
         }
     }
-
-    /// The density every group is pinned to, or `None` for [`Auto`](Self::Auto).
-    fn forced_level(self) -> Option<Level> {
-        match self {
-            Self::Auto => None,
-            Self::Full => Some(Level::Full),
-            Self::Compact => Some(Level::Compact),
-            Self::Collapsed => Some(Level::Collapsed),
-        }
-    }
 }
 
 impl std::fmt::Display for CollapseMode {
@@ -110,13 +106,15 @@ struct Widths {
     tight: f32,
 }
 
-/// Choose a level per group. `Auto` degrades from the right, one group at a
-/// time: first Full → Compact, then Compact → Collapsed, each phase only while
-/// the row still overflows; if even the all-collapsed row overflows, every
-/// collapsed group drops to Tight at once. Forced modes pin everything.
-fn decide_levels(mode: CollapseMode, widths: &[Widths], max_w: f32) -> Vec<Level> {
-    if let Some(level) = mode.forced_level() {
-        return vec![level; widths.len()];
+/// Choose a level per group. [`RibbonLayout::Auto`] degrades from the right,
+/// one group at a time: first Full → Compact, then Compact → Collapsed, each
+/// phase only while the row still overflows; if even the all-collapsed row
+/// overflows, every collapsed group drops to Tight at once. A fixed
+/// [`RibbonLayout`] pins every group to the row style's own rendering, so the
+/// two-row and single-row layouts hold their shape instead of degrading.
+fn decide_levels(layout: RibbonLayout, widths: &[Widths], max_w: f32) -> Vec<Level> {
+    if layout != RibbonLayout::Auto {
+        return vec![Level::Full; widths.len()];
     }
     let width_of = |lv: Level, i: usize| match lv {
         Level::Full => widths[i].full,
@@ -158,7 +156,7 @@ pub(crate) struct CollapseGroups<'a, Message> {
     elements: Vec<Element<'a, Message, Theme>>,
     /// How many groups are laid out; `elements.len() == count * SLOTS`.
     count: usize,
-    mode: CollapseMode,
+    layout: RibbonLayout,
     /// The levels chosen during the last layout, replayed in the other trait
     /// methods so update/draw/overlay touch the same child that was placed.
     levels: RefCell<Vec<Level>>,
@@ -166,13 +164,13 @@ pub(crate) struct CollapseGroups<'a, Message> {
 
 impl<'a, Message: Clone + 'a> CollapseGroups<'a, Message> {
     /// Builds the row from one [`GroupSlots`] per group, in left-to-right order.
-    pub(crate) fn new(groups: Vec<GroupSlots<'a, Message>>, mode: CollapseMode) -> Self {
+    pub(crate) fn new(groups: Vec<GroupSlots<'a, Message>>, layout: RibbonLayout) -> Self {
         let count = groups.len();
         let elements = groups.into_iter().flatten().collect();
         Self {
             elements,
             count,
-            mode,
+            layout,
             levels: RefCell::new(vec![Level::Full; count]),
         }
     }
@@ -209,11 +207,12 @@ impl<Message: Clone> Widget<Message, Theme, iced::Renderer> for CollapseGroups<'
         }
 
         let natural = layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY));
-        let auto = self.mode == CollapseMode::Auto;
+        let auto = self.layout == RibbonLayout::Auto;
 
         // Auto needs each group's width at all four densities to pick the
-        // degradation. A forced mode pins every group to one level, so it
-        // measures nothing up front and derives the row from what it places.
+        // degradation. A fixed layout pins every group to its own rendering,
+        // so it measures nothing up front and derives the row from what it
+        // places.
         let widths = if auto {
             let mut measured = Vec::with_capacity(self.count);
             for i in 0..self.count {
@@ -226,12 +225,12 @@ impl<Message: Clone> Widget<Message, Theme, iced::Renderer> for CollapseGroups<'
             }
             measured
         } else {
-            // A forced mode ignores the widths but still needs one level per
+            // A fixed layout ignores the widths but still needs one level per
             // group, so hand `decide_levels` a correctly-sized placeholder.
             vec![Widths::default(); self.count]
         };
 
-        let levels = decide_levels(self.mode, &widths, limits.max().width);
+        let levels = decide_levels(self.layout, &widths, limits.max().width);
         *self.levels.borrow_mut() = levels;
         let levels = self.levels.borrow();
 
@@ -442,7 +441,7 @@ impl<'a, Message: Clone + 'a> From<CollapseGroups<'a, Message>> for Element<'a, 
 
 #[cfg(test)]
 mod tests {
-    use super::{decide_levels, CollapseMode, Level, Widths};
+    use super::{decide_levels, Level, RibbonLayout, Widths};
 
     fn w(full: f32, compact: f32, button: f32, tight: f32) -> Widths {
         Widths {
@@ -454,27 +453,29 @@ mod tests {
     }
 
     #[test]
-    fn forced_modes_pin_every_group() {
+    fn fixed_layouts_pin_every_group() {
         let widths = [w(200.0, 150.0, 100.0, 50.0), w(180.0, 130.0, 90.0, 40.0)];
-        assert_eq!(
-            decide_levels(CollapseMode::Full, &widths, 10.0),
-            vec![Level::Full, Level::Full]
-        );
-        assert_eq!(
-            decide_levels(CollapseMode::Compact, &widths, 10.0),
-            vec![Level::Compact, Level::Compact]
-        );
-        assert_eq!(
-            decide_levels(CollapseMode::Collapsed, &widths, 10.0),
-            vec![Level::Collapsed, Level::Collapsed]
-        );
+        for layout in [
+            RibbonLayout::LooseThreeRow,
+            RibbonLayout::CompactThreeRow,
+            RibbonLayout::LooseTwoRow,
+            RibbonLayout::CompactTwoRow,
+            RibbonLayout::LooseSingleRow,
+            RibbonLayout::CompactSingleRow,
+        ] {
+            assert_eq!(
+                decide_levels(layout, &widths, 10.0),
+                vec![Level::Full, Level::Full],
+                "{layout:?} must pin every group to its own rendering"
+            );
+        }
     }
 
     #[test]
     fn auto_huge_width_keeps_everything_full() {
         let widths = [w(200.0, 150.0, 100.0, 50.0), w(180.0, 130.0, 90.0, 40.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 1e9),
+            decide_levels(RibbonLayout::Auto, &widths, 1e9),
             vec![Level::Full, Level::Full]
         );
     }
@@ -484,7 +485,7 @@ mod tests {
         let widths = [w(50.0, 40.0, 30.0, 20.0), w(200.0, 100.0, 60.0, 30.0)];
         // Full row = 250 > 240; rightmost compact => 50 + 100 = 150 <= 240.
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 240.0),
+            decide_levels(RibbonLayout::Auto, &widths, 240.0),
             vec![Level::Full, Level::Compact]
         );
     }
@@ -494,7 +495,7 @@ mod tests {
         let widths = [w(50.0, 25.0, 20.0, 15.0), w(50.0, 25.0, 20.0, 15.0)];
         // Full row 100 > 75; rightmost compact => 75 <= 75; left stays FULL.
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 75.0),
+            decide_levels(RibbonLayout::Auto, &widths, 75.0),
             vec![Level::Full, Level::Compact]
         );
     }
@@ -503,7 +504,7 @@ mod tests {
     fn auto_escalates_a_single_group_past_collapsed_to_tight() {
         let widths = [w(50.0, 40.0, 30.0, 20.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 25.0),
+            decide_levels(RibbonLayout::Auto, &widths, 25.0),
             vec![Level::Tight]
         );
     }
@@ -512,7 +513,7 @@ mod tests {
     fn auto_cascade_drops_every_collapsed_group_to_tight() {
         let widths = [w(100.0, 90.0, 50.0, 30.0), w(100.0, 90.0, 50.0, 30.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 20.0),
+            decide_levels(RibbonLayout::Auto, &widths, 20.0),
             vec![Level::Tight, Level::Tight]
         );
     }
@@ -521,34 +522,34 @@ mod tests {
     fn auto_runs_the_compact_phase_across_the_row_first() {
         let widths = [w(30.0, 26.0, 15.0, 12.0), w(100.0, 80.0, 40.0, 20.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 100.0),
+            decide_levels(RibbonLayout::Auto, &widths, 100.0),
             vec![Level::Compact, Level::Collapsed]
         );
     }
 
     #[test]
     fn no_groups_stays_empty() {
-        assert_eq!(decide_levels(CollapseMode::Auto, &[], 1e9), vec![]);
-        assert_eq!(decide_levels(CollapseMode::Full, &[], 1e9), vec![]);
+        assert_eq!(decide_levels(RibbonLayout::Auto, &[], 1e9), vec![]);
+        assert_eq!(decide_levels(RibbonLayout::LooseThreeRow, &[], 1e9), vec![]);
     }
 
     #[test]
     fn single_group_walks_the_whole_ladder() {
         let widths = [w(100.0, 60.0, 40.0, 20.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 1e9),
+            decide_levels(RibbonLayout::Auto, &widths, 1e9),
             vec![Level::Full]
         );
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 75.0),
+            decide_levels(RibbonLayout::Auto, &widths, 75.0),
             vec![Level::Compact]
         );
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 45.0),
+            decide_levels(RibbonLayout::Auto, &widths, 45.0),
             vec![Level::Collapsed]
         );
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 20.0),
+            decide_levels(RibbonLayout::Auto, &widths, 20.0),
             vec![Level::Tight]
         );
     }
@@ -557,7 +558,7 @@ mod tests {
     fn exact_fit_at_full_stays_full() {
         let widths = [w(30.0, 20.0, 15.0, 10.0), w(40.0, 25.0, 15.0, 10.0)];
         assert_eq!(
-            decide_levels(CollapseMode::Auto, &widths, 70.0),
+            decide_levels(RibbonLayout::Auto, &widths, 70.0),
             vec![Level::Full, Level::Full]
         );
     }
