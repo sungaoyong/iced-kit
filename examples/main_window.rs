@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use iced::widget::{column, container, mouse_area, row, scrollable, stack, text};
 use iced::{Alignment, Color, Element, Length, Padding, Rectangle, Task};
+use iced_kit::i18n::{FluentTranslator, I18n};
 use iced_kit::icons::IconName;
 use iced_kit::widgets::button::{self as kit_button, Button};
 use iced_kit::widgets::details::StatusBar;
@@ -83,6 +84,8 @@ enum Message {
     /// The layout ComboBox's panel open state and trigger anchor.
     LayoutComboToggle,
     LayoutComboAnchored(Rectangle),
+    /// Switches the application language ("en" or "zh-CN").
+    SwitchLanguage(&'static str),
 }
 
 struct App {
@@ -120,10 +123,18 @@ struct App {
     /// reference a value that outlives the view call.
     theme_selected: RibbonTheme,
     layout_selected: RibbonLayout,
+    /// The translation context, re-created on a language switch from the
+    /// inline FTL in `Message::SwitchLanguage`.
+    i18n: I18n<FluentTranslator>,
 }
 
 impl App {
     fn new() -> (Self, Task<Message>) {
+        let i18n = I18n::new(
+            FluentTranslator::from_str("en", include_str!("../locales/en/main.ftl"))
+                .expect("valid en ftl"),
+        );
+
         (
             Self {
                 ribbon: RibbonState::new(),
@@ -148,6 +159,7 @@ impl App {
                 layout_combo_anchor: None,
                 theme_selected: RibbonTheme::default(),
                 layout_selected: RibbonLayout::default(),
+                i18n,
             },
             Task::none(),
         )
@@ -330,6 +342,19 @@ impl App {
             Message::WindowId(id) => {
                 self.window_id = Some(id);
             }
+            Message::SwitchLanguage("en") => {
+                self.i18n = I18n::new(
+                    FluentTranslator::from_str("en", include_str!("../locales/en/main.ftl"))
+                        .expect("valid en ftl"),
+                );
+            }
+            Message::SwitchLanguage("zh-CN") => {
+                self.i18n = I18n::new(
+                    FluentTranslator::from_str("zh-CN", include_str!("../locales/zh-CN/main.ftl"))
+                        .expect("valid zh-CN ftl"),
+                );
+            }
+            Message::SwitchLanguage(_) => {}
         }
         Task::none()
     }
@@ -352,7 +377,7 @@ impl App {
         if let (Some(anchor), Some(id)) = (self.anchor, self.ribbon.open_dropdown.as_deref()) {
             let panel = stack![
                 popover_dismiss_area(Message::CloseDropdown),
-                Dropdown::new(panel_items(id))
+                Dropdown::new(panel_items(id, &self.i18n))
                     .anchor(anchor.x, anchor.y + anchor.height + PANEL_GAP),
             ];
             open = open.dropdown(panel);
@@ -362,7 +387,8 @@ impl App {
             if let Some(anchor) = self.app_menu_anchor {
                 let panel = stack![
                     popover_dismiss_area(Message::CloseDropdown),
-                    Dropdown::new(app_menu_items()).anchor(anchor.x, anchor.y + anchor.height),
+                    Dropdown::new(app_menu_items(&self.i18n))
+                        .anchor(anchor.x, anchor.y + anchor.height),
                 ];
                 open = open.dropdown(panel);
             }
@@ -436,6 +462,7 @@ impl App {
     // ── Title bar (SARibbon style: one tinted area holding everything) ───
 
     fn build_title_bar(&self) -> Element<'_, Message, Theme> {
+        let i18n = &self.i18n;
         let rt = self.ribbon.ribbon_theme;
         let accent = rt.accent();
 
@@ -443,32 +470,33 @@ impl App {
         // Every icon on the tinted bar shares one face: a bare glyph that
         // takes a translucent white wash on hover, so the bar reads as one
         // surface rather than a row of separate controls.
+
         let app_btn = trigger(
-            Button::new("SA  File").on_press(Message::AppMenuToggle),
+            Button::new(i18n.tr("app-button")).on_press(Message::AppMenuToggle),
             Message::AppMenuAnchored,
         );
 
         let qab_row = row![
             kit_button::icon_button()
                 .icon(IconName::Save)
-                .tooltip_at("Save", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("save-action"), TooltipPosition::Bottom)
                 .ghost()
-                .on_press(Message::Ran("Save")),
+                .on_press(Message::Ran("save")),
             kit_button::icon_button()
                 .icon(IconName::Undo2)
-                .tooltip_at("Undo", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("undo-action"), TooltipPosition::Bottom)
                 .ghost()
-                .on_press(Message::Ran("Undo")),
+                .on_press(Message::Ran("undo")),
             kit_button::icon_button()
                 .icon(IconName::Redo2)
-                .tooltip_at("Redo", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("redo-action"), TooltipPosition::Bottom)
                 .ghost()
-                .on_press(Message::Ran("Redo")),
+                .on_press(Message::Ran("redo")),
             kit_button::icon_button()
                 .icon(IconName::Printer)
-                .tooltip_at("Print", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("print-action"), TooltipPosition::Bottom)
                 .ghost()
-                .on_press(Message::Ran("Print")),
+                .on_press(Message::Ran("print")),
         ]
         .spacing(2)
         .align_y(Alignment::Center);
@@ -476,17 +504,17 @@ impl App {
         let win_controls = row![
             kit_button::icon_button()
                 .icon(IconName::Minus)
-                .tooltip_at("Minimize", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("minimize-window"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::WindowMinimize),
             kit_button::icon_button()
                 .icon(IconName::Square)
-                .tooltip_at("Maximize", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("maximize-window"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::WindowToggleMaximize),
             kit_button::icon_button()
                 .icon(IconName::X)
-                .tooltip_at("Close", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("close-window"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::WindowClose),
         ]
@@ -500,7 +528,7 @@ impl App {
             app_btn,
             qab_row,
             container(text("")).width(Length::Fill),
-            text("ribbon mainwindow demo").size(13),
+            text(i18n.tr("window-title")).size(13),
         ])
         .on_press(Message::TitleBarPressed);
 
@@ -547,11 +575,11 @@ impl App {
                     IconName::Pin
                 })
                 .tooltip_at(
-                    if self.ribbon.minimized {
-                        "Pin ribbon open"
+                    i18n.tr(if self.ribbon.minimized {
+                        "pin-ribbon"
                     } else {
-                        "Minimize the ribbon"
-                    },
+                        "minimize-ribbon"
+                    }),
                     TooltipPosition::Bottom,
                 )
                 .ghost()
@@ -562,19 +590,16 @@ impl App {
                 }),
             kit_button::icon_button()
                 .icon(IconName::CircleHelp)
-                .tooltip_at("Help", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("help-action"), TooltipPosition::Bottom)
                 .ghost()
-                .on_press(Message::Ran("Help")),
+                .on_press(Message::Ran("help")),
             kit_button::icon_button()
                 .icon(if self.ribbon.is_contextual_tab_shown("Picture Tools") {
                     IconName::Eye
                 } else {
                     IconName::EyeOff
                 })
-                .tooltip_at(
-                    "Toggle the Picture Tools context category",
-                    TooltipPosition::Bottom
-                )
+                .tooltip_at(i18n.tr("toggle-picture-tools"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::TogglePictureTools),
             kit_button::icon_button()
@@ -583,10 +608,7 @@ impl App {
                 } else {
                     IconName::EyeOff
                 })
-                .tooltip_at(
-                    "Toggle the Table Tools context category",
-                    TooltipPosition::Bottom
-                )
+                .tooltip_at(i18n.tr("toggle-table-tools"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::ToggleTableTools),
             kit_button::icon_button()
@@ -595,7 +617,7 @@ impl App {
                 } else {
                     IconName::Plus
                 })
-                .tooltip_at("Toggle the Delete category", TooltipPosition::Bottom)
+                .tooltip_at(i18n.tr("toggle-delete-category"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::ToggleDeleteCategory),
             kit_button::icon_button()
@@ -604,10 +626,7 @@ impl App {
                 } else {
                     IconName::Plus
                 })
-                .tooltip_at(
-                    "Toggle the Size(example long category) category",
-                    TooltipPosition::Bottom
-                )
+                .tooltip_at(i18n.tr("toggle-size-category"), TooltipPosition::Bottom)
                 .ghost()
                 .on_press(Message::ToggleSizePanel),
         ]
@@ -617,7 +636,7 @@ impl App {
         // The search box, styled for the tinted title bar: a translucent
         // surface with a light rule, rather than the page-field's white.
         let search = container(
-            text_input("Search", &self.search)
+            text_input(&i18n.tr("search"), &self.search)
                 .on_input(Message::SearchChanged)
                 .width(150.0),
         )
@@ -676,11 +695,15 @@ impl App {
 
         let theme_combo = trigger(
             row![
-                text("Theme").size(12),
+                text(i18n.tr("theme-label")).size(12),
                 container(
-                    combobox(&self.theme_options, Some(self.theme_selected), "Theme",)
-                        .on_toggle(Message::ThemeComboToggle)
-                        .class(Box::new(combo_style) as Box<_>),
+                    combobox(
+                        &self.theme_options,
+                        Some(self.theme_selected),
+                        i18n.tr("theme-label"),
+                    )
+                    .on_toggle(Message::ThemeComboToggle)
+                    .class(Box::new(combo_style) as Box<_>),
                 )
                 .width(110.0),
             ]
@@ -691,11 +714,15 @@ impl App {
 
         let layout_combo = trigger(
             row![
-                text("Layout").size(12),
+                text(i18n.tr("layout-label")).size(12),
                 container(
-                    combobox(&self.layout_options, Some(self.layout_selected), "Layout",)
-                        .on_toggle(Message::LayoutComboToggle)
-                        .class(Box::new(combo_style) as Box<_>),
+                    combobox(
+                        &self.layout_options,
+                        Some(self.layout_selected),
+                        i18n.tr("layout-label"),
+                    )
+                    .on_toggle(Message::LayoutComboToggle)
+                    .class(Box::new(combo_style) as Box<_>),
                 )
                 .width(110.0),
             ]
@@ -735,18 +762,19 @@ impl App {
     /// The tab labels in strip order, with the dynamically-added categories
     /// included when they are shown.
     fn tab_labels(&self) -> Vec<String> {
+        let i18n = &self.i18n;
         let mut labels = vec![
-            "Home".to_owned(),
-            "Insert".to_owned(),
-            "Page Layout".to_owned(),
-            "View".to_owned(),
-            "Developer".to_owned(),
+            i18n.tr("tab-home"),
+            i18n.tr("tab-insert"),
+            i18n.tr("tab-page-layout"),
+            i18n.tr("tab-view"),
+            i18n.tr("tab-developer"),
         ];
         if self.delete_shown {
-            labels.push("Delete".to_owned());
+            labels.push(i18n.tr("tab-delete"));
         }
         if self.size_shown {
-            labels.push("Size(example long category)".to_owned());
+            labels.push(i18n.tr("tab-size"));
         }
         labels
     }
@@ -762,65 +790,67 @@ impl App {
             self.developer_tab(),
         ];
         if self.delete_shown {
-            tabs.push(Self::delete_tab());
+            tabs.push(self.delete_tab());
         }
         if self.size_shown {
-            tabs.push(Self::size_tab());
+            tabs.push(self.size_tab());
         }
         tabs
     }
 
     /// The "Delete" category: a panel that is added and removed at runtime,
     /// the reference's createCategoryDelete demonstration.
-    fn delete_tab() -> RibbonTab<Message> {
-        RibbonTab::new("Delete")
+    fn delete_tab(&self) -> RibbonTab<Message> {
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-delete"))
             .group(
-                RibbonGroup::new("Remove")
+                RibbonGroup::new(i18n.tr("group-remove"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Trash2)
-                            .label("Delete Row")
-                            .on_press(Message::Ran("Delete Row")),
+                            .label(i18n.tr("delete-row"))
+                            .on_press(Message::Ran("delete-row")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Eraser)
-                            .label("Clear")
-                            .on_press(Message::Ran("Clear")),
+                            .label(i18n.tr("clear"))
+                            .on_press(Message::Ran("clear")),
                     )),
             )
             .group(
-                RibbonGroup::new("Add")
+                RibbonGroup::new(i18n.tr("group-add"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Plus)
-                            .label("Insert")
-                            .on_press(Message::Ran("Insert")),
+                            .label(i18n.tr("insert"))
+                            .on_press(Message::Ran("insert")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::FilePlus2)
-                            .label("New Item")
-                            .on_press(Message::Ran("New Item")),
+                            .label(i18n.tr("new-item"))
+                            .on_press(Message::Ran("new-item")),
                     )),
             )
     }
 
     /// The "Size" category, whose long title demonstrates the strip handling
     /// a category name too long to fit beside the others.
-    fn size_tab() -> RibbonTab<Message> {
-        RibbonTab::new("Size(example long category)").group(
-            RibbonGroup::new("Sizing")
+    fn size_tab(&self) -> RibbonTab<Message> {
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-size")).group(
+            RibbonGroup::new(i18n.tr("group-sizing"))
                 .item(RibbonItem::large(
                     RibbonTool::named(IconName::Expand)
-                        .label("Stretch")
-                        .on_press(Message::Ran("Stretch")),
+                        .label(i18n.tr("stretch"))
+                        .on_press(Message::Ran("stretch")),
                 ))
                 .item(RibbonItem::large(
                     RibbonTool::named(IconName::Shrink)
-                        .label("Shrink")
-                        .on_press(Message::Ran("Shrink")),
+                        .label(i18n.tr("shrink"))
+                        .on_press(Message::Ran("shrink")),
                 ))
                 .item(RibbonItem::tool(
                     RibbonTool::named(IconName::Move)
-                        .label("Scale")
-                        .on_press(Message::Ran("Scale")),
+                        .label(i18n.tr("scale"))
+                        .on_press(Message::Ran("scale")),
                 )),
         )
     }
@@ -839,48 +869,49 @@ impl App {
     // ── Ribbon tabs ─────────────────────────────────────────────────────
 
     fn home_tab(&self) -> RibbonTab<Message> {
-        RibbonTab::new("Home")
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-home"))
             .group(
-                RibbonGroup::new("Clipboard")
+                RibbonGroup::new(i18n.tr("group-clipboard"))
                     .item(RibbonItem::large_dropdown(
                         "paste",
                         IconName::ClipboardPaste,
-                        "Paste",
+                        i18n.tr("paste"),
                         vec![],
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Copy)
-                            .label("Copy")
-                            .on_press(Message::Ran("Copy")),
+                            .label(i18n.tr("copy"))
+                            .on_press(Message::Ran("copy")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Scissors)
-                            .label("Cut")
-                            .on_press(Message::Ran("Cut")),
+                            .label(i18n.tr("cut"))
+                            .on_press(Message::Ran("cut")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Paintbrush)
-                            .label("Format Painter")
-                            .on_press(Message::Ran("Format Painter")),
+                            .label(i18n.tr("format-painter"))
+                            .on_press(Message::Ran("format-painter")),
                     )),
             )
             .group(
-                RibbonGroup::new("Font")
+                RibbonGroup::new(i18n.tr("group-font"))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Bold)
-                            .label("Bold")
+                            .label(i18n.tr("bold"))
                             .selected(true)
-                            .on_press(Message::Ran("Bold")),
+                            .on_press(Message::Ran("bold")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Italic)
-                            .label("Italic")
-                            .on_press(Message::Ran("Italic")),
+                            .label(i18n.tr("italic"))
+                            .on_press(Message::Ran("italic")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Underline)
-                            .label("Underline")
-                            .on_press(Message::Ran("Underline")),
+                            .label(i18n.tr("underline"))
+                            .on_press(Message::Ran("underline")),
                     ))
                     .item(RibbonItem::dropdown(
                         "font-color",
@@ -889,75 +920,75 @@ impl App {
                     )),
             )
             .group(
-                RibbonGroup::new("Paragraph")
+                RibbonGroup::new(i18n.tr("group-paragraph"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::AlignLeft)
-                            .label("Left")
+                            .label(i18n.tr("align-left"))
                             .selected(self.alignment == Alignment::Start)
                             .on_press(Message::AlignLeft),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::AlignCenter)
-                            .label("Center")
+                            .label(i18n.tr("align-center"))
                             .selected(self.alignment == Alignment::Center)
                             .on_press(Message::AlignCenter),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::AlignRight)
-                            .label("Right")
+                            .label(i18n.tr("align-right"))
                             .selected(self.alignment == Alignment::End)
                             .on_press(Message::AlignRight),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::AlignJustify)
-                            .label("Justify")
-                            .on_press(Message::Ran("Justify")),
+                            .label(i18n.tr("align-justify"))
+                            .on_press(Message::Ran("align-justify")),
                     )),
             )
             .group(
-                RibbonGroup::new("Styles").item(RibbonItem::gallery(
-                    RibbonGallery::new("styles", "Quick Styles")
+                RibbonGroup::new(i18n.tr("group-styles")).item(RibbonItem::gallery(
+                    RibbonGallery::new("styles", i18n.tr("quick-styles"))
                         .item(
                             RibbonGalleryItem::new(IconName::Heading1)
-                                .label("Heading 1")
-                                .on_press(Message::Ran("Heading 1")),
+                                .label(i18n.tr("heading-1"))
+                                .on_press(Message::Ran("heading-1")),
                         )
                         .item(
                             RibbonGalleryItem::new(IconName::Heading2)
-                                .label("Heading 2")
-                                .on_press(Message::Ran("Heading 2")),
+                                .label(i18n.tr("heading-2"))
+                                .on_press(Message::Ran("heading-2")),
                         )
                         .item(
                             RibbonGalleryItem::new(IconName::Heading3)
-                                .label("Heading 3")
-                                .on_press(Message::Ran("Heading 3")),
+                                .label(i18n.tr("heading-3"))
+                                .on_press(Message::Ran("heading-3")),
                         )
                         .item(
                             RibbonGalleryItem::new(IconName::Text)
-                                .label("Normal")
+                                .label(i18n.tr("normal"))
                                 .selected(true)
-                                .on_press(Message::Ran("Normal")),
+                                .on_press(Message::Ran("normal")),
                         )
                         .item(
                             RibbonGalleryItem::new(IconName::List)
-                                .label("List")
-                                .on_press(Message::Ran("List")),
+                                .label(i18n.tr("list"))
+                                .on_press(Message::Ran("list")),
                         )
                         .item(
                             RibbonGalleryItem::new(IconName::Quote)
-                                .label("Quote")
-                                .on_press(Message::Ran("Quote")),
+                                .label(i18n.tr("quote"))
+                                .on_press(Message::Ran("quote")),
                         )
                         .columns(4),
                 )),
             )
             .group(
-                RibbonGroup::new("Editing")
+                RibbonGroup::new(i18n.tr("group-editing"))
                     .item(RibbonItem::dropdown("find", IconName::Search, vec![]))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Replace)
-                            .label("Replace")
-                            .on_press(Message::Ran("Replace")),
+                            .label(i18n.tr("replace"))
+                            .on_press(Message::Ran("replace")),
                     ))
                     .item(RibbonItem::dropdown(
                         "select",
@@ -969,166 +1000,169 @@ impl App {
             // body runs the action while its ▾ opens a menu, a labelled
             // dropdown, and a disabled tool.
             .group(
-                RibbonGroup::new("Popup Styles")
+                RibbonGroup::new(i18n.tr("group-popup-styles"))
                     .item(RibbonItem::action_dropdown(
                         "instant-popup",
                         IconName::Zap,
-                        Message::Ran("Instant Popup"),
+                        Message::Ran("instant-popup"),
                         vec![],
                     ))
                     .item(RibbonItem::action_dropdown(
                         "delayed-popup",
                         IconName::Timer,
-                        Message::Ran("Delayed Popup"),
+                        Message::Ran("delayed-popup"),
                         vec![],
                     ))
                     .item(RibbonItem::labeled_dropdown(
                         "menu-button",
-                        "Menu",
+                        i18n.tr("menu"),
                         IconName::List,
                         vec![],
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Ban)
-                            .label("Disabled")
+                            .label(i18n.tr("disabled"))
                             .disabled(true),
                     )),
             )
     }
 
     fn insert_tab(&self) -> RibbonTab<Message> {
-        RibbonTab::new("Insert")
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-insert"))
             .group(
-                RibbonGroup::new("Tables")
+                RibbonGroup::new(i18n.tr("group-tables"))
                     .item(RibbonItem::large_dropdown(
                         "insert-table",
                         IconName::Table,
-                        "Table",
+                        i18n.tr("table"),
                         vec![],
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Grid3x3)
-                            .label("Quick Table")
-                            .on_press(Message::Ran("Quick Table")),
+                            .label(i18n.tr("quick-table"))
+                            .on_press(Message::Ran("quick-table")),
                     )),
             )
             .group(
-                RibbonGroup::new("Illustrations")
+                RibbonGroup::new(i18n.tr("group-illustrations"))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Image)
-                            .label("Pictures")
-                            .on_press(Message::Ran("Pictures")),
+                            .label(i18n.tr("pictures"))
+                            .on_press(Message::Ran("pictures")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::ChartColumn)
-                            .label("Chart")
-                            .on_press(Message::Ran("Chart")),
+                            .label(i18n.tr("chart"))
+                            .on_press(Message::Ran("chart")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Shapes)
-                            .label("Shapes")
-                            .on_press(Message::Ran("Shapes")),
+                            .label(i18n.tr("shapes"))
+                            .on_press(Message::Ran("shapes")),
                     )),
             )
             .group(
-                RibbonGroup::new("Links")
+                RibbonGroup::new(i18n.tr("group-links"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Link)
-                            .label("Link")
-                            .on_press(Message::Ran("Link")),
+                            .label(i18n.tr("link"))
+                            .on_press(Message::Ran("link")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Bookmark)
-                            .label("Bookmark")
-                            .on_press(Message::Ran("Bookmark")),
+                            .label(i18n.tr("bookmark"))
+                            .on_press(Message::Ran("bookmark")),
                     )),
             )
     }
 
     fn page_layout_tab(&self) -> RibbonTab<Message> {
-        RibbonTab::new("Page Layout")
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-page-layout"))
             .group(
-                RibbonGroup::new("Page Setup")
+                RibbonGroup::new(i18n.tr("group-page-setup"))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::FileText)
-                            .label("Margins")
-                            .on_press(Message::Ran("Margins")),
+                            .label(i18n.tr("margins"))
+                            .on_press(Message::Ran("margins")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::RectangleHorizontal)
-                            .label("Orientation")
-                            .on_press(Message::Ran("Orientation")),
+                            .label(i18n.tr("orientation"))
+                            .on_press(Message::Ran("orientation")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Ruler)
-                            .label("Size")
-                            .on_press(Message::Ran("Size")),
+                            .label(i18n.tr("size"))
+                            .on_press(Message::Ran("size")),
                     )),
             )
             .group(
-                RibbonGroup::new("Paragraph")
+                RibbonGroup::new(i18n.tr("group-paragraph"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::IndentIncrease)
-                            .label("Indent")
-                            .on_press(Message::Ran("Indent")),
+                            .label(i18n.tr("indent"))
+                            .on_press(Message::Ran("indent")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Outdent)
-                            .label("Outdent")
-                            .on_press(Message::Ran("Outdent")),
+                            .label(i18n.tr("outdent"))
+                            .on_press(Message::Ran("outdent")),
                     )),
             )
     }
 
     fn view_tab(&self) -> RibbonTab<Message> {
-        RibbonTab::new("View")
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-view"))
             .group(
-                RibbonGroup::new("Show")
+                RibbonGroup::new(i18n.tr("group-show"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Grid3x3)
-                            .label("Gridlines")
-                            .on_press(Message::Ran("Gridlines")),
+                            .label(i18n.tr("gridlines"))
+                            .on_press(Message::Ran("gridlines")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Ruler)
-                            .label("Ruler")
-                            .on_press(Message::Ran("Ruler")),
+                            .label(i18n.tr("ruler"))
+                            .on_press(Message::Ran("ruler")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::MapPin)
-                            .label("Navigation")
-                            .on_press(Message::Ran("Navigation")),
+                            .label(i18n.tr("navigation"))
+                            .on_press(Message::Ran("navigation")),
                     )),
             )
             .group(
-                RibbonGroup::new("Zoom")
+                RibbonGroup::new(i18n.tr("group-zoom"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::ZoomIn)
-                            .label("Zoom In")
-                            .on_press(Message::Ran("Zoom In")),
+                            .label(i18n.tr("zoom-in"))
+                            .on_press(Message::Ran("zoom-in")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::ZoomOut)
-                            .label("Zoom Out")
-                            .on_press(Message::Ran("Zoom Out")),
+                            .label(i18n.tr("zoom-out"))
+                            .on_press(Message::Ran("zoom-out")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Maximize2)
-                            .label("100%")
-                            .on_press(Message::Ran("Reset Zoom")),
+                            .label(i18n.tr("zoom-100"))
+                            .on_press(Message::Ran("zoom-100")),
                     )),
             )
             .group(
-                RibbonGroup::new("Options")
+                RibbonGroup::new(i18n.tr("group-options"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::WrapText)
-                            .label("Word Wrap")
+                            .label(i18n.tr("word-wrap"))
                             .selected(self.word_wrap)
                             .on_press(Message::ToggleWordWrap),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::ArrowLeftRight)
-                            .label("RTL")
+                            .label(i18n.tr("rtl"))
                             .selected(self.rtl)
                             .on_press(Message::ToggleRtl),
                     )),
@@ -1136,36 +1170,37 @@ impl App {
     }
 
     fn developer_tab(&self) -> RibbonTab<Message> {
-        RibbonTab::new("Developer")
+        let i18n = &self.i18n;
+        RibbonTab::new(i18n.tr("tab-developer"))
             .group(
-                RibbonGroup::new("Code")
+                RibbonGroup::new(i18n.tr("group-code"))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Code)
-                            .label("Code")
-                            .on_press(Message::Ran("Code")),
+                            .label(i18n.tr("code"))
+                            .on_press(Message::Ran("code")),
                     ))
                     .item(RibbonItem::large(
                         RibbonTool::named(IconName::Terminal)
-                            .label("Terminal")
-                            .on_press(Message::Ran("Terminal")),
+                            .label(i18n.tr("terminal"))
+                            .on_press(Message::Ran("terminal")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Bug)
-                            .label("Debug")
-                            .on_press(Message::Ran("Debug")),
+                            .label(i18n.tr("debug"))
+                            .on_press(Message::Ran("debug")),
                     )),
             )
             .group(
-                RibbonGroup::new("Customize")
+                RibbonGroup::new(i18n.tr("group-customize"))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Settings)
-                            .label("Options")
-                            .on_press(Message::Ran("Options")),
+                            .label(i18n.tr("options"))
+                            .on_press(Message::Ran("options")),
                     ))
                     .item(RibbonItem::tool(
                         RibbonTool::named(IconName::Palette)
-                            .label("Colors")
-                            .on_press(Message::Ran("Colors")),
+                            .label(i18n.tr("colors"))
+                            .on_press(Message::Ran("colors")),
                     )),
             )
     }
@@ -1173,7 +1208,8 @@ impl App {
     // ── Content area ────────────────────────────────────────────────────
 
     fn build_content_area(&self) -> Element<'_, Message, Theme> {
-        let heading = text("Log").size(16);
+        let i18n = &self.i18n;
+        let heading = text(i18n.tr("log-heading")).size(16);
 
         // The operation log: every action the ribbon reports is appended here,
         // newest last, as the reference's example does.
@@ -1203,8 +1239,9 @@ impl App {
     // ── Status bar ──────────────────────────────────────────────────────
 
     fn build_status_bar(&self) -> Element<'_, Message, Theme> {
+        let i18n = &self.i18n;
         StatusBar::new()
-            .left(text("Page 1 of 1  |  Words: 108  |  Zoom: 100%").size(12))
+            .left(text(i18n.tr("status-page")).size(12))
             .right(
                 row![
                     text(self.ribbon.ribbon_theme.label()).size(12),
@@ -1219,57 +1256,77 @@ impl App {
 }
 
 /// The application button's menu, in the style of Office's File menu.
-fn app_menu_items() -> Vec<MenuItem<'static, Message>> {
+fn app_menu_items(i18n: &I18n<FluentTranslator>) -> Vec<MenuItem<'static, Message>> {
     vec![
-        MenuItem::new("New", Message::AppMenuAction("New")).shortcut("Ctrl+N"),
-        MenuItem::new("Open...", Message::AppMenuAction("Open...")).shortcut("Ctrl+O"),
-        MenuItem::new("Save", Message::AppMenuAction("Save")).shortcut("Ctrl+S"),
-        MenuItem::new("Save As...", Message::AppMenuAction("Save As...")),
-        MenuItem::new("Print...", Message::AppMenuAction("Print...")).shortcut("Ctrl+P"),
-        MenuItem::new("Exit", Message::AppMenuAction("Exit")),
+        MenuItem::new(i18n.tr("menu-new"), Message::AppMenuAction("new")).shortcut("Ctrl+N"),
+        MenuItem::new(i18n.tr("menu-open"), Message::AppMenuAction("open")).shortcut("Ctrl+O"),
+        MenuItem::new(i18n.tr("menu-save"), Message::AppMenuAction("save")).shortcut("Ctrl+S"),
+        MenuItem::new(i18n.tr("menu-save-as"), Message::AppMenuAction("save-as")),
+        MenuItem::new(i18n.tr("menu-print"), Message::AppMenuAction("print")).shortcut("Ctrl+P"),
+        MenuItem::new(i18n.tr("menu-language"), Message::SwitchLanguage("en")),
+        MenuItem::new("中文 (zh-CN)", Message::SwitchLanguage("zh-CN")),
+        MenuItem::new(i18n.tr("menu-exit"), Message::AppMenuAction("exit")),
     ]
 }
 
-fn panel_items(id: &str) -> Vec<MenuItem<'static, Message>> {
+fn panel_items(id: &str, i18n: &I18n<FluentTranslator>) -> Vec<MenuItem<'static, Message>> {
     match id {
         "paste" => vec![
-            MenuItem::new("Keep Source Formatting", Message::Ran("Paste: keep source"))
-                .shortcut("Ctrl+V"),
-            MenuItem::new("Merge Formatting", Message::Ran("Paste: merge")),
-            MenuItem::new("Keep Text Only", Message::Ran("Paste: text only"))
+            MenuItem::new(
+                i18n.tr("keep-source-formatting"),
+                Message::Ran("paste-keep-source"),
+            )
+            .shortcut("Ctrl+V"),
+            MenuItem::new(i18n.tr("merge-formatting"), Message::Ran("paste-merge")),
+            MenuItem::new(i18n.tr("keep-text-only"), Message::Ran("paste-text-only"))
                 .shortcut("Ctrl+Shift+V"),
         ],
         "find" => vec![
-            MenuItem::new("Find...", Message::Ran("Find")).shortcut("Ctrl+F"),
-            MenuItem::new("Find and Replace...", Message::Ran("Find and Replace"))
-                .shortcut("Ctrl+H"),
+            MenuItem::new(i18n.tr("find"), Message::Ran("find")).shortcut("Ctrl+F"),
+            MenuItem::new(
+                i18n.tr("find-and-replace"),
+                Message::Ran("find-and-replace"),
+            )
+            .shortcut("Ctrl+H"),
         ],
         "select" => vec![
-            MenuItem::new("Select All", Message::Ran("Select All")).shortcut("Ctrl+A"),
-            MenuItem::new("Select Objects", Message::Ran("Select Objects")),
+            MenuItem::new(i18n.tr("select-all"), Message::Ran("select-all")).shortcut("Ctrl+A"),
+            MenuItem::new(i18n.tr("select-objects"), Message::Ran("select-objects")),
         ],
         "font-color" => vec![
-            MenuItem::new("Automatic", Message::Ran("Font color: auto")),
-            MenuItem::new("Black", Message::Ran("Font color: black")),
-            MenuItem::new("Red", Message::Ran("Font color: red")),
+            MenuItem::new(i18n.tr("font-color-auto"), Message::Ran("font-color-auto")),
+            MenuItem::new(
+                i18n.tr("font-color-black"),
+                Message::Ran("font-color-black"),
+            ),
+            MenuItem::new(i18n.tr("font-color-red"), Message::Ran("font-color-red")),
         ],
         "insert-table" => vec![
-            MenuItem::new("Insert Table...", Message::Ran("Insert Table")),
-            MenuItem::new("Draw Table", Message::Ran("Draw Table")),
-            MenuItem::new("Quick Table", Message::Ran("Quick Table")),
+            MenuItem::new(i18n.tr("insert-table"), Message::Ran("insert-table")),
+            MenuItem::new(i18n.tr("draw-table"), Message::Ran("draw-table")),
+            MenuItem::new(i18n.tr("quick-table"), Message::Ran("quick-table")),
         ],
         "instant-popup" => vec![
-            MenuItem::new("Insert Row", Message::Ran("Instant: Insert Row")),
-            MenuItem::new("Insert Column", Message::Ran("Instant: Insert Column")),
+            MenuItem::new(i18n.tr("insert-row"), Message::Ran("instant-insert-row")),
+            MenuItem::new(
+                i18n.tr("insert-column"),
+                Message::Ran("instant-insert-column"),
+            ),
         ],
         "delayed-popup" => vec![
-            MenuItem::new("Sort Ascending", Message::Ran("Delayed: Sort Asc")),
-            MenuItem::new("Sort Descending", Message::Ran("Delayed: Sort Desc")),
+            MenuItem::new(i18n.tr("sort-ascending"), Message::Ran("delayed-sort-asc")),
+            MenuItem::new(
+                i18n.tr("sort-descending"),
+                Message::Ran("delayed-sort-desc"),
+            ),
         ],
         "menu-button" => vec![
-            MenuItem::new("Apply Style", Message::Ran("Menu: Apply Style")),
-            MenuItem::new("Modify Style...", Message::Ran("Menu: Modify Style")),
-            MenuItem::new("Clear Formatting", Message::Ran("Menu: Clear Formatting")),
+            MenuItem::new(i18n.tr("apply-style"), Message::Ran("menu-apply-style")),
+            MenuItem::new(i18n.tr("modify-style"), Message::Ran("menu-modify-style")),
+            MenuItem::new(
+                i18n.tr("clear-formatting"),
+                Message::Ran("menu-clear-formatting"),
+            ),
         ],
         other => vec![MenuItem::new(format!("{other}"), Message::Noop).enabled(false)],
     }

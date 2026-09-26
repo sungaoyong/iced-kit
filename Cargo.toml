@@ -22,6 +22,7 @@ include = [
     "tests/*.rs",
     "tests/dock/*.rs",
     "tests/snapshots/*.png",
+    "locales/**/*.ftl",
     "Cargo.toml",
     "README.md",
     "THEMING.md",
@@ -39,6 +40,14 @@ dock = ["dep:thiserror"]
 # Serialization of dock layouts.
 dock-serde = ["dock", "dep:serde"]
 
+# Internationalization: Translator trait, I18n context, and tr! macro.
+# Pulls in fluent-bundle as a stable argument type for translate_fmt,
+# but the FluentTranslator backend requires `i18n-fluent`.
+i18n = ["dep:fluent-bundle"]
+
+# Fluent (.ftl) backend for i18n, powered by the fluent-bundle crate.
+i18n-fluent = ["i18n", "dep:thiserror"]
+
 [dependencies]
 iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"] }
 # Icon font and name enum only. The crate's own `iced` feature is deliberately
@@ -47,12 +56,21 @@ iced = { version = "0.14.0", features = ["advanced", "canvas", "markdown", "svg"
 lucide-icons = { version = "1.31", default-features = false }
 thiserror = { version = "2.0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+# Pulled in by the `i18n` feature so `Translator::translate_fmt` can use
+# `FluentValue` as a stable argument type. Enable `i18n-fluent` for the
+# `FluentTranslator` backend.
+fluent-bundle = { version = "0.16", optional = true }
 
 # The dock example only compiles with the `dock` feature, and without this
 # entry `cargo test` — which builds examples — would fail in a default build.
 [[example]]
 name = "dock"
 required-features = ["dock"]
+
+# The main_window example uses i18n with the Fluent backend.
+[[example]]
+name = "main_window"
+required-features = ["i18n-fluent"]
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -715,6 +715,65 @@ Two things set it apart:
 - [`PUBLISHING.md`](PUBLISHING.md) — release audit: metadata, licensing,
   attribution, docs.rs, and the one open blocker.
 
+## Internationalization (`i18n` feature)
+
+iced-kit provides a lightweight translation layer that plugs into any widget
+constructor accepting `impl text::IntoFragment`. The core `i18n` feature adds
+the `Translator` trait, the `I18n` context, and the `tr!` macro. Enable
+`i18n-fluent` for a ready-made backend using `.ftl` files:
+
+```toml
+iced-kit = { version = "0.1", features = ["i18n-fluent"] }
+```
+
+```rust
+use iced_kit::i18n::{FluentTranslator, I18n};
+use iced_kit::prelude::*;
+
+struct App {
+    i18n: I18n<FluentTranslator>,
+}
+
+impl App {
+    fn new() -> Self {
+        let translator = FluentTranslator::from_str("en", r#"
+save = Save
+cancel = Cancel
+hello-user = Hello, { $name }!
+items-count = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+        "#).expect("valid ftl");
+        Self { i18n: I18n::new(translator) }
+    }
+
+    fn view(&self) -> Element<'_, Message, Theme> {
+        let i18n = &self.i18n;
+        column![
+            heading(i18n.tr("app-title"), Heading::H2),
+            button(tr!("save")).on_press(Message::Save),
+            button(tr!("cancel")).on_press(Message::Cancel),
+            text(tr!("hello-user", "name" => "Alice")),
+            text(tr!("items-count", "count" => 42)),
+        ]
+        .into()
+    }
+}
+```
+
+Or load from `.ftl` files on disk (one directory per locale, each containing
+a `main.ftl`):
+
+```rust
+let translator = FluentTranslator::load_from_dir("en", "locales/")?;
+```
+
+Reference translations live in [`locales/en/main.ftl`](locales/en/main.ftl)
+and [`locales/zh-CN/main.ftl`](locales/zh-CN/main.ftl). Missing keys fall
+back to the key string itself, so untranslated text stays visible rather
+than blank.
+
 ## Running the gallery
 
 ```sh
