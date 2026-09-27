@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.85"
 description = "A shadcn/ui-flavored component library and design system for iced, porting the gpui-kit visual language"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/iced-kit/iced-kit"
+repository = "https://github.com/sungaoyong/iced-kit"
 keywords = ["iced", "gui", "widgets", "components", "design-system"]
 categories = ["gui"]
 # Ship the sources, the bundled tab-strip icons, and the documentation that
