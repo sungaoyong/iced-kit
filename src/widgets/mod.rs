@@ -48,6 +48,7 @@ pub mod toggle;
 pub mod tree;
 pub mod typography;
 pub mod virtual_list;
+pub mod wizard;
 
 pub use avatar::{
     avatar, avatar_group, avatar_with_label, avatar_with_name, Avatar, AvatarGroup, AvatarLabel,
@@ -138,5 +139,6 @@ pub use typography::{
     Label,
 };
 pub use virtual_list::{text_row, virtual_list, VirtualList, VirtualListState};
+pub use wizard::{wizard, Wizard, WizardDirection, WizardLayout, WizardState, WizardStep};
 
 pub use crate::theme::catalog::ButtonVariant;

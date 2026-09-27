@@ -186,6 +186,14 @@ log-heading = Log
 status-ready = Ready
 status-page = Page 1 of 1  |  Words: 108  |  Zoom: 100%
 
+# ── Wizard ──────────────────────────────────────────────────────────
+
+wizard-next = Next
+wizard-back = Back
+wizard-finish = Finish
+wizard-cancel = Cancel
+wizard-step-of = Step { $current } of { $total }
+
 # ── Date / calendar ──────────────────────────────────────────────────
 
 month-January = January

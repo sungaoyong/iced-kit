@@ -183,6 +183,14 @@ log-heading = 日志
 status-ready = 就绪
 status-page = 第 1 页，共 1 页  |  字数: 108  |  缩放: 100%
 
+# ── 向导 ────────────────────────────────────────────────────────────
+
+wizard-next = 下一步
+wizard-back = 上一步
+wizard-finish = 完成
+wizard-cancel = 取消
+wizard-step-of = 第 { $current} 步，共 { $total } 步
+
 # ── 日期 / 日历 ──────────────────────────────────────────────────────
 
 month-January = 一月
