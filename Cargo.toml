@@ -33,6 +33,11 @@ include = [
 ]
 
 [features]
+# The default build ships the i18n layer with its Fluent backend, which is
+# what the widgets (Calendar, Wizard) and the examples expect. Turn both off
+# with `default-features = false` for a leaner, translation-free build.
+default = ["i18n", "i18n-fluent"]
+
 # Docking layout: draggable tabs, resizable splits, drag-and-drop docking,
 # collapsible edge docks and panel zoom.
 dock = ["dep:thiserror"]

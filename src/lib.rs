@@ -34,6 +34,7 @@
 #[cfg(feature = "dock")]
 pub mod dock;
 
+#[cfg(feature = "i18n")]
 pub mod i18n;
 pub mod icons;
 pub mod motion;
@@ -41,11 +42,13 @@ pub mod setting;
 pub mod theme;
 pub mod widgets;
 
+#[cfg(feature = "i18n")]
 pub use i18n::I18n;
 pub use theme::{Colors, Motion, Size, Theme, Tokens};
 
 /// The imports most applications want.
 pub mod prelude {
+    #[cfg(feature = "i18n")]
     pub use crate::i18n::I18n;
     pub use crate::icons::IconName;
     pub use crate::theme::{Size, Theme};

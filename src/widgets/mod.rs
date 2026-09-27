@@ -19,6 +19,7 @@ pub mod chat;
 pub mod color_picker;
 pub mod combobox;
 pub mod data_table;
+#[cfg(feature = "i18n-fluent")]
 pub mod date;
 pub mod details;
 pub mod display;
@@ -48,6 +49,7 @@ pub mod toggle;
 pub mod tree;
 pub mod typography;
 pub mod virtual_list;
+#[cfg(feature = "i18n-fluent")]
 pub mod wizard;
 
 pub use avatar::{
@@ -79,6 +81,7 @@ pub use combobox::{
     combobox, combobox_panel, filter_options, ComboBox, ComboBoxOption, ComboBoxPanel,
 };
 pub use data_table::{Column, ColumnGroup, DataTable, SortDirection, SortKey, TableState, Width};
+#[cfg(feature = "i18n-fluent")]
 pub use date::{
     calendar, date_picker, month_grid, month_name, Calendar, Date, DatePicker, DatePreset, Weekday,
 };
@@ -139,6 +142,7 @@ pub use typography::{
     Label,
 };
 pub use virtual_list::{text_row, virtual_list, VirtualList, VirtualListState};
+#[cfg(feature = "i18n-fluent")]
 pub use wizard::{wizard, Wizard, WizardDirection, WizardLayout, WizardState, WizardStep};
 
 pub use crate::theme::catalog::ButtonVariant;
